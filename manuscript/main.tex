@@ -208,8 +208,10 @@ At $n=50$ the GPU completes in 4\,ms what takes the CPU 6.4\,s (1{,}600$\times$)
 To evaluate sensitivity to demographic model misspecification, we repeated the accuracy analysis under three demographic scenarios from \texttt{stdpopsim} \cite{Adrion2020}: the Gutenkunst et al.\ three-population out-of-Africa model \cite{Gutenkunst2009}, the Tennessen et al.\ two-population European--African model, and the Tennessen et al.\ African population with ancient size changes (Fig~\ref{fig:demography}).
 In all cases, the flow field was computed under the default constant-$N_e$ assumption, so any accuracy loss reflects model misspecification rather than implementation error.
 
-Across all three demographic scenarios, the \texttt{tmrca.cu} forward--backward estimator maintained high accuracy, with the marginal TMRCA distributions closely matching the ground truth from \texttt{msprime} (Fig~\ref{fig:demography}).
-Absolute accuracy varied by scenario, with correlations ranging from $r = 0.82$ to $r = 0.88$ for the forward--backward estimator across the three demographic models.  The flow field, despite being calibrated for constant population size, generalizes well to complex demographic histories including bottlenecks and population splits.
+Across all three demographic scenarios, both \texttt{tmrca.cu} and Schweiger's Gamma-SMC maintained reasonable accuracy despite the constant-$N_e$ flow field being misspecified (Fig~\ref{fig:demography}).
+The \texttt{tmrca.cu} forward--backward estimator achieved correlations of $r = 0.81$--$0.88$ across the three models, consistently outperforming Schweiger's forward-only tool ($r = 0.78$--$0.82$).
+Both methods exhibit some accuracy degradation relative to the constant-$N_e$ scenario, confirming that demographic misspecification affects the flow field approach, but the effect is modest.
+The flow field, despite being calibrated for constant population size, generalizes reasonably well to complex demographic histories including bottlenecks and population splits.
 
 \begin{figure}[!ht]
 \centering
@@ -217,7 +219,7 @@ Absolute accuracy varied by scenario, with correlations ranging from $r = 0.82$ 
 \caption{\textbf{Demographic robustness.}
 Three demographic models from \texttt{stdpopsim}: Gutenkunst et al.\ out-of-Africa (top), Tennessen et al.\ two-population (middle), and Tennessen et al.\ African population (bottom).
 Left: effective population size history.
-Centre: per-site TMRCA traces (black: truth; blue: \texttt{tmrca.cu}).
+Centre: per-site TMRCA traces (black: truth; blue: \texttt{tmrca.cu}; orange: Schweiger et al.).
 Right: marginal TMRCA distribution.
 The constant-$N_e$ flow field was used in all cases; accuracy is maintained across diverse demographic histories ($r = 0.82$--$0.88$).}
 \label{fig:demography}
