@@ -1,0 +1,33 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# Build artifacts
+build/
+*.so
+*.o
+*.a
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Benchmark outputs
+benchmarks/*.png
+benchmarks/*.npz
+
+# Manuscript build artifacts
+manuscript/*.aux
+manuscript/*.log
+manuscript/*.out
+manuscript/*.synctex*
+manuscript/*.bbl
+manuscript/*.blg
+manuscript/*.fdb_latexmk
+manuscript/*.fls
+
+# Editor
+*.swp
+*.swo
+*~

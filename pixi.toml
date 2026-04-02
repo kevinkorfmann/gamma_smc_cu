@@ -1,0 +1,35 @@
+[workspace]
+authors = ["kevinkorfmann <kevin.korfmann@gmail.com>"]
+channels = ["conda-forge", "nvidia"]
+name = "tmrca.cu"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[dependencies]
+cuda-toolkit = ">=12.0,<12.3"
+cmake = ">=3.24"
+ninja = "*"
+gcc = ">=11"
+gxx = ">=11"
+numpy = ">=1.24"
+python = ">=3.10"
+pybind11 = ">=2.11"
+pytest = ">=7"
+msprime = ">=1.2"
+tskit = ">=0.5"
+scipy = ">=1.10"
+matplotlib = "*"
+
+[activation.env]
+PYTHONPATH = "${PIXI_PROJECT_ROOT}/python:${PIXI_PROJECT_ROOT}"
+LD_LIBRARY_PATH = "${PIXI_PROJECT_ROOT}/python/tmrca_cu:${LD_LIBRARY_PATH}"
+CUDA_VISIBLE_DEVICES = "0"
+
+[tasks]
+configure = "cmake -S . -B build -G Ninja -DCMAKE_CUDA_ARCHITECTURES=80 -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=$CONDA_PREFIX -DPYTHON_EXECUTABLE=$CONDA_PREFIX/bin/python"
+_cmake-build = { cmd = "cmake --build build -j", depends-on = ["configure"] }
+_install = { cmd = "cp build/_core.cpython-*.so python/tmrca_cu/ && cp build/libtmrcacu_kernels.so python/tmrca_cu/", depends-on = ["_cmake-build"] }
+build = { depends-on = ["_install"] }
+test = { cmd = "python -m pytest tests/ -v --ignore=tests/performance", depends-on = ["build"] }
+test-unit = { cmd = "python -m pytest tests/unit/ -v", depends-on = ["build"] }
+test-ref = "python -m pytest tests/reference/ -v"
