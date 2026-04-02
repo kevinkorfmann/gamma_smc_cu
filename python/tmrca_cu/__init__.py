@@ -26,6 +26,7 @@ from tmrca_cu._core import (
     pelt_changepoint,
     adaptive_prior_infer,
     gamma_smc_forward,
+    gamma_smc_flow_fb,
     HMMContext,
 )
 
@@ -51,6 +52,7 @@ __all__ = [
     "pelt_changepoint",
     "adaptive_prior_infer",
     "gamma_smc_forward",
+    "gamma_smc_flow_fb",
     "HMMContext",
     "CoalescenceEstimator",
     "TMRCAResult",

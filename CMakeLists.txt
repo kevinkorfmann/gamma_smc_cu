@@ -27,7 +27,9 @@ add_library(tmrcacu_kernels SHARED
     src/kernels/convergence.cu
     src/kernels/adaptive_prior.cu
     src/kernels/gamma_smc.cu
+    src/kernels/gamma_smc_flow.cu
     src/demography.cpp
+    src/flow_field.cpp
 )
 target_include_directories(tmrcacu_kernels PUBLIC ${CMAKE_SOURCE_DIR}/include)
 set_target_properties(tmrcacu_kernels PROPERTIES

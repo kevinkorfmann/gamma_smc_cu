@@ -6,3 +6,4 @@
 #include "pelt.h"
 #include "ultrametric.h"
 #include "gamma_smc.h"
+#include "flow_field.h"
