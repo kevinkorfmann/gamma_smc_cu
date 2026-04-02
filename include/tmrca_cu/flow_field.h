@@ -68,3 +68,30 @@ void gamma_smc_flow_cached_fb_gpu(
     float* tmrca_mean_out,
     float* tmrca_lower_out,
     float* tmrca_upper_out);
+
+// GPU forward-only with interleaved float2 cache. No forward buffer needed.
+// Single pass: outputs mean (and optionally CI) directly.
+// d_cache: [n_max_steps × FF_GRID] interleaved (mean, cv) float pairs on GPU.
+void gamma_smc_flow_cached_fwd_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    const void* d_cache,          // float2* on GPU: [n_max_steps × FF_GRID]
+    int n_max_steps,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,       // nullptr for mean-only
+    float* tmrca_upper_out);      // nullptr for mean-only
+
+// Fused flow FB + per-site reduction. Returns [S] floats instead of [S × n_pairs].
+void gamma_smc_flow_cached_fb_reduce_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    const float* d_cache_mean, const float* d_cache_cv,
+    int n_max_steps,
+    float* fwd_buf,
+    float* site_mean_out,
+    float* site_min_out,
+    float* site_max_out);

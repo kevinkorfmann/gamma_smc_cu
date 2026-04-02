@@ -1450,6 +1450,8 @@ public:
     HMMContext(const HMMContext&) = delete;
     HMMContext& operator=(const HMMContext&) = delete;
 
+
+
     int n_haps() const { return n_haps_; }
     int n_sites() const { return S_; }
     int n_bins() const { return K_; }
@@ -2431,6 +2433,60 @@ public:
     FlowContext(const FlowContext&) = delete;
     FlowContext& operator=(const FlowContext&) = delete;
 
+    py::dict run_fb_summary(std::vector<std::pair<int, int>> pairs) {
+        int n_pairs = (int)pairs.size();
+        if (n_pairs == 0) {
+            py::dict result;
+            result["site_mean"] = py::array_t<float>(0);
+            return result;
+        }
+
+        size_t fwd_buf_bytes = 2ULL * S_ * n_pairs * sizeof(float);
+        float* d_fwd_buf;
+        CUDA_CHECK(cudaMalloc(&d_fwd_buf, fwd_buf_bytes));
+
+        float *d_site_mean, *d_site_min, *d_site_max;
+        CUDA_CHECK(cudaMalloc(&d_site_mean, S_ * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_site_min, S_ * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_site_max, S_ * sizeof(float)));
+
+        alloc_output(n_pairs, false);
+        std::vector<int> pi(n_pairs), pj(n_pairs);
+        for (int p = 0; p < n_pairs; p++) {
+            pi[p] = pairs[p].first;
+            pj[p] = pairs[p].second;
+        }
+        CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+
+        gamma_smc_flow_cached_fb_reduce_gpu(
+            d_packed_, n_words_, d_pos_, S_, g_cache_Ne,
+            d_pi_, d_pj_, n_pairs,
+            g_d_cache_mean, g_d_cache_cv, g_cache_n_steps,
+            d_fwd_buf,
+            d_site_mean, d_site_min, d_site_max);
+
+        cudaFree(d_fwd_buf);
+
+        auto mean_out = py::array_t<float>((ssize_t)S_);
+        auto min_out = py::array_t<float>((ssize_t)S_);
+        auto max_out = py::array_t<float>((ssize_t)S_);
+        CUDA_CHECK(cudaMemcpy(mean_out.mutable_data(), d_site_mean, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(min_out.mutable_data(), d_site_min, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+        CUDA_CHECK(cudaMemcpy(max_out.mutable_data(), d_site_max, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+
+        cudaFree(d_site_mean);
+        cudaFree(d_site_min);
+        cudaFree(d_site_max);
+
+        py::dict result;
+        result["site_mean"] = mean_out;
+        result["site_min"] = min_out;
+        result["site_max"] = max_out;
+        result["n_pairs"] = n_pairs;
+        return result;
+    }
+
     int n_haps() const { return n_haps_; }
     int n_sites() const { return S_; }
 
@@ -2875,6 +2931,7 @@ PYBIND11_MODULE(_core, m) {
         .def("run_fb", &FlowContext::run_fb,
              "Forward-backward smoothing. Returns dict with 'mean'.",
              py::arg("pairs"), py::arg("mean_only") = true)
+        .def("run_fb_summary", &FlowContext::run_fb_summary, py::arg("pairs"))
         .def_property_readonly("n_haps", &FlowContext::n_haps)
         .def_property_readonly("n_sites", &FlowContext::n_sites);
 }
