@@ -2,6 +2,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 #include <cuda_runtime.h>
+#include <cuda_fp16.h>
 #include <cstring>
 #include <cmath>
 #include <vector>
@@ -1800,6 +1801,80 @@ py::dict py_gamma_smc_forward_quantized(
 }
 
 // ============================================================
+
+// ============================================================
+// Gamma-SMC site summary (GPU-side reduction, minimal D2H)
+// ============================================================
+py::dict py_gamma_smc_site_summary(
+    py::array_t<uint8_t, py::array::c_style> G,
+    py::array_t<double, py::array::c_style> positions_arr,
+    std::vector<std::pair<int, int>> pairs,
+    double Ne, double mu_scalar, double rho_scalar,
+    int stride)
+{
+    auto g_buf = G.request();
+    auto pos_buf = positions_arr.request();
+
+    int n = (int)g_buf.shape[0];
+    int S = (int)g_buf.shape[1];
+    int n_words = (S + 63) / 64;
+    int n_pairs = (int)pairs.size();
+    int out_S = (stride == 1) ? S : (S + stride - 1) / stride;
+
+    std::vector<int> pi(n_pairs), pj(n_pairs);
+    for (int p = 0; p < n_pairs; p++) {
+        pi[p] = pairs[p].first;
+        pj[p] = pairs[p].second;
+    }
+
+    uint8_t* d_G; uint64_t* d_packed; double* d_pos;
+    int *d_pi, *d_pj;
+    float *d_site_mean, *d_site_min, *d_site_max;
+
+    CUDA_CHECK(cudaMalloc(&d_G, (size_t)n * S * sizeof(uint8_t)));
+    CUDA_CHECK(cudaMalloc(&d_packed, (size_t)n * n_words * sizeof(uint64_t)));
+    CUDA_CHECK(cudaMemset(d_packed, 0, (size_t)n * n_words * sizeof(uint64_t)));
+    CUDA_CHECK(cudaMemcpy(d_G, g_buf.ptr, (size_t)n * S, cudaMemcpyHostToDevice));
+    bitpack_genotypes_gpu(d_G, d_packed, n, S, n_words);
+    cudaFree(d_G);
+
+    CUDA_CHECK(cudaMalloc(&d_pos, S * sizeof(double)));
+    CUDA_CHECK(cudaMemcpy(d_pos, pos_buf.ptr, S * sizeof(double), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&d_pi, n_pairs * sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&d_pj, n_pairs * sizeof(int)));
+    CUDA_CHECK(cudaMemcpy(d_pi, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_pj, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+
+    CUDA_CHECK(cudaMalloc(&d_site_mean, out_S * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_site_min, out_S * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_site_max, out_S * sizeof(float)));
+
+    gamma_smc_forward_site_summary_gpu(
+        d_packed, n_words, d_pos, S,
+        (float)mu_scalar, (float)rho_scalar, (float)Ne,
+        d_pi, d_pj, n_pairs,
+        d_site_mean, d_site_min, d_site_max, stride);
+
+    auto mean_out = py::array_t<float>((ssize_t)out_S);
+    auto min_out = py::array_t<float>((ssize_t)out_S);
+    auto max_out = py::array_t<float>((ssize_t)out_S);
+    CUDA_CHECK(cudaMemcpy(mean_out.mutable_data(), d_site_mean, out_S * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(min_out.mutable_data(), d_site_min, out_S * sizeof(float), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(max_out.mutable_data(), d_site_max, out_S * sizeof(float), cudaMemcpyDeviceToHost));
+
+    cudaFree(d_packed); cudaFree(d_pos);
+    cudaFree(d_pi); cudaFree(d_pj);
+    cudaFree(d_site_mean); cudaFree(d_site_min); cudaFree(d_site_max);
+
+    py::dict result;
+    result["site_mean"] = mean_out;
+    result["site_min"] = min_out;
+    result["site_max"] = max_out;
+    result["n_pairs"] = n_pairs;
+    result["out_S"] = out_S;
+    return result;
+}
+
 // Gamma-SMC flow field forward-backward
 // ============================================================
 
@@ -1812,8 +1887,44 @@ static float* g_d_flow_v = nullptr;
 // Global: multi-step cache (rebuilt when params change)
 static float* g_d_cache_mean = nullptr;
 static float* g_d_cache_cv = nullptr;
+static float2* g_d_cache_f2 = nullptr;   // interleaved (mean, cv) for fwd-only kernel
+static void* g_d_cache_h2 = nullptr;    // half2 cache for fp16 kernel
+static cudaArray_t g_cache_array = nullptr;   // layered CUDA array for texture
+static cudaTextureObject_t g_cache_tex = 0;   // hardware bilinear texture
+static int g_cache_tex_layers = 0;            // number of layers in texture
 static int g_cache_n_steps = 0;
 static float g_cache_rho = 0, g_cache_mu = 0, g_cache_Ne = 0;
+
+// Forward-declare kernel launchers (defined in gamma_smc_flow.cu)
+extern void gamma_smc_flow_tex_fwd_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    cudaTextureObject_t cache_tex, int n_tex_layers,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,
+    float* tmrca_upper_out);
+
+extern void gamma_smc_flow_sync_fwd_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    const void* d_cache, int n_max_steps,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,
+    float* tmrca_upper_out);
+
+extern void gamma_smc_flow_h2_fwd_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    const void* d_cache_h2, int n_max_steps,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,
+    float* tmrca_upper_out);
 
 static void ensure_flow_field(const std::string& path) {
     if (g_flow_field_loaded) return;
@@ -1841,6 +1952,11 @@ static void ensure_cache(float Ne, float mu, float rho, int n_steps,
     // Free old
     if (g_d_cache_mean) { cudaFree(g_d_cache_mean); g_d_cache_mean = nullptr; }
     if (g_d_cache_cv)   { cudaFree(g_d_cache_cv); g_d_cache_cv = nullptr; }
+    if (g_d_cache_f2)   { cudaFree(g_d_cache_f2); g_d_cache_f2 = nullptr; }
+    if (g_d_cache_h2)   { cudaFree(g_d_cache_h2); g_d_cache_h2 = nullptr; }
+    if (g_cache_tex)    { cudaDestroyTextureObject(g_cache_tex); g_cache_tex = 0; }
+    if (g_cache_array)  { cudaFreeArray(g_cache_array); g_cache_array = nullptr; }
+    g_cache_tex_layers = 0;
 
     float scaled_rho = 2.0f * Ne * rho;
     float scaled_mu  = 4.0f * Ne * mu;
@@ -1855,6 +1971,69 @@ static void ensure_cache(float Ne, float mu, float rho, int n_steps,
                           total * sizeof(float), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(g_d_cache_cv, cache.cv,
                           total * sizeof(float), cudaMemcpyHostToDevice));
+
+    // Build interleaved float2 cache for fwd-only kernel
+    std::vector<float> interleaved(total * 2);
+    for (size_t i = 0; i < total; i++) {
+        interleaved[2 * i]     = cache.mean[i];
+        interleaved[2 * i + 1] = cache.cv[i];
+    }
+    CUDA_CHECK(cudaMalloc(&g_d_cache_f2, total * sizeof(float2)));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_f2, interleaved.data(),
+                          total * sizeof(float2), cudaMemcpyHostToDevice));
+
+    // Build half-precision (fp16) cache — halves L2 traffic per bilinear lookup
+    {
+        std::vector<__half2> h2_data(total);
+        for (size_t i = 0; i < total; i++) {
+            h2_data[i] = __floats2half2_rn(cache.mean[i], cache.cv[i]);
+        }
+        CUDA_CHECK(cudaMalloc(&g_d_cache_h2, total * sizeof(__half2)));
+        CUDA_CHECK(cudaMemcpy(g_d_cache_h2, h2_data.data(),
+                              total * sizeof(__half2), cudaMemcpyHostToDevice));
+    }
+
+    // Build layered 2D texture for hardware bilinear interpolation.
+    // Max 2048 layers for layered 2D array; handle overflow via decomposition loop.
+    {
+        int n_layers = std::min(n_steps, 2048);
+        g_cache_tex_layers = n_layers;
+
+        // Reinterpret interleaved floats as float2 for host data
+        const float2* f2_host = reinterpret_cast<const float2*>(interleaved.data());
+
+        cudaChannelFormatDesc desc = cudaCreateChannelDesc<float2>();
+        // width = FF_CV_N (cv dim), height = FF_MEAN_N (mean dim)
+        cudaExtent extent = make_cudaExtent(FF_CV_N, FF_MEAN_N, n_layers);
+        CUDA_CHECK(cudaMalloc3DArray(&g_cache_array, &desc, extent, cudaArrayLayered));
+
+        // Copy host data → layered array
+        cudaMemcpy3DParms p = {0};
+        p.srcPtr = make_cudaPitchedPtr(
+            (void*)f2_host,
+            FF_CV_N * sizeof(float2),   // pitch (row stride in bytes)
+            FF_CV_N,                    // width in elements
+            FF_MEAN_N                   // height in rows
+        );
+        p.dstArray = g_cache_array;
+        p.extent = make_cudaExtent(FF_CV_N, FF_MEAN_N, n_layers);
+        p.kind = cudaMemcpyHostToDevice;
+        CUDA_CHECK(cudaMemcpy3D(&p));
+
+        // Create texture object
+        cudaResourceDesc resDesc = {};
+        resDesc.resType = cudaResourceTypeArray;
+        resDesc.res.array.array = g_cache_array;
+
+        cudaTextureDesc texDesc = {};
+        texDesc.addressMode[0] = cudaAddressModeClamp;  // cv dim
+        texDesc.addressMode[1] = cudaAddressModeClamp;  // mean dim
+        texDesc.filterMode = cudaFilterModeLinear;       // hardware bilinear!
+        texDesc.readMode = cudaReadModeElementType;
+        texDesc.normalizedCoords = 0;                    // use texel coordinates
+
+        CUDA_CHECK(cudaCreateTextureObject(&g_cache_tex, &resDesc, &texDesc, nullptr));
+    }
 
     g_cache_n_steps = n_steps;
     g_cache_rho = rho;
@@ -2157,6 +2336,357 @@ py::dict py_gamma_smc_flow_cached_fb(
 }
 
 // ============================================================
+// FlowContext: persistent GPU context for max throughput
+// ============================================================
+class FlowContext {
+    uint64_t* d_packed_ = nullptr;
+    double* d_pos_ = nullptr;
+    int* d_pi_ = nullptr;
+    int* d_pj_ = nullptr;
+    float* d_mean_ = nullptr;
+    float* d_lower_ = nullptr;
+    float* d_upper_ = nullptr;
+
+    int n_haps_, n_words_, S_;
+    int max_pairs_;      // current device output allocation size
+    bool has_ci_;
+
+    void alloc_output(int n_pairs, bool ci) {
+        if (n_pairs <= max_pairs_ && ci == has_ci_) return;
+        free_output();
+        max_pairs_ = n_pairs;
+        has_ci_ = ci;
+
+        size_t total = (size_t)n_pairs * S_;
+        CUDA_CHECK(cudaMalloc(&d_mean_, total * sizeof(float)));
+        if (ci) {
+            CUDA_CHECK(cudaMalloc(&d_lower_, total * sizeof(float)));
+            CUDA_CHECK(cudaMalloc(&d_upper_, total * sizeof(float)));
+        }
+        CUDA_CHECK(cudaMalloc(&d_pi_, n_pairs * sizeof(int)));
+        CUDA_CHECK(cudaMalloc(&d_pj_, n_pairs * sizeof(int)));
+    }
+
+    void free_output() {
+        if (d_mean_) { cudaFree(d_mean_); d_mean_ = nullptr; }
+        if (d_lower_) { cudaFree(d_lower_); d_lower_ = nullptr; }
+        if (d_upper_) { cudaFree(d_upper_); d_upper_ = nullptr; }
+        if (d_pi_) { cudaFree(d_pi_); d_pi_ = nullptr; }
+        if (d_pj_) { cudaFree(d_pj_); d_pj_ = nullptr; }
+        max_pairs_ = 0;
+    }
+
+public:
+    FlowContext(
+        py::array_t<uint8_t, py::array::c_style> G,
+        py::array_t<double, py::array::c_style> positions_arr,
+        double Ne, double mu, double rho,
+        std::string flow_field_path,
+        int cache_steps)
+    {
+        auto g_buf = G.request();
+        auto pos_buf = positions_arr.request();
+
+        n_haps_ = (int)g_buf.shape[0];
+        S_ = (int)g_buf.shape[1];
+        n_words_ = (S_ + 63) / 64;
+        max_pairs_ = 0;
+        has_ci_ = false;
+
+        // Determine cache steps from positions
+        if (cache_steps <= 0) {
+            const double* pos = (const double*)pos_buf.ptr;
+            double max_gap = 0;
+            for (int i = 1; i < S_; i++) {
+                double gap = pos[i] - pos[i - 1];
+                if (gap > max_gap) max_gap = gap;
+            }
+            cache_steps = std::max(1024, (int)(max_gap * 1.1) + 1);
+            cache_steps = std::min(cache_steps, 16384);
+        }
+
+        // Build/upload cache
+        ensure_cache((float)Ne, (float)mu, (float)rho, cache_steps, flow_field_path);
+
+        // Upload and bitpack genotypes
+        uint8_t* d_G;
+        CUDA_CHECK(cudaMalloc(&d_G, (size_t)n_haps_ * S_ * sizeof(uint8_t)));
+        CUDA_CHECK(cudaMalloc(&d_packed_, (size_t)n_haps_ * n_words_ * sizeof(uint64_t)));
+        CUDA_CHECK(cudaMemset(d_packed_, 0, (size_t)n_haps_ * n_words_ * sizeof(uint64_t)));
+        CUDA_CHECK(cudaMemcpy(d_G, g_buf.ptr, (size_t)n_haps_ * S_, cudaMemcpyHostToDevice));
+        bitpack_genotypes_gpu(d_G, d_packed_, n_haps_, S_, n_words_);
+        cudaFree(d_G);
+
+        // Upload positions
+        CUDA_CHECK(cudaMalloc(&d_pos_, S_ * sizeof(double)));
+        CUDA_CHECK(cudaMemcpy(d_pos_, pos_buf.ptr, S_ * sizeof(double), cudaMemcpyHostToDevice));
+    }
+
+    ~FlowContext() {
+        free_output();
+        if (d_packed_) cudaFree(d_packed_);
+        if (d_pos_) cudaFree(d_pos_);
+    }
+
+    FlowContext(const FlowContext&) = delete;
+    FlowContext& operator=(const FlowContext&) = delete;
+
+    int n_haps() const { return n_haps_; }
+    int n_sites() const { return S_; }
+
+    py::dict run_fwd(std::vector<std::pair<int, int>> pairs, bool mean_only) {
+        int n_pairs = (int)pairs.size();
+        if (n_pairs == 0) {
+            py::dict result;
+            result["mean"] = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, 0});
+            return result;
+        }
+
+        bool ci = !mean_only;
+        alloc_output(n_pairs, ci);
+
+        // Upload pair indices
+        std::vector<int> pi(n_pairs), pj(n_pairs);
+        for (int p = 0; p < n_pairs; p++) {
+            pi[p] = pairs[p].first;
+            pj[p] = pairs[p].second;
+        }
+        CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+
+        // Kernel — use fp16 cache for halved L2 traffic
+        gamma_smc_flow_h2_fwd_gpu(
+            d_packed_, n_words_, d_pos_, S_, g_cache_Ne,
+            d_pi_, d_pj_, n_pairs,
+            g_d_cache_h2, g_cache_n_steps,
+            d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr);
+
+        // D2H directly to numpy-managed memory
+        size_t bytes = (size_t)S_ * n_pairs * sizeof(float);
+        auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        CUDA_CHECK(cudaMemcpy(mean_out.mutable_data(), d_mean_, bytes, cudaMemcpyDeviceToHost));
+
+        py::dict result;
+        result["mean"] = mean_out;
+
+        if (ci) {
+            auto lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            auto upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            CUDA_CHECK(cudaMemcpy(lower_out.mutable_data(), d_lower_, bytes, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(upper_out.mutable_data(), d_upper_, bytes, cudaMemcpyDeviceToHost));
+            result["lower"] = lower_out;
+            result["upper"] = upper_out;
+        }
+
+        return result;
+    }
+
+    py::dict run_fb(std::vector<std::pair<int, int>> pairs, bool mean_only) {
+        int n_pairs = (int)pairs.size();
+        if (n_pairs == 0) {
+            py::dict result;
+            result["mean"] = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, 0});
+            return result;
+        }
+
+        bool ci = !mean_only;
+
+        // Need forward buffer for FB
+        size_t fwd_buf_bytes = 2ULL * S_ * n_pairs * sizeof(float);
+        float* d_fwd_buf;
+        CUDA_CHECK(cudaMalloc(&d_fwd_buf, fwd_buf_bytes));
+
+        alloc_output(n_pairs, ci);
+
+        std::vector<int> pi(n_pairs), pj(n_pairs);
+        for (int p = 0; p < n_pairs; p++) {
+            pi[p] = pairs[p].first;
+            pj[p] = pairs[p].second;
+        }
+        CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+
+        gamma_smc_flow_cached_fb_gpu(
+            d_packed_, n_words_, d_pos_, S_, g_cache_Ne,
+            d_pi_, d_pj_, n_pairs,
+            g_d_cache_mean, g_d_cache_cv, g_cache_n_steps,
+            d_fwd_buf,
+            d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr);
+
+        cudaFree(d_fwd_buf);
+
+        size_t bytes = (size_t)S_ * n_pairs * sizeof(float);
+        auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        CUDA_CHECK(cudaMemcpy(mean_out.mutable_data(), d_mean_, bytes, cudaMemcpyDeviceToHost));
+
+        py::dict result;
+        result["mean"] = mean_out;
+        if (ci) {
+            auto lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            auto upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            CUDA_CHECK(cudaMemcpy(lower_out.mutable_data(), d_lower_, bytes, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(upper_out.mutable_data(), d_upper_, bytes, cudaMemcpyDeviceToHost));
+            result["lower"] = lower_out;
+            result["upper"] = upper_out;
+        }
+        return result;
+    }
+};
+
+// ============================================================
+// Forward-only with cache — no forward buffer, max throughput
+// ============================================================
+py::dict py_gamma_smc_flow_cached_fwd(
+    py::array_t<uint8_t, py::array::c_style> G,
+    py::array_t<double, py::array::c_style> positions_arr,
+    std::vector<std::pair<int, int>> pairs,
+    double Ne,
+    double mu_scalar,
+    double rho_scalar,
+    std::string flow_field_path,
+    bool mean_only,
+    int cache_steps)
+{
+    auto g_buf = G.request();
+    auto pos_buf = positions_arr.request();
+
+    int n = (int)g_buf.shape[0];
+    int S = (int)g_buf.shape[1];
+    int n_words = (S + 63) / 64;
+    int n_pairs = (int)pairs.size();
+
+    // Determine cache size from data if not specified
+    if (cache_steps <= 0) {
+        const double* pos = (const double*)pos_buf.ptr;
+        double max_gap = 0;
+        for (int i = 1; i < S; i++) {
+            double gap = pos[i] - pos[i - 1];
+            if (gap > max_gap) max_gap = gap;
+        }
+        cache_steps = std::max(1024, (int)(max_gap * 1.1) + 1);
+        cache_steps = std::min(cache_steps, 16384);
+    }
+
+    ensure_cache((float)Ne, (float)mu_scalar, (float)rho_scalar, cache_steps,
+                 flow_field_path);
+
+    // Pair indices
+    std::vector<int> pi(n_pairs), pj(n_pairs);
+    for (int p = 0; p < n_pairs; p++) {
+        pi[p] = pairs[p].first;
+        pj[p] = pairs[p].second;
+    }
+
+    // GPU allocations: genotypes + positions + pairs
+    uint8_t* d_G;
+    uint64_t* d_packed;
+    double* d_pos;
+    int *d_pi, *d_pj;
+
+    CUDA_CHECK(cudaMalloc(&d_G, (size_t)n * S * sizeof(uint8_t)));
+    CUDA_CHECK(cudaMalloc(&d_packed, (size_t)n * n_words * sizeof(uint64_t)));
+    CUDA_CHECK(cudaMemset(d_packed, 0, (size_t)n * n_words * sizeof(uint64_t)));
+    CUDA_CHECK(cudaMemcpy(d_G, g_buf.ptr, (size_t)n * S * sizeof(uint8_t),
+                          cudaMemcpyHostToDevice));
+    bitpack_genotypes_gpu(d_G, d_packed, n, S, n_words);
+    cudaFree(d_G);
+
+    CUDA_CHECK(cudaMalloc(&d_pos, S * sizeof(double)));
+    CUDA_CHECK(cudaMemcpy(d_pos, pos_buf.ptr, S * sizeof(double),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_CHECK(cudaMalloc(&d_pi, n_pairs * sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&d_pj, n_pairs * sizeof(int)));
+    CUDA_CHECK(cudaMemcpy(d_pi, pi.data(), n_pairs * sizeof(int),
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_pj, pj.data(), n_pairs * sizeof(int),
+                          cudaMemcpyHostToDevice));
+
+    // Output-only allocation (NO forward buffer!)
+    int n_arrays = mean_only ? 1 : 3;
+    size_t free_mem = 0, total_mem = 0;
+    cudaMemGetInfo(&free_mem, &total_mem);
+    size_t per_pair = (size_t)S * n_arrays * sizeof(float);
+    size_t usable = (size_t)(free_mem * 0.7);
+    int chunk_pairs = n_pairs;
+    if (per_pair > 0 && (size_t)n_pairs * per_pair > usable)
+        chunk_pairs = std::max(1, (int)(usable / per_pair));
+
+    size_t chunk_sites = (size_t)chunk_pairs * S;
+    float *d_mean, *d_lower = nullptr, *d_upper = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_mean, chunk_sites * sizeof(float)));
+    if (!mean_only) {
+        CUDA_CHECK(cudaMalloc(&d_lower, chunk_sites * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_upper, chunk_sites * sizeof(float)));
+    }
+
+    auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S, (ssize_t)n_pairs});
+    py::array_t<float> lower_out, upper_out;
+    if (!mean_only) {
+        lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S, (ssize_t)n_pairs});
+        upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S, (ssize_t)n_pairs});
+    }
+
+    float* h_mean = mean_out.mutable_data();
+    float* h_lower = mean_only ? nullptr : lower_out.mutable_data();
+    float* h_upper = mean_only ? nullptr : upper_out.mutable_data();
+
+    for (int offset = 0; offset < n_pairs; offset += chunk_pairs) {
+        int chunk = std::min(chunk_pairs, n_pairs - offset);
+
+        if (g_cache_tex) {
+            gamma_smc_flow_tex_fwd_gpu(
+                d_packed, n_words, d_pos, S, (float)Ne,
+                d_pi + offset, d_pj + offset, chunk,
+                g_cache_tex, g_cache_tex_layers,
+                d_mean, d_lower, d_upper);
+        } else {
+            gamma_smc_flow_cached_fwd_gpu(
+                d_packed, n_words, d_pos, S, (float)Ne,
+                d_pi + offset, d_pj + offset, chunk,
+                g_d_cache_f2, g_cache_n_steps,
+                d_mean, d_lower, d_upper);
+        }
+
+        if (chunk == n_pairs) {
+            size_t bytes = (size_t)S * chunk * sizeof(float);
+            CUDA_CHECK(cudaMemcpy(h_mean, d_mean, bytes, cudaMemcpyDeviceToHost));
+            if (!mean_only) {
+                CUDA_CHECK(cudaMemcpy(h_lower, d_lower, bytes, cudaMemcpyDeviceToHost));
+                CUDA_CHECK(cudaMemcpy(h_upper, d_upper, bytes, cudaMemcpyDeviceToHost));
+            }
+        } else {
+            auto copy2d = [&](float* d_src, float* h_dst) {
+                CUDA_CHECK(cudaMemcpy2D(
+                    h_dst + offset, (size_t)n_pairs * sizeof(float),
+                    d_src, (size_t)chunk * sizeof(float),
+                    (size_t)chunk * sizeof(float), S,
+                    cudaMemcpyDeviceToHost));
+            };
+            copy2d(d_mean, h_mean);
+            if (!mean_only) {
+                copy2d(d_lower, h_lower);
+                copy2d(d_upper, h_upper);
+            }
+        }
+    }
+
+    cudaFree(d_packed); cudaFree(d_pos);
+    cudaFree(d_pi); cudaFree(d_pj);
+    cudaFree(d_mean);
+    if (d_lower) cudaFree(d_lower);
+    if (d_upper) cudaFree(d_upper);
+
+    py::dict result;
+    result["mean"] = mean_out;
+    if (!mean_only) {
+        result["lower"] = lower_out;
+        result["upper"] = upper_out;
+    }
+    return result;
+}
+
+// ============================================================
 // Module definition
 // ============================================================
 PYBIND11_MODULE(_core, m) {
@@ -2269,6 +2799,17 @@ PYBIND11_MODULE(_core, m) {
           py::arg("flow_field_path") = "/sietch_colab/kkor/gamma_smc/resources/default_flow_field.txt",
           py::arg("mean_only") = false);
 
+    m.def("gamma_smc_flow_cached_fwd", &py_gamma_smc_flow_cached_fwd,
+          "Gamma-SMC forward-only with precomputed multi-step cache on GPU.\n"
+          "No forward buffer — single pass, maximum throughput.\n"
+          "Returns dict with 'mean' (and 'lower','upper' unless mean_only=True).",
+          py::arg("G"), py::arg("positions"), py::arg("pairs"),
+          py::arg("Ne") = 10000.0, py::arg("mu") = 1.25e-8,
+          py::arg("rho") = 1e-8,
+          py::arg("flow_field_path") = "/sietch_colab/kkor/gamma_smc/resources/default_flow_field.txt",
+          py::arg("mean_only") = true,
+          py::arg("cache_steps") = 0);
+
     m.def("gamma_smc_flow_cached_fb", &py_gamma_smc_flow_cached_fb,
           "Gamma-SMC forward-backward with precomputed multi-step cache on GPU.\n"
           "Eliminates per-site flow field iteration — single bilinear lookup per site.\n"
@@ -2280,6 +2821,11 @@ PYBIND11_MODULE(_core, m) {
           py::arg("flow_field_path") = "/sietch_colab/kkor/gamma_smc/resources/default_flow_field.txt",
           py::arg("mean_only") = false,
           py::arg("cache_steps") = 0);
+
+    m.def("gamma_smc_site_summary", &py_gamma_smc_site_summary,
+          py::arg("G"), py::arg("positions"), py::arg("pairs"),
+          py::arg("Ne"), py::arg("mu"), py::arg("rho"),
+          py::arg("stride") = 1);
 
     m.def("gamma_smc_forward_quantized", &py_gamma_smc_forward_quantized,
           "Gamma-SMC forward filtering with log-scale quantized output.\n"
@@ -2308,4 +2854,27 @@ PYBIND11_MODULE(_core, m) {
         .def_property_readonly("n_haps", &HMMContext::n_haps)
         .def_property_readonly("n_sites", &HMMContext::n_sites)
         .def_property_readonly("n_bins", &HMMContext::n_bins);
+
+    py::class_<FlowContext>(m, "FlowContext",
+        "Persistent GPU context for flow-field Gamma-SMC inference.\n"
+        "Holds packed genotypes, positions, and cache on GPU.\n"
+        "Eliminates per-call allocation overhead for max throughput.\n"
+        "Use run_fwd() for forward-only (fastest) or run_fb() for smoothed.")
+        .def(py::init<py::array_t<uint8_t, py::array::c_style>,
+                       py::array_t<double, py::array::c_style>,
+                       double, double, double, std::string, int>(),
+             py::arg("G"), py::arg("positions"),
+             py::arg("Ne") = 10000.0, py::arg("mu") = 1.25e-8,
+             py::arg("rho") = 1e-8,
+             py::arg("flow_field_path") = "/sietch_colab/kkor/gamma_smc/resources/default_flow_field.txt",
+             py::arg("cache_steps") = 0)
+        .def("run_fwd", &FlowContext::run_fwd,
+             "Forward-only filtering (fastest). Returns dict with 'mean'.\n"
+             "No forward buffer needed — single pass, pinned D2H.",
+             py::arg("pairs"), py::arg("mean_only") = true)
+        .def("run_fb", &FlowContext::run_fb,
+             "Forward-backward smoothing. Returns dict with 'mean'.",
+             py::arg("pairs"), py::arg("mean_only") = true)
+        .def_property_readonly("n_haps", &FlowContext::n_haps)
+        .def_property_readonly("n_sites", &FlowContext::n_sites);
 }

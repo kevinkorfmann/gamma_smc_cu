@@ -34,3 +34,15 @@ void gamma_smc_forward_quantized_gpu(
     unsigned char* q_out,
     float log_min, float log_max,
     int stride = 1, int bits = 8);
+
+// GPU-side per-site summary: run forward filter + reduce across pairs.
+// Returns per-site mean (and optionally min/max) — only out_S floats D2H.
+void gamma_smc_forward_site_summary_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    float mu, float rho, float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    float* site_mean_out,   // [out_S], device memory
+    float* site_min_out,    // [out_S] or NULL
+    float* site_max_out,    // [out_S] or NULL
+    int stride = 1);
