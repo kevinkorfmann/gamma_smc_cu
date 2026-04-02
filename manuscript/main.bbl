@@ -1,0 +1,68 @@
+\begin{thebibliography}{7}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Baumdicker et~al.(2022)Baumdicker, Bisschop, Goldstein, Gower,
+  Ragsdale, Tsambos, Zhu, Eldon, Ellerman, Galloway, Gladstein, Gorjanc, Guo,
+  Jeffery, Kretzschumar, Lohse, Matschiner, Nelson, Pope, Rasmussen, Raza,
+  Rizvi, Sell{\'e}s, Steinr{\"u}cken, Terhorst, Thornton, van Kemenade, Wohns,
+  Wong, Gravel, Kern, Koskela, Ralph, and Kelleher]{Baumdicker2022}
+Franz Baumdicker, Gertjan Bisschop, Daniel Goldstein, Graham Gower, Aaron~P.
+  Ragsdale, Georgia Tsambos, Sha Zhu, Bjarki Eldon, E.~Castedo Ellerman,
+  Jared~G. Galloway, Ariella~L. Gladstein, Gregor Gorjanc, Bing Guo, Ben
+  Jeffery, Warren~W. Kretzschumar, Konrad Lohse, Michael Matschiner, Dominic
+  Nelson, Nathaniel~S. Pope, Consuelo~D. Rasmussen, Murillo~F. Raza, Shahina
+  Rizvi, Guillermo Sell{\'e}s, Matthias Steinr{\"u}cken, Jonathan Terhorst,
+  Kevin~R. Thornton, Hugo van Kemenade, Anthony~W. Wohns, Yan Wong, Simon
+  Gravel, Andrew~D. Kern, Jere Koskela, Peter~L. Ralph, and Jerome Kelleher.
+\newblock Efficient ancestry and mutation simulation with msprime 1.0.
+\newblock \emph{Genetics}, 220\penalty0 (3):\penalty0 iyab229, 2022.
+\newblock \doi{10.1093/genetics/iyab229}.
+
+\bibitem[Kelleher et~al.(2019)Kelleher, Wong, Wohns, Fadil, Albers, and
+  McVean]{Kelleher2019}
+Jerome Kelleher, Yan Wong, Anthony~W. Wohns, Chaimaa Fadil, Patrick~K. Albers,
+  and Gil McVean.
+\newblock Inferring whole-genome histories in large population samples.
+\newblock \emph{Nature Genetics}, 51\penalty0 (9):\penalty0 1330--1338, 2019.
+\newblock \doi{10.1038/s41588-019-0483-y}.
+
+\bibitem[Li and Durbin(2011)]{Li2011}
+Heng Li and Richard Durbin.
+\newblock Inference of human population history from individual whole-genome
+  sequences.
+\newblock \emph{Nature}, 475\penalty0 (7357):\penalty0 493--496, 2011.
+\newblock \doi{10.1038/nature10231}.
+
+\bibitem[Schiffels and Durbin(2014)]{Schiffels2014}
+Stephan Schiffels and Richard Durbin.
+\newblock Inferring human population size and separation history from multiple
+  genome sequences.
+\newblock \emph{Nature Genetics}, 46\penalty0 (8):\penalty0 919--925, 2014.
+\newblock \doi{10.1038/ng.3015}.
+
+\bibitem[Schweiger and Durbin(2023)]{Schweiger2023}
+Regev Schweiger and Richard Durbin.
+\newblock Ultra-fast genome-wide inference of pairwise coalescence times.
+\newblock \emph{Genome Research}, 33\penalty0 (7):\penalty0 1023--1031, 2023.
+\newblock \doi{10.1101/gr.277665.123}.
+
+\bibitem[Speidel et~al.(2019)Speidel, Forest, Shi, and Myers]{Speidel2019}
+Leo Speidel, Marie Forest, Sinan Shi, and Simon~R. Myers.
+\newblock A method for genome-wide genealogy estimation for thousands of
+  samples.
+\newblock \emph{Nature Genetics}, 51\penalty0 (9):\penalty0 1321--1329, 2019.
+\newblock \doi{10.1038/s41588-019-0484-x}.
+
+\bibitem[Zhang et~al.(2023)Zhang, Biddanda, Gunnarsson, Cooper, and
+  Palamara]{Zhang2023}
+Brian~C. Zhang, Arjun Biddanda, {\'A}rni~Freyr Gunnarsson, Fergus Cooper, and
+  Pier~Francesco Palamara.
+\newblock Biobank-scale inference of ancestral recombination graphs.
+\newblock \emph{Nature Genetics}, 55\penalty0 (5):\penalty0 768--776, 2023.
+\newblock \doi{10.1038/s41588-023-01379-x}.
+
+\end{thebibliography}

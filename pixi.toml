@@ -36,3 +36,6 @@ build = { depends-on = ["_install"] }
 test = { cmd = "python -m pytest tests/ -v --ignore=tests/performance", depends-on = ["build"] }
 test-unit = { cmd = "python -m pytest tests/unit/ -v", depends-on = ["build"] }
 test-ref = "python -m pytest tests/reference/ -v"
+
+[pypi-dependencies]
+stdpopsim = "*"
