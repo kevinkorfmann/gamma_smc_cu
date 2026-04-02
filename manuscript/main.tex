@@ -38,9 +38,9 @@ Pairwise coalescence times (TMRCAs) encode the shared genealogical history betwe
 Existing methods for estimating site-specific TMRCA from sequence data---including PSMC, MSMC2, and the Gamma-SMC hidden Markov model of Schweiger et al.---are constrained to CPU execution and scale poorly beyond a few hundred haplotypes.
 Here we present \texttt{tmrca.cu}, an open-source CUDA library that re-implements the Gamma-SMC forward--backward algorithm entirely on GPU.
 Three architectural innovations---linearized recombination transitions, pre-XOR'd genotype buffers, and a fused backward-reduction kernel---collectively eliminate memory-bandwidth and latency bottlenecks that would otherwise prevent GPU acceleration of this workload.
-On a single NVIDIA A100 GPU, \texttt{tmrca.cu} achieves 250--3{,}000$\times$ wall-clock speedups over the original Gamma-SMC binary across a range of sample sizes (10--1{,}000 haplotypes) and sequence lengths (1--10\,Mb), while simultaneously improving estimation accuracy from a Pearson correlation of $r=0.791$ to $r=0.820$ against \texttt{msprime} ground truth on a log-transformed scale.
+On a single NVIDIA A100 GPU, \texttt{tmrca.cu} achieves 121--3{,}145$\times$ wall-clock speedups over the original Gamma-SMC binary across a range of sample sizes (10--1{,}000 haplotypes) and sequence lengths (1--10\,Mb), while simultaneously improving estimation accuracy from a Pearson correlation of $r=0.791$ to $r=0.820$ against \texttt{msprime} ground truth on a log-transformed scale.
 The accuracy gain arises from the full forward--backward posterior, which conditions on the entire sequence rather than only upstream sites as in the default forward-pass output of the original tool.
-These speedups bring all-pairs TMRCA estimation for a 1\,Mb region across 1{,}000 haplotypes---roughly 500{,}000 pairs---from 89 seconds on CPU down to 0.26 seconds on GPU.
+These speedups bring all-pairs TMRCA estimation for a 1\,Mb region across 1{,}000 haplotypes---roughly 500{,}000 pairs---from 89 seconds on CPU down to 0.74 seconds on GPU.
 We demonstrate that this performance envelope is sufficient to make genome-wide, all-pairs TMRCA inference tractable for cohorts of tens of thousands of individuals, opening new avenues for genealogy-aware analyses at biobank scale.
 \end{abstract}
 
@@ -52,7 +52,7 @@ Every pair of individuals shares a common ancestor at every position in the geno
 Knowing these coalescence times would help researchers detect natural selection, infer past population sizes, and find disease-associated loci, but estimating them from DNA sequences is computationally expensive.
 The fastest existing method, Gamma-SMC, runs on a single CPU core and takes about 90 seconds for 1{,}000 haplotypes over 1 megabase, making whole-genome analysis of large cohorts impractical.
 We developed \texttt{tmrca.cu}, a GPU implementation that performs the same statistical computation hundreds to thousands of times faster by exploiting the massive parallelism of modern graphics processors.
-On a single NVIDIA A100 GPU, \texttt{tmrca.cu} estimates coalescence times for all half-million pairs among 1{,}000 haplotypes in under 0.3 seconds---a 345-fold speedup.
+On a single NVIDIA A100 GPU, \texttt{tmrca.cu} estimates coalescence times for all half-million pairs among 1{,}000 haplotypes in under 0.8 seconds---a 121-fold speedup.
 The GPU estimates are also slightly more accurate than the CPU version because they use the full forward--backward algorithm rather than a forward-only approximation.
 This level of performance makes it feasible, for the first time, to compute pairwise TMRCA landscapes across entire genomes for large biobank cohorts, potentially enabling new kinds of population genetic analyses that were previously out of reach.
 
@@ -87,7 +87,7 @@ This workload---millions of independent, lightweight, memory-bound sequential sc
 
 Here we present \texttt{tmrca.cu}, a CUDA library that implements the Gamma-SMC forward--backward algorithm on GPU.
 We introduce three architectural optimizations---linearized recombination, pre-XOR'd genotype buffers, and fused backward-reduction---that collectively address the memory and compute bottlenecks specific to this workload.
-On a single NVIDIA A100, \texttt{tmrca.cu} achieves 250--3{,}000$\times$ speedups over the original Gamma-SMC binary while simultaneously improving estimation accuracy from $r=0.791$ to $r=0.820$ (Pearson correlation against ground truth on a log scale).
+On a single NVIDIA A100, \texttt{tmrca.cu} achieves 121--3{,}145$\times$ speedups over the original Gamma-SMC binary while simultaneously improving estimation accuracy from $r=0.791$ to $r=0.820$ (Pearson correlation against ground truth on a log scale).
 We argue that these speedups bring genome-wide, all-pairs TMRCA estimation within practical reach for biobank-scale cohorts.
 
 % ============================================================================
@@ -103,19 +103,19 @@ Our implementation differs only in the computational substrate (GPU instead of C
 
 \subsection*{Speed--accuracy tradeoff}
 
-We benchmarked \texttt{tmrca.cu} against Schweiger's original compiled Gamma-SMC binary across fifteen configurations spanning sample sizes from 10 to 1{,}000 haplotypes and sequence lengths of 1, 5, and 10\,Mb (Table~\ref{tab:benchmarks}, Fig~\ref{fig:speed_accuracy}).
+We benchmarked \texttt{tmrca.cu} against Schweiger's original compiled Gamma-SMC binary across fourteen configurations spanning sample sizes from 10 to 1{,}000 haplotypes and sequence lengths of 1 and 10\,Mb (Table~\ref{tab:benchmarks}, Fig~\ref{fig:speed_accuracy}).
 Simulated haplotypes were generated with \texttt{msprime} under a constant-size demographic model ($N_e = 10{,}000$, $\mu = 1.25 \times 10^{-8}$, $\rho = 1 \times 10^{-8}$), providing ground-truth coalescence times for accuracy evaluation.
 
-For 10 haplotypes over 1\,Mb (45 pairs), \texttt{tmrca.cu} completed in 0.002 seconds compared to 6.2 seconds for Gamma-SMC, a 3{,}134$\times$ speedup.
-At the other extreme, for 1{,}000 haplotypes over 1\,Mb (499{,}500 pairs), the GPU tool finished in 0.259 seconds versus 89.2 seconds, a 345$\times$ speedup.
-Across all configurations, speedups ranged from 264$\times$ to 3{,}134$\times$, with the highest ratios observed at small sample sizes where CPU per-pair overhead dominates (Fig~\ref{fig:speedup}).
+For 10 haplotypes over 1\,Mb (45 pairs), \texttt{tmrca.cu} completed in 0.002 seconds compared to 6.2 seconds for Gamma-SMC, a 3{,}145$\times$ speedup.
+At the other extreme, for 1{,}000 haplotypes over 1\,Mb (499{,}500 pairs), the GPU tool finished in 0.737 seconds versus 89.2 seconds, a 121$\times$ speedup.
+Across all configurations, speedups ranged from 121$\times$ to 3{,}145$\times$, with the highest ratios observed at small sample sizes where CPU per-pair overhead dominates (Fig~\ref{fig:speedup}).
 
 \begin{figure}[!ht]
 \centering
 \includegraphics[width=0.8\textwidth]{fig1_speed_accuracy.pdf}
 \caption{\textbf{Speed--accuracy tradeoff.}
 Each point represents one benchmark configuration (sample size $\times$ sequence length).
-Circles denote 1\,Mb and squares 5\,Mb sequences.
+Circles denote 1\,Mb and diamonds 10\,Mb sequences.
 Blue: \texttt{tmrca.cu} forward--backward with GPU-side reduction; orange-red: Schweiger et al.\'s original Gamma-SMC binary.
 Faint lines connect matched configurations.
 \texttt{tmrca.cu} consistently occupies the fast-and-accurate region (upper left), achieving 250--3{,}000$\times$ lower wall-clock time at equal or higher accuracy.}
@@ -129,17 +129,17 @@ However, the GPU and CPU implementations exhibit qualitatively different scaling
 Schweiger's Gamma-SMC shows wall-clock time that scales roughly linearly with the number of pairs for a fixed sequence length, consistent with sequential pair processing.
 In contrast, \texttt{tmrca.cu} exhibits a shallower scaling curve because GPU occupancy increases with pair count: at low pair counts, many of the A100's streaming multiprocessors sit idle, whereas at high pair counts the GPU is fully saturated and throughput per pair approaches a constant.
 
-For 1\,Mb sequences, the GPU time increases from 0.002\,s (45 pairs) to 0.259\,s (499{,}500 pairs), a 130$\times$ increase in time for an 11{,}100$\times$ increase in pairs.
+For 1\,Mb sequences, the GPU time increases from 0.002\,s (45 pairs) to 0.737\,s (499{,}500 pairs), a 369$\times$ increase in time for an 11{,}100$\times$ increase in pairs.
 This sub-linear scaling reflects effective GPU utilization and suggests that further pair-count increases would continue to amortize fixed kernel-launch and memory-allocation overhead.
 
 \begin{figure}[!ht]
 \centering
 \includegraphics[width=0.8\textwidth]{fig2_scaling.pdf}
 \caption{\textbf{Wall-clock scaling and speedup.}
-(\textbf{a})~Wall-clock time versus number of haplotypes for 1\,Mb (solid) and 5\,Mb (dashed) sequences.
+(\textbf{a})~Wall-clock time versus number of haplotypes for 1\,Mb (solid) and 10\,Mb (dashed) sequences.
 Blue: \texttt{tmrca.cu}; orange-red: Schweiger et al.
 Both axes are log-scaled; the GPU curve lies 2--3 orders of magnitude below the CPU curve.
-(\textbf{b})~Speedup (CPU time / GPU time) for 1\,Mb (dark blue) and 5\,Mb (light blue) sequences.
+(\textbf{b})~Speedup (CPU time / GPU time) for 1\,Mb and 10\,Mb sequences.
 Dashed lines mark 100$\times$ and 1{,}000$\times$.}
 \label{fig:scaling}
 \end{figure}
@@ -147,11 +147,11 @@ Dashed lines mark 100$\times$ and 1{,}000$\times$.}
 \subsection*{Speedup across configurations}
 
 Speedup factors vary systematically with both sample size and sequence length (Fig~\ref{fig:speedup}).
-For 1\,Mb sequences, speedup decreases from 3{,}134$\times$ at $n=10$ to 264$\times$ at $n=500$, then increases to 345$\times$ at $n=1{,}000$.
+For 1\,Mb sequences, speedup decreases from 3{,}145$\times$ at $n=10$ to 139$\times$ at $n=500$ and 121$\times$ at $n=1{,}000$.
 The initial decrease reflects the transition from a launch-overhead-dominated regime (few pairs, GPU underutilized but CPU equally fast per pair) to a compute-dominated regime.
 The uptick at $n=1{,}000$ likely reflects improved GPU occupancy once the pair count exceeds the number of resident warps.
 
-For 5\,Mb sequences, the pattern is similar but with lower absolute speedups (282--493$\times$), because the longer sequences increase per-pair computation, shifting the balance from launch overhead toward sustained throughput where the GPU's advantage, while still large, is determined by raw FLOP and memory-bandwidth ratios rather than latency hiding.
+For 10\,Mb sequences, the pattern is similar with speedups ranging from 175$\times$ to 408$\times$ where Schweiger's tool completed; at $n \geq 500$ the CPU tool exceeds 600\,s, while \texttt{tmrca.cu} finishes in 1.3--5.3\,s.
 
 \begin{figure}[!ht]
 \centering
@@ -160,7 +160,7 @@ For 5\,Mb sequences, the pattern is similar but with lower absolute speedups (28
 (\textbf{a})~Distribution of per-pair Pearson~$r$ (log-TMRCA versus truth) across 40 randomly sampled pairs ($n=50$, 2\,Mb).
 Boxes show interquartile range; diamonds mark means; individual data points are shown with jitter.
 The forward--backward estimator (mean $r=0.813$) outperforms both the forward-only variant ($r=0.737$) and Schweiger et al.\ ($r=0.798$).
-(\textbf{b})~Mean accuracy versus sample size for 1\,Mb and 5\,Mb sequences.}
+(\textbf{b})~Mean accuracy versus sample size for 1\,Mb and 10\,Mb sequences.}
 \label{fig:speedup}
 \end{figure}
 
@@ -189,7 +189,7 @@ The accuracy advantage of the forward--backward algorithm is expected on theoret
 Schweiger's original binary outputs the forward-pass Gamma mean, which conditions only on upstream sites and is therefore less well-calibrated for interior genomic positions.
 
 The per-configuration accuracy numbers confirm that the GPU implementation does not sacrifice statistical fidelity for speed.
-For the 1\,Mb, $n=10$ configuration, our forward--backward estimates achieve $r=0.842$ versus $r=0.815$ for Gamma-SMC; for 5\,Mb, $n=100$, we achieve $r=0.839$ versus $r=0.797$ (Table~\ref{tab:benchmarks}).
+For the 1\,Mb, $n=10$ configuration, our forward--backward estimates achieve $r=0.833$ versus $r=0.815$ for Gamma-SMC; for 10\,Mb, $n=100$, we achieve $r=0.843$ versus $r=0.800$ (Table~\ref{tab:benchmarks}).
 In no configuration does Gamma-SMC outperform the GPU forward--backward estimator.
 
 \begin{figure}[!ht]
@@ -238,22 +238,21 @@ Simulations use $N_e = 10{,}000$, $\mu = 1.25 \times 10^{-8}$, $\rho = 1 \times 
 \toprule
 $n$ & Seq.\ length & Pairs & Gamma-SMC (s) & \texttt{tmrca.cu} (s) & Speedup & $r$ (ours) & $r$ (Gamma-SMC) \\
 \midrule
-10 & 1\,Mb & 45 & 6.2 & 0.002 & 3{,}134$\times$ & 0.842 & 0.815 \\
-50 & 1\,Mb & 1{,}225 & 6.4 & 0.004 & 1{,}560$\times$ & 0.792 & 0.755 \\
-100 & 1\,Mb & 4{,}950 & 6.7 & 0.008 & 837$\times$ & 0.812 & 0.797 \\
-200 & 1\,Mb & 19{,}900 & 8.7 & 0.020 & 435$\times$ & 0.820 & 0.800 \\
-500 & 1\,Mb & 124{,}750 & 25.1 & 0.095 & 264$\times$ & 0.740 & 0.796 \\
-1{,}000 & 1\,Mb & 499{,}500 & 89.2 & 0.259 & 345$\times$ & 0.720 & 0.764 \\
-50 & 5\,Mb & 1{,}225 & 6.9 & 0.023 & 297$\times$ & 0.847 & 0.800 \\
-100 & 5\,Mb & 4{,}950 & 9.5 & 0.034 & 282$\times$ & 0.839 & 0.797 \\
-200 & 5\,Mb & 19{,}900 & 22.2 & 0.063 & 353$\times$ & 0.820 & 0.783 \\
-500 & 5\,Mb & 124{,}750 & 125.9 & 0.255 & 493$\times$ & 0.780 & 0.794 \\
+10 & 1\,Mb & 45 & 6.2 & 0.002 & 3{,}145$\times$ & 0.833 & 0.815 \\
+20 & 1\,Mb & 190 & 6.5 & 0.003 & 2{,}411$\times$ & 0.818 & 0.790 \\
+50 & 1\,Mb & 1{,}225 & 6.4 & 0.004 & 1{,}504$\times$ & 0.815 & 0.755 \\
+100 & 1\,Mb & 4{,}950 & 6.7 & 0.008 & 882$\times$ & 0.815 & 0.797 \\
+200 & 1\,Mb & 19{,}900 & 8.7 & 0.020 & 430$\times$ & 0.818 & 0.800 \\
+500 & 1\,Mb & 124{,}750 & 25.1 & 0.181 & 139$\times$ & 0.822 & 0.796 \\
+1{,}000 & 1\,Mb & 499{,}500 & 89.2 & 0.737 & 121$\times$ & 0.801 & 0.764 \\
 \midrule
-10 & 10\,Mb & 45 & 6.4 & 0.023 & 278$\times$ & 0.870 & 0.820 \\
-50 & 10\,Mb & 1{,}225 & 8.2 & 0.048 & 171$\times$ & 0.852 & 0.810 \\
-100 & 10\,Mb & 4{,}950 & 14.8 & 0.068 & 218$\times$ & 0.845 & 0.800 \\
-200 & 10\,Mb & 19{,}900 & 45.3 & 0.130 & 348$\times$ & 0.830 & 0.790 \\
-500 & 10\,Mb & 124{,}750 & $>$600 & 0.520 & $>$1{,}150$\times$ & 0.790 & --- \\
+10 & 10\,Mb & 45 & 6.4 & 0.021 & 311$\times$ & 0.846 & 0.820 \\
+20 & 10\,Mb & 190 & 6.8 & 0.031 & 221$\times$ & 0.848 & --- \\
+50 & 10\,Mb & 1{,}225 & 8.2 & 0.047 & 175$\times$ & 0.859 & 0.810 \\
+100 & 10\,Mb & 4{,}950 & 14.8 & 0.071 & 209$\times$ & 0.843 & 0.800 \\
+200 & 10\,Mb & 19{,}900 & 45.3 & 0.111 & 408$\times$ & 0.841 & 0.790 \\
+500 & 10\,Mb & 124{,}750 & $>$600 & 1.284 & $>$467$\times$ & 0.853 & --- \\
+1{,}000 & 10\,Mb & 499{,}500 & --- & 5.338 & --- & 0.842 & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -296,7 +295,7 @@ At large pair counts ( \geq 500$), three GPUs achieve .7\times$ speedup, approac
 \section*{Discussion}
 
 We have presented \texttt{tmrca.cu}, a GPU-accelerated implementation of the Gamma-SMC model for pairwise coalescence time estimation.
-On a single NVIDIA A100, it achieves 250--3{,}000$\times$ speedups over the original CPU implementation while producing more accurate estimates through the use of a full forward--backward algorithm.
+On a single NVIDIA A100, it achieves 121--3{,}145$\times$ speedups over the original CPU implementation while producing more accurate estimates through the use of a full forward--backward algorithm.
 
 \paragraph{What this enables.}
 The practical implication of these speedups is a qualitative shift in the feasibility of all-pairs TMRCA analysis.
@@ -395,7 +394,7 @@ This reduces the PCIe transfer by four orders of magnitude and eliminates the ne
 \subsection*{Simulation and benchmarking protocol}
 
 Simulated haplotypes were generated with \texttt{msprime} v1.2 \cite{Baumdicker2022} under a constant-size demographic model with effective population size $N_e = 10{,}000$, per-base mutation rate $\mu = 1.25 \times 10^{-8}$, and per-base recombination rate $\rho = 1 \times 10^{-8}$.
-Sample sizes ranged from $n=10$ to $n=1{,}000$ haplotypes, and sequence lengths were 1\,Mb and 5\,Mb.
+Sample sizes ranged from $n=10$ to $n=1{,}000$ haplotypes, and sequence lengths were 1\,Mb and 10\,Mb.
 Ground-truth pairwise coalescence times were extracted from the \texttt{msprime} tree sequence.
 
 Schweiger's Gamma-SMC was run using the original compiled binary with default parameters and the default flow field file (\texttt{default\_flow\_field.txt}).
