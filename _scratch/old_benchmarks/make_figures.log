@@ -1,0 +1,37 @@
+======================================================================
+Collecting benchmark data...
+======================================================================
+
+  n=10, 1Mb... S=1429 npp=45 fb=0.0019s fwd=0.0008s schw(timeout=180s)... schw=6.1s (3150x) r_fb=0.842 r_sw=0.815 [8s total]
+
+  n=20, 1Mb... S=1865 npp=190 fb=0.0027s fwd=0.0012s schw(timeout=180s)... schw=6.1s (2292x) r_fb=0.819 r_sw=0.790 [7s total]
+
+  n=50, 1Mb... S=2067 npp=1225 fb=0.0041s fwd=0.0021s schw(timeout=180s)... schw=6.2s (1523x) r_fb=0.792 r_sw=0.755 [7s total]
+
+  n=100, 1Mb... S=2554 npp=4950 fb=0.0082s fwd=0.1975s schw(timeout=180s)... schw=6.7s (814x) r_fb=0.812 r_sw=0.797 [11s total]
+
+  n=200, 1Mb... S=2967 npp=19900 fb=0.0201s fwd=0.0833s schw(timeout=180s)... schw=8.8s (438x) r_fb=0.826 r_sw=0.800 [13s total]
+
+  n=500, 1Mb... S=3523 npp=124750 fb=0.1806s fwd=2.7522s schw(timeout=180s)... schw=25.7s (142x) r_fb=0.815 r_sw=0.796 [66s total]
+
+  n=1000, 1Mb... S=3853 npp=499500 fb=0.7599s fwd=11.3202s schw(timeout=300s)... schw=89.7s (118x) r_fb=0.799 r_sw=0.764 [237s total]
+
+  n=10, 10Mb... S=14603 npp=45 fb=0.0203s fwd=0.0081s schw(timeout=180s)... schw=6.2s (305x) r_fb=0.862 r_sw=0.803 [15s total]
+
+  n=20, 10Mb... S=18191 npp=190 fb=0.0308s fwd=0.0119s schw(timeout=180s)... schw=6.4s (207x) r_fb=0.854 r_sw=0.796 [11s total]
+
+  n=50, 10Mb... S=21469 npp=1225 fb=0.0441s fwd=0.9415s schw(timeout=180s)... schw=7.8s (177x) r_fb=0.844 r_sw=0.788 [17s total]
+
+  n=100, 10Mb... S=26070 npp=4950 fb=0.0649s fwd=0.5902s schw(timeout=180s)... schw=13.6s (209x) r_fb=0.842 r_sw=0.786 [35s total]
+
+  n=200, 10Mb... S=29045 npp=19900 fb=0.1096s fwd=1.7477s schw(timeout=300s)... schw=42.0s (383x) r_fb=0.840 r_sw=0.790 [85s total]
+
+  n=500, 10Mb... S=34300 npp=124750 fb=1.2684s fwd=7.6176s schw(timeout=600s)... Traceback (most recent call last):
+  File "/sietch_colab/kkor/tmrca.cu/benchmarks/make_figures.py", line 254, in <module>
+    schw, sp, t_sw = run_schw(ts, n, timeout=stimeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/sietch_colab/kkor/tmrca.cu/benchmarks/make_figures.py", line 96, in run_schw
+    subprocess.run(["zstd", "-d", out, "-o", dec],
+  File "/sietch_colab/kkor/tmrca.cu/.pixi/envs/default/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['zstd', '-d', '/tmp/tmpeqo4s2x1/out', '-o', '/tmp/tmpeqo4s2x1/out.bin']' returned non-zero exit status 1.

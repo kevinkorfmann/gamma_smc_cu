@@ -1413,6 +1413,7 @@ public:
             cum_rho_arr[s] = cum_rho_arr[s - 1] + rho_scalar * (pos_ptr[s] - pos_ptr[s - 1]);
         }
 
+
         // Upload and bitpack genotypes
         uint8_t* d_G;
         CUDA_CHECK(cudaMalloc(&d_G, (size_t)n_haps_ * S_ * sizeof(uint8_t)));
@@ -2354,6 +2355,11 @@ class FlowContext {
     bool has_ci_;
     float* d_fwd_buf_ = nullptr;
     int fwd_buf_pairs_ = 0;  // how many pairs the fwd_buf can hold
+    int device_id_ = 0;  // GPU device this context lives on
+    float* ctx_cache_mean_ = nullptr;
+    float* ctx_cache_cv_ = nullptr;
+    int ctx_cache_steps_ = 0;
+    float ctx_cache_Ne_ = 0;
 
     void alloc_output(int n_pairs, bool ci) {
         if (n_pairs <= max_pairs_ && ci == has_ci_) return;
@@ -2399,6 +2405,7 @@ public:
         auto g_buf = G.request();
         auto pos_buf = positions_arr.request();
 
+        cudaGetDevice(&device_id_);  // remember which GPU we're on
         n_haps_ = (int)g_buf.shape[0];
         S_ = (int)g_buf.shape[1];
         n_words_ = (S_ + 63) / 64;
@@ -2420,6 +2427,53 @@ public:
         // Build/upload cache
         ensure_cache((float)Ne, (float)mu, (float)rho, cache_steps, flow_field_path);
 
+        // Multi-GPU: each device needs its own cache allocation.
+        // Save global pointers, force rebuild on this device, then restore.
+        {
+            float* saved_mean = g_d_cache_mean;
+            float* saved_cv = g_d_cache_cv;
+            float2* saved_f2 = g_d_cache_f2;
+            void* saved_h2 = g_d_cache_h2;
+            int saved_steps = g_cache_n_steps;
+            
+            // Check if cache is on a different device
+            int cache_device = -1;
+            cudaPointerAttributes attr;
+            if (saved_mean && cudaPointerGetAttributes(&attr, saved_mean) == cudaSuccess) {
+                cache_device = attr.device;
+            }
+            cudaGetLastError();
+            
+            if (cache_device != device_id_ && cache_device >= 0) {
+                // Force rebuild: temporarily null the globals so ensure_cache rebuilds
+                g_d_cache_mean = nullptr;
+                g_d_cache_cv = nullptr;
+                g_d_cache_f2 = nullptr;
+                g_d_cache_h2 = nullptr;
+                g_cache_n_steps = 0;
+                
+                ensure_cache((float)Ne, (float)mu, (float)rho, cache_steps, flow_field_path);
+                
+                // Save the device-local pointers
+                ctx_cache_mean_ = g_d_cache_mean;
+                ctx_cache_cv_ = g_d_cache_cv;
+                ctx_cache_steps_ = g_cache_n_steps;
+                ctx_cache_Ne_ = g_cache_Ne;
+                
+                // Restore globals (so the original device's cache isn't lost)
+                g_d_cache_mean = saved_mean;
+                g_d_cache_cv = saved_cv;
+                g_d_cache_f2 = saved_f2;
+                g_d_cache_h2 = saved_h2;
+                g_cache_n_steps = saved_steps;
+            } else {
+                // Same device or first time: use globals directly
+                ctx_cache_mean_ = g_d_cache_mean;
+                ctx_cache_cv_ = g_d_cache_cv;
+                ctx_cache_steps_ = g_cache_n_steps;
+                ctx_cache_Ne_ = g_cache_Ne;
+            }
+        }
         // Upload and bitpack genotypes
         uint8_t* d_G;
         CUDA_CHECK(cudaMalloc(&d_G, (size_t)n_haps_ * S_ * sizeof(uint8_t)));
@@ -2445,6 +2499,7 @@ public:
     FlowContext& operator=(const FlowContext&) = delete;
 
     py::dict run_fb_summary(std::vector<std::pair<int, int>> pairs) {
+        cudaSetDevice(device_id_);  // ensure correct GPU
         int n_pairs = (int)pairs.size();
         if (n_pairs == 0) {
             py::dict result;
@@ -2469,9 +2524,9 @@ public:
         CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
 
         gamma_smc_flow_cached_fb_reduce_gpu(
-            d_packed_, n_words_, d_pos_, S_, g_cache_Ne,
+            d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
             d_pi_, d_pj_, n_pairs,
-            g_d_cache_mean, g_d_cache_cv, g_cache_n_steps,
+            ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
             d_fwd_buf_,
             d_site_mean, d_site_min, d_site_max);
 
@@ -2496,8 +2551,10 @@ public:
 
     int n_haps() const { return n_haps_; }
     int n_sites() const { return S_; }
+    int device_id() const { return device_id_; }
 
     py::dict run_fwd(std::vector<std::pair<int, int>> pairs, bool mean_only) {
+        cudaSetDevice(device_id_);
         int n_pairs = (int)pairs.size();
         if (n_pairs == 0) {
             py::dict result;
@@ -2519,9 +2576,9 @@ public:
 
         // Kernel — use fp16 cache for halved L2 traffic
         gamma_smc_flow_h2_fwd_gpu(
-            d_packed_, n_words_, d_pos_, S_, g_cache_Ne,
+            d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
             d_pi_, d_pj_, n_pairs,
-            g_d_cache_h2, g_cache_n_steps,
+            g_d_cache_h2, ctx_cache_steps_,
             d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr);
 
         // D2H directly to numpy-managed memory
@@ -2545,6 +2602,7 @@ public:
     }
 
     py::dict run_fb(std::vector<std::pair<int, int>> pairs, bool mean_only) {
+        cudaSetDevice(device_id_);
         int n_pairs = (int)pairs.size();
         if (n_pairs == 0) {
             py::dict result;
@@ -2570,9 +2628,9 @@ public:
         CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
 
         gamma_smc_flow_cached_fb_gpu(
-            d_packed_, n_words_, d_pos_, S_, g_cache_Ne,
+            d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
             d_pi_, d_pj_, n_pairs,
-            g_d_cache_mean, g_d_cache_cv, g_cache_n_steps,
+            ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
             d_fwd_buf,
             d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr);
 
@@ -2885,6 +2943,22 @@ PYBIND11_MODULE(_core, m) {
           py::arg("mean_only") = false,
           py::arg("cache_steps") = 0);
 
+    m.def("set_device", [](int device_id) {
+        CUDA_CHECK(cudaSetDevice(device_id));
+    }, py::arg("device_id"), "Set the active CUDA device");
+
+    m.def("get_device_count", []() -> int {
+        int count = 0;
+        CUDA_CHECK(cudaGetDeviceCount(&count));
+        return count;
+    }, "Get the number of available CUDA devices");
+
+    m.def("get_device", []() -> int {
+        int dev = 0;
+        CUDA_CHECK(cudaGetDevice(&dev));
+        return dev;
+    }, "Get the current CUDA device");
+
     m.def("gamma_smc_site_summary", &py_gamma_smc_site_summary,
           py::arg("G"), py::arg("positions"), py::arg("pairs"),
           py::arg("Ne"), py::arg("mu"), py::arg("rho"),
@@ -2939,6 +3013,7 @@ PYBIND11_MODULE(_core, m) {
              "Forward-backward smoothing. Returns dict with 'mean'.",
              py::arg("pairs"), py::arg("mean_only") = true)
         .def("run_fb_summary", &FlowContext::run_fb_summary, py::arg("pairs"))
+        .def_property_readonly("device_id", &FlowContext::device_id)
         .def_property_readonly("n_haps", &FlowContext::n_haps)
         .def_property_readonly("n_sites", &FlowContext::n_sites);
 }
