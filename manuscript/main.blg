@@ -3,48 +3,44 @@ Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: main.aux
 The style file: plainnat.bst
 Database file #1: references.bib
-Warning--I didn't find a database entry for "Palamara2012"
-Warning--I didn't find a database entry for "Ralph2013"
-Warning--I didn't find a database entry for "Malaspinas2016"
-You've used 7 entries,
+You've used 12 entries,
             2773 wiz_defined-function locations,
-            663 strings with 7016 characters,
-and the built_in function-call counts, 5414 in all, are:
-= -- 450
-> -- 516
-< -- 3
-+ -- 172
-- -- 165
-* -- 546
-:= -- 881
-add.period$ -- 28
-call.type$ -- 7
-change.case$ -- 76
-chr.to.int$ -- 7
-cite$ -- 14
-duplicate$ -- 144
-empty$ -- 291
-format.name$ -- 178
-if$ -- 1069
+            702 strings with 8629 characters,
+and the built_in function-call counts, 9354 in all, are:
+= -- 768
+> -- 917
+< -- 4
++ -- 306
+- -- 294
+* -- 943
+:= -- 1531
+add.period$ -- 48
+call.type$ -- 12
+change.case$ -- 133
+chr.to.int$ -- 12
+cite$ -- 24
+duplicate$ -- 248
+empty$ -- 492
+format.name$ -- 314
+if$ -- 1847
 int.to.chr$ -- 1
 int.to.str$ -- 1
-missing$ -- 7
-newline$ -- 50
-num.names$ -- 28
-pop$ -- 131
+missing$ -- 12
+newline$ -- 80
+num.names$ -- 48
+pop$ -- 230
 preamble$ -- 1
-purify$ -- 69
+purify$ -- 121
 quote$ -- 0
-skip$ -- 146
+skip$ -- 251
 stack$ -- 0
-substring$ -- 203
-swap$ -- 7
+substring$ -- 329
+swap$ -- 12
 text.length$ -- 0
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 77
+type$ -- 132
 warning$ -- 0
-while$ -- 34
+while$ -- 56
 width$ -- 0
-write$ -- 112
-(There were 3 warnings)
+write$ -- 187

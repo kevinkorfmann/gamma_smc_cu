@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2022/dev/Debian) (preloaded format=pdflatex 2026.1.30)  2 APR 2026 13:37
+This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2022/dev/Debian) (preloaded format=pdflatex 2026.1.30)  2 APR 2026 13:43
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -374,24 +374,24 @@ File: l3backend-pdftex.def 2022-01-12 L3 backend support: PDF output (pdfTeX)
 (./main.aux)
 \openout1 = `main.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 28.
-LaTeX Font Info:    ... okay on input line 28.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 28.
-LaTeX Font Info:    ... okay on input line 28.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 28.
-LaTeX Font Info:    ... okay on input line 28.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 28.
-LaTeX Font Info:    ... okay on input line 28.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 28.
-LaTeX Font Info:    ... okay on input line 28.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 28.
-LaTeX Font Info:    ... okay on input line 28.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 28.
-LaTeX Font Info:    ... okay on input line 28.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 28.
-LaTeX Font Info:    ... okay on input line 28.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 28.
-LaTeX Font Info:    ... okay on input line 28.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 29.
+LaTeX Font Info:    ... okay on input line 29.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 29.
+LaTeX Font Info:    ... okay on input line 29.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 29.
+LaTeX Font Info:    ... okay on input line 29.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 29.
+LaTeX Font Info:    ... okay on input line 29.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 29.
+LaTeX Font Info:    ... okay on input line 29.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 29.
+LaTeX Font Info:    ... okay on input line 29.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 29.
+LaTeX Font Info:    ... okay on input line 29.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 29.
+LaTeX Font Info:    ... okay on input line 29.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 29.
+LaTeX Font Info:    ... okay on input line 29.
  (/usr/share/texlive/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
 \scratchcounter=\count302
@@ -448,7 +448,7 @@ e
 * \@reversemarginfalse
 * (1in=72.27pt=25.4mm, 1cm=28.453pt)
 
-Package hyperref Info: Link coloring OFF on input line 28.
+Package hyperref Info: Link coloring OFF on input line 29.
 (/usr/share/texlive/texmf-dist/tex/latex/hyperref/nameref.sty
 Package: nameref 2021-04-02 v2.47 Cross-referencing by name of section
 
@@ -460,9 +460,9 @@ Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
 )
 \c@section@level=\count308
 )
-LaTeX Info: Redefining \ref on input line 28.
-LaTeX Info: Redefining \pageref on input line 28.
-LaTeX Info: Redefining \nameref on input line 28.
+LaTeX Info: Redefining \ref on input line 29.
+LaTeX Info: Redefining \pageref on input line 29.
+LaTeX Info: Redefining \nameref on input line 29.
 
 (./main.out) (./main.out)
 \@outlinefile=\write3
@@ -471,86 +471,90 @@ LaTeX Info: Redefining \nameref on input line 28.
 Package caption Info: Begin \AtBeginDocument code.
 Package caption Info: End \AtBeginDocument code.
 LaTeX Font Info:    Trying to load font information for T1+cmss on input line 3
-0.
+1.
 
 (/usr/share/texlive/texmf-dist/tex/latex/base/t1cmss.fd
 File: t1cmss.fd 2019/12/16 v2.5j Standard LaTeX font definitions
 )
-LaTeX Font Info:    Trying to load font information for U+msa on input line 30.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 31.
 
 
 (/usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 30.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 31.
 
 
 (/usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 )
 LaTeX Font Info:    Trying to load font information for T1+cmtt on input line 3
-8.
+9.
 
 (/usr/share/texlive/texmf-dist/tex/latex/base/t1cmtt.fd
 File: t1cmtt.fd 2019/12/16 v2.5j Standard LaTeX font definitions
 )
 
 Package natbib Warning: Citation `Palamara2012' on page 1 undefined on input li
-ne 65.
+ne 66.
 
 
 Package natbib Warning: Citation `Ralph2013' on page 1 undefined on input line 
-65.
+66.
 
 [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}]
 
 Package natbib Warning: Citation `Malaspinas2016' on page 2 undefined on input 
-line 69.
+line 70.
 
 [2]
 <../benchmarks//fig1_speed_accuracy.pdf, id=65, 499.40578pt x 352.39017pt>
 File: ../benchmarks//fig1_speed_accuracy.pdf Graphic file (type pdf)
 <use ../benchmarks//fig1_speed_accuracy.pdf>
 Package pdftex.def Info: ../benchmarks//fig1_speed_accuracy.pdf  used on input 
-line 114.
+line 115.
 (pdftex.def)             Requested size: 375.80544pt x 265.18993pt.
-<../benchmarks//fig2_scaling.pdf, id=67, 860.84073pt x 354.33566pt>
+ [3 <../benchmarks//fig1_speed_accuracy.pdf>]
+<../benchmarks//fig2_scaling.pdf, id=128, 860.84073pt x 354.33566pt>
 File: ../benchmarks//fig2_scaling.pdf Graphic file (type pdf)
 <use ../benchmarks//fig2_scaling.pdf>
 Package pdftex.def Info: ../benchmarks//fig2_scaling.pdf  used on input line 13
-6.
+7.
 (pdftex.def)             Requested size: 375.80544pt x 154.69165pt.
- [3 <../benchmarks//fig1_speed_accuracy.pdf>]
 <../benchmarks//fig3_accuracy.pdf, id=130, 506.00447pt x 186.78993pt>
 File: ../benchmarks//fig3_accuracy.pdf Graphic file (type pdf)
 <use ../benchmarks//fig3_accuracy.pdf>
 Package pdftex.def Info: ../benchmarks//fig3_accuracy.pdf  used on input line 1
-57.
+58.
 (pdftex.def)             Requested size: 375.80544pt x 138.72685pt.
  [4 <../benchmarks//fig2_scaling.pdf> <../benchmarks//fig3_accuracy.pdf>]
-<../benchmarks//fig4_traces.pdf, id=254, 1004.12181pt x 461.7526pt>
+<../benchmarks//fig4_traces.pdf, id=252, 1004.12181pt x 461.7526pt>
 File: ../benchmarks//fig4_traces.pdf Graphic file (type pdf)
 <use ../benchmarks//fig4_traces.pdf>
-Package pdftex.def Info: ../benchmarks//fig4_traces.pdf  used on input line 174
+Package pdftex.def Info: ../benchmarks//fig4_traces.pdf  used on input line 175
 .
 (pdftex.def)             Requested size: 469.75502pt x 216.02324pt.
-<../benchmarks//fig5_summary.pdf, id=257, 252.1991pt x 157.85188pt>
+
+
+LaTeX Warning: Reference `fig:summary' on page 5 undefined on input line 186.
+
+<../benchmarks//fig5_summary.pdf, id=254, 252.1991pt x 157.85188pt>
 File: ../benchmarks//fig5_summary.pdf Graphic file (type pdf)
 <use ../benchmarks//fig5_summary.pdf>
 Package pdftex.def Info: ../benchmarks//fig5_summary.pdf  used on input line 19
-6.
+7.
 (pdftex.def)             Requested size: 328.82707pt x 205.82161pt.
- [5 <../benchmarks//fig4_traces.pdf>]
-<../benchmarks//fig6_demographics.pdf, id=319, 1293.45158pt x 929.19069pt>
+[5 <../benchmarks//fig4_traces.pdf>]
+<../benchmarks//fig6_demographics.pdf, id=323, 1293.45158pt x 929.19069pt>
 File: ../benchmarks//fig6_demographics.pdf Graphic file (type pdf)
 <use ../benchmarks//fig6_demographics.pdf>
 Package pdftex.def Info: ../benchmarks//fig6_demographics.pdf  used on input li
-ne 215.
+ne 216.
 (pdftex.def)             Requested size: 375.80544pt x 269.96881pt.
 
-Overfull \hbox (9.17711pt too wide) in paragraph at lines 236--258
+Overfull \hbox (10.5695pt too wide) in paragraph at lines 237--259
  [][] 
  []
 
@@ -558,28 +562,35 @@ Overfull \hbox (9.17711pt too wide) in paragraph at lines 236--258
 
 LaTeX Warning: Text page 7 contains only floats.
 
-[7 <../benchmarks//fig6_demographics.pdf>] [8] [9] (./main.bbl)
-Overfull \hbox (2.06079pt too wide) in paragraph at lines 396--398
+[7 <../benchmarks//fig6_demographics.pdf>] [8] [9] (./main.bbl [10])
+Overfull \hbox (2.06079pt too wide) in paragraph at lines 397--399
  []\T1/cmr/bx/n/10 S1 Text. De-tailed math-e-mat-i-cal deriva-tions and im-ple-
 men-ta-tion notes. \T1/cmr/m/n/10 Con-tains the full Gamma-
  []
 
-[10]
 
 Package natbib Warning: There were undefined citations.
 
-[11] (./main.aux)
+[11] (./main.aux
+
+Package natbib Warning: Citation(s) may have changed.
+(natbib)                Rerun to get citations correct.
+
+)
+
+LaTeX Warning: There were undefined references.
+
 Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: D41D8CD98F00B204E9800998ECF8427E;0.
  ) 
 Here is how much of TeX's memory you used:
- 12669 strings out of 480247
- 198462 string characters out of 5896151
- 501148 words of memory out of 5000000
- 30374 multiletter control sequences out of 15000+600000
+ 12690 strings out of 480247
+ 198856 string characters out of 5896151
+ 502691 words of memory out of 5000000
+ 30390 multiletter control sequences out of 15000+600000
  488464 words of font info for 76 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
- 60i,9n,63p,681b,410s stack positions out of 5000i,500n,10000p,200000b,80000s
+ 60i,9n,63p,681b,468s stack positions out of 5000i,500n,10000p,200000b,80000s
 {/usr/share/texmf/fonts/enc/dvips/cm-super/cm-super-t1.enc}</usr/share/texliv
 e/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/texm
 f-dist/fonts/type1/public/amsfonts/cm/cmmi7.pfb></usr/share/texlive/texmf-dist/
@@ -600,10 +611,10 @@ type1/public/cm-super/sfrm1728.pfb></usr/share/texmf/fonts/type1/public/cm-supe
 r/sfss0500.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfti1000.pfb></usr
 /share/texmf/fonts/type1/public/cm-super/sftt0900.pfb></usr/share/texmf/fonts/t
 ype1/public/cm-super/sftt1000.pfb>
-Output written on main.pdf (11 pages, 606473 bytes).
+Output written on main.pdf (11 pages, 612935 bytes).
 PDF statistics:
- 595 PDF objects out of 1000 (max. 8388607)
- 246 compressed objects within 3 object streams
- 56 named destinations out of 1000 (max. 500000)
+ 605 PDF objects out of 1000 (max. 8388607)
+ 256 compressed objects within 3 object streams
+ 61 named destinations out of 1000 (max. 500000)
  31 words of extra memory for PDF output out of 10000 (max. 10000000)
 

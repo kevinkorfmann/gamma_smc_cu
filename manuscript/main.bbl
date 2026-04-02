@@ -1,9 +1,26 @@
-\begin{thebibliography}{7}
+\begin{thebibliography}{12}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
   \providecommand{\doi}[1]{doi: #1}\else
   \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Adrion et~al.(2020)Adrion, Cole, Dukler, Galloway, Gladstein, Gower,
+  Kyriazis, Ragsdale, Tsambos, Baumdicker, Carlson, Cartwright, Durvasula,
+  Gronau, Kim, McKenzie, Messer, Noskova, Ortega-Del~Vecchyo, Racimo, Struck,
+  Gravel, Gutenkunst, Lohmueller, Ralph, Schrider, Siepel, Kelleher, and
+  Kern]{Adrion2020}
+Jeffrey~R. Adrion, Christopher~B. Cole, Noah Dukler, Jared~G. Galloway,
+  Ariella~L. Gladstein, Graham Gower, Christopher~C. Kyriazis, Aaron~P.
+  Ragsdale, Georgia Tsambos, Franz Baumdicker, Jedidiah Carlson, Reed~A.
+  Cartwright, Arun Durvasula, Ilan Gronau, Bernard~Y. Kim, Patrick McKenzie,
+  Philipp~W. Messer, Ekaterina Noskova, Diego Ortega-Del~Vecchyo, Fernando
+  Racimo, Travis~J. Struck, Simon Gravel, Ryan~N. Gutenkunst, Kirk~E.
+  Lohmueller, Peter~L. Ralph, Daniel~R. Schrider, Adam Siepel, Jerome Kelleher,
+  and Andrew~D. Kern.
+\newblock A community-maintained standard library of population genetic models.
+\newblock \emph{eLife}, 9:\penalty0 e54967, 2020.
+\newblock \doi{10.7554/eLife.54967}.
 
 \bibitem[Baumdicker et~al.(2022)Baumdicker, Bisschop, Goldstein, Gower,
   Ragsdale, Tsambos, Zhu, Eldon, Ellerman, Galloway, Gladstein, Gorjanc, Guo,
@@ -22,6 +39,15 @@ Franz Baumdicker, Gertjan Bisschop, Daniel Goldstein, Graham Gower, Aaron~P.
 \newblock \emph{Genetics}, 220\penalty0 (3):\penalty0 iyab229, 2022.
 \newblock \doi{10.1093/genetics/iyab229}.
 
+\bibitem[Gutenkunst et~al.(2009)Gutenkunst, Hernandez, Williamson, and
+  Bustamante]{Gutenkunst2009}
+Ryan~N. Gutenkunst, Ryan~D. Hernandez, Scott~H. Williamson, and Carlos~D.
+  Bustamante.
+\newblock Inferring the joint demographic history of multiple populations from
+  multidimensional {SNP} frequency data.
+\newblock \emph{PLoS Genetics}, 5\penalty0 (10):\penalty0 e1000695, 2009.
+\newblock \doi{10.1371/journal.pgen.1000695}.
+
 \bibitem[Kelleher et~al.(2019)Kelleher, Wong, Wohns, Fadil, Albers, and
   McVean]{Kelleher2019}
 Jerome Kelleher, Yan Wong, Anthony~W. Wohns, Chaimaa Fadil, Patrick~K. Albers,
@@ -36,6 +62,28 @@ Heng Li and Richard Durbin.
   sequences.
 \newblock \emph{Nature}, 475\penalty0 (7357):\penalty0 493--496, 2011.
 \newblock \doi{10.1038/nature10231}.
+
+\bibitem[Malaspinas et~al.(2016)Malaspinas, Westaway, Muller,
+  et~al.]{Malaspinas2016}
+Anna-Sapfo Malaspinas, Michael~C. Westaway, Craig Muller, et~al.
+\newblock A genomic history of {Aboriginal Australia}.
+\newblock \emph{Nature}, 538:\penalty0 207--214, 2016.
+\newblock \doi{10.1038/nature18299}.
+
+\bibitem[Palamara et~al.(2012)Palamara, Lencz, Darvasi, and
+  Pe'er]{Palamara2012}
+Pier~Francesco Palamara, Todd Lencz, Ariel Darvasi, and Itsik Pe'er.
+\newblock Length distributions of identity by descent reveal fine-scale
+  demographic history.
+\newblock \emph{American Journal of Human Genetics}, 91:\penalty0 809--822,
+  2012.
+\newblock \doi{10.1016/j.ajhg.2012.08.030}.
+
+\bibitem[Ralph and Coop(2013)]{Ralph2013}
+Peter Ralph and Graham Coop.
+\newblock The geography of recent genetic ancestry across {Europe}.
+\newblock \emph{PLoS Biology}, 11:\penalty0 e1001555, 2013.
+\newblock \doi{10.1371/journal.pbio.1001555}.
 
 \bibitem[Schiffels and Durbin(2014)]{Schiffels2014}
 Stephan Schiffels and Richard Durbin.

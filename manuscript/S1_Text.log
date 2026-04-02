@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2022/dev/Debian) (preloaded format=pdflatex 2026.1.30)  2 APR 2026 13:36
+This is pdfTeX, Version 3.141592653-2.6-1.40.22 (TeX Live 2022/dev/Debian) (preloaded format=pdflatex 2026.1.30)  2 APR 2026 13:41
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -368,7 +368,7 @@ File: l3backend-pdftex.def 2022-01-12 L3 backend support: PDF output (pdfTeX)
 \l__color_backend_stack_int=\count293
 \l__pdf_internal_box=\box53
 )
-No file S1_Text.aux.
+(./S1_Text.aux)
 \openout1 = `S1_Text.aux'.
 
 LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 20.
@@ -389,6 +389,7 @@ LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 20.
 LaTeX Font Info:    ... okay on input line 20.
 LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 20.
 LaTeX Font Info:    ... okay on input line 20.
+
 (/usr/share/texlive/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
 \scratchcounter=\count294
@@ -427,6 +428,8 @@ Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
 LaTeX Info: Redefining \ref on input line 20.
 LaTeX Info: Redefining \pageref on input line 20.
 LaTeX Info: Redefining \nameref on input line 20.
+
+(./S1_Text.out) (./S1_Text.out)
 \@outlinefile=\write3
 \openout3 = `S1_Text.out'.
 
@@ -507,14 +510,7 @@ n/10 )$ \T1/cmr/m/n/10 is ap-prox-i-mated by a dis-crete set of $\OML/cmm/m/it/
 
 [1
 
-{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}]
-
-LaTeX Warning: Reference `eq:transition' on page 2 undefined on input line 74.
-
-
-LaTeX Warning: Reference `eq:transition' on page 2 undefined on input line 76.
-
-[2]
+{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2]
 
 Package natbib Warning: Citation `Schweiger2023' on page 3 undefined on input l
 ine 87.
@@ -537,16 +533,7 @@ r/m/n/10 and $\OMS/cmsy/m/n/10 ^^H$ \T1/cmr/m/n/10 de-notes the bit-wise XOR op
 -er-a-tion. The \T1/cmtt/m/n/10 precompute_xor_kernel
  []
 
-[7] [8]
-
-LaTeX Warning: Reference `eq:smooth_alpha' on page 9 undefined on input line 32
-0.
-
-
-LaTeX Warning: Reference `eq:smooth_beta' on page 9 undefined on input line 320
-.
-
-[9]
+[7] [8] [9]
 
 Package natbib Warning: Citation `Schweiger2023' on page 10 undefined on input 
 line 354.
@@ -570,26 +557,14 @@ No file S1_Text.bbl.
 Package natbib Warning: There were undefined citations.
 
 [13] (./S1_Text.aux)
-
-LaTeX Warning: There were undefined references.
-
-
-LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
-
-
-Package rerunfilecheck Warning: File `S1_Text.out' has changed.
-(rerunfilecheck)                Rerun to get outlines right
-(rerunfilecheck)                or use package `bookmark'.
-
-Package rerunfilecheck Info: Checksums for `S1_Text.out':
-(rerunfilecheck)             Before: <no file>
-(rerunfilecheck)             After:  4297DCB8822118C6DE4D7DE96DAC5337;8137.
+Package rerunfilecheck Info: File `S1_Text.out' has not changed.
+(rerunfilecheck)             Checksum: 4297DCB8822118C6DE4D7DE96DAC5337;8137.
  ) 
 Here is how much of TeX's memory you used:
- 11800 strings out of 480247
- 179815 string characters out of 5896151
- 484075 words of memory out of 5000000
- 29463 multiletter control sequences out of 15000+600000
+ 11849 strings out of 480247
+ 180527 string characters out of 5896151
+ 484981 words of memory out of 5000000
+ 29506 multiletter control sequences out of 15000+600000
  489327 words of font info for 85 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  60i,13n,63p,925b,477s stack positions out of 5000i,500n,10000p,200000b,80000s
@@ -609,10 +584,10 @@ onts/type1/public/cm-super/sfbx1000.pfb></usr/share/texmf/fonts/type1/public/cm
 </usr/share/texmf/fonts/type1/public/cm-super/sfrm1000.pfb></usr/share/texmf/fo
 nts/type1/public/cm-super/sfrm1728.pfb></usr/share/texmf/fonts/type1/public/cm-
 super/sftt1000.pfb>
-Output written on S1_Text.pdf (13 pages, 311131 bytes).
+Output written on S1_Text.pdf (13 pages, 314302 bytes).
 PDF statistics:
- 269 PDF objects out of 1000 (max. 8388607)
- 218 compressed objects within 3 object streams
+ 398 PDF objects out of 1000 (max. 8388607)
+ 346 compressed objects within 4 object streams
  109 named destinations out of 1000 (max. 500000)
- 1 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 329 words of extra memory for PDF output out of 10000 (max. 10000000)
 
