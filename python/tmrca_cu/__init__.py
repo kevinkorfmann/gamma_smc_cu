@@ -27,6 +27,7 @@ from tmrca_cu._core import (
     adaptive_prior_infer,
     gamma_smc_forward,
     gamma_smc_flow_fb,
+    gamma_smc_flow_cached_fb,
     HMMContext,
 )
 
@@ -53,6 +54,7 @@ __all__ = [
     "adaptive_prior_infer",
     "gamma_smc_forward",
     "gamma_smc_flow_fb",
+    "gamma_smc_flow_cached_fb",
     "HMMContext",
     "CoalescenceEstimator",
     "TMRCAResult",

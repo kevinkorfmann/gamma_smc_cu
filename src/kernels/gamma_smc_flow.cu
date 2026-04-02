@@ -344,3 +344,263 @@ void gamma_smc_flow_fb_gpu(
     }
     cudaDeviceSynchronize();
 }
+
+// ============================================================
+// CACHED VERSION: Multi-step cache eliminates per-site iteration.
+// Each gap → single bilinear lookup via __ldg() (read-only texture cache).
+// No shared memory loading per site; L2 cache handles reuse across blocks.
+// ============================================================
+
+// Bilinear interpolation directly from global memory via __ldg().
+// ptr points to one step's grid: cache + step_idx * FF_GRID.
+__device__ __forceinline__ float cache_bilinear_ldg(
+    const float* __restrict__ ptr,
+    float mean_log10, float cv_log10)
+{
+    float fm = (mean_log10 - MEAN_LOG10_MIN) * MEAN_STEP_INV;
+    float fc = (cv_log10 - CV_LOG10_MIN) * CV_STEP_INV;
+    fm = fmaxf(0.0f, fminf(fm, (float)(FF_MEAN_N - 2)));
+    fc = fmaxf(0.0f, fminf(fc, (float)(FF_CV_N - 2)));
+
+    int m0 = (int)fm, c0 = (int)fc;
+    float wm = fm - (float)m0, wc = fc - (float)c0;
+
+    int base = m0 * FF_CV_N + c0;
+    float v00 = __ldg(ptr + base);
+    float v01 = __ldg(ptr + base + 1);
+    float v10 = __ldg(ptr + base + FF_CV_N);
+    float v11 = __ldg(ptr + base + FF_CV_N + 1);
+
+    return __fmaf_rn(wm, __fmaf_rn(wc, v11, (1.0f - wc) * v10),
+           (1.0f - wm) * __fmaf_rn(wc, v01, (1.0f - wc) * v00));
+}
+
+// Apply cache lookup for `gap_steps` bp.
+// Decomposes into chunks of n_max_steps if needed.
+__device__ __forceinline__ void cache_advance(
+    float& m, float& c,
+    const float* __restrict__ cache_mean,
+    const float* __restrict__ cache_cv,
+    int gap_steps, int n_max_steps)
+{
+    while (gap_steps > n_max_steps) {
+        const float* pm = cache_mean + (size_t)(n_max_steps - 1) * FF_GRID;
+        const float* pc = cache_cv   + (size_t)(n_max_steps - 1) * FF_GRID;
+        float m_new = cache_bilinear_ldg(pm, m, c);
+        float c_new = cache_bilinear_ldg(pc, m, c);
+        m = m_new; c = c_new;
+        gap_steps -= n_max_steps;
+    }
+    if (gap_steps > 0) {
+        const float* pm = cache_mean + (size_t)(gap_steps - 1) * FF_GRID;
+        const float* pc = cache_cv   + (size_t)(gap_steps - 1) * FF_GRID;
+        float m_new = cache_bilinear_ldg(pm, m, c);
+        float c_new = cache_bilinear_ldg(pc, m, c);
+        m = m_new; c = c_new;
+    }
+}
+
+// ============================================================
+// Forward pass with cache
+// ============================================================
+__global__ void gamma_smc_cached_forward_kernel(
+    const uint64_t* __restrict__ packed,
+    int n_words,
+    const double* __restrict__ positions,
+    int S,
+    const int* __restrict__ pair_i,
+    const int* __restrict__ pair_j,
+    int n_pairs,
+    const float* __restrict__ cache_mean,
+    const float* __restrict__ cache_cv,
+    int n_max_steps,
+    float* __restrict__ fwd_mean,
+    float* __restrict__ fwd_cv_out)
+{
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= n_pairs) return;
+
+    int hi = pair_i[pid];
+    int hj = pair_j[pid];
+
+    float m = 0.0f, c = 0.0f;
+    int cur_word = -1;
+    uint64_t xor_w = 0;
+    double prev_pos = 0.0;
+
+    for (int s = 0; s < S; s++) {
+        double pos = positions[s];
+        int gap_steps = (int)(pos - prev_pos + 0.5);
+        prev_pos = pos;
+
+        if (s > 0 && gap_steps > 0) {
+            cache_advance(m, c, cache_mean, cache_cv, gap_steps, n_max_steps);
+        }
+
+        // Site emission: het → alpha += 1
+        int w = s >> 6;
+        int bit = s & 63;
+        if (w != cur_word) {
+            xor_w = packed[(long long)hi * n_words + w]
+                  ^ packed[(long long)hj * n_words + w];
+            cur_word = w;
+        }
+        if ((xor_w >> bit) & 1ULL) {
+            float alpha = __exp10f(-2.0f * c) + 1.0f;
+            float a_log = __log10f(alpha);
+            float b_log = -2.0f * c - m;
+            m = a_log - b_log;
+            c = -0.5f * a_log;
+        }
+
+        long long idx = (long long)s * n_pairs + pid;
+        fwd_mean[idx] = m;
+        fwd_cv_out[idx] = c;
+    }
+}
+
+// ============================================================
+// Backward pass + combine with cache
+// ============================================================
+template<bool WRITE_CI>
+__global__ void gamma_smc_cached_backward_kernel(
+    const uint64_t* __restrict__ packed,
+    int n_words,
+    const double* __restrict__ positions,
+    int S,
+    float Ne,
+    const int* __restrict__ pair_i,
+    const int* __restrict__ pair_j,
+    int n_pairs,
+    const float* __restrict__ cache_mean,
+    const float* __restrict__ cache_cv,
+    int n_max_steps,
+    const float* __restrict__ fwd_mean_in,
+    const float* __restrict__ fwd_cv_in,
+    float* __restrict__ mean_out,
+    float* __restrict__ lower_out,
+    float* __restrict__ upper_out)
+{
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= n_pairs) return;
+
+    int hi = pair_i[pid];
+    int hj = pair_j[pid];
+
+    float m = 0.0f, c = 0.0f;
+    float unscale = 2.0f * Ne;
+    int cur_word = -1;
+    uint64_t xor_w = 0;
+
+    for (int s = S - 1; s >= 0; s--) {
+        // Backward state BEFORE emission
+        float bwd_a = __exp10f(-2.0f * c);
+        float bwd_b = __exp10f(-2.0f * c - m);
+
+        // Forward state
+        long long idx = (long long)s * n_pairs + pid;
+        float fm = fwd_mean_in[idx], fc = fwd_cv_in[idx];
+        float fwd_a = __exp10f(-2.0f * fc);
+        float fwd_b = __exp10f(-2.0f * fc - fm);
+
+        // Combine
+        float a_s = fmaxf(fwd_a + bwd_a - 1.0f, 1.0f);
+        float b_s = fmaxf(fwd_b + bwd_b - 1.0f, 1e-10f);
+        float mean_gen = (a_s / b_s) * unscale;
+        mean_out[idx] = mean_gen;
+
+        if constexpr (WRITE_CI) {
+            float inv9a = __frcp_rn(9.0f * a_s);
+            float sq = __fsqrt_rn(inv9a);
+            float base = 1.0f - inv9a;
+            float lo_f = fmaxf(base - 1.96f * sq, 0.0f);
+            float hi_f = base + 1.96f * sq;
+            lower_out[idx] = fmaxf(mean_gen * lo_f * lo_f * lo_f, 0.0f);
+            upper_out[idx] = mean_gen * hi_f * hi_f * hi_f;
+        }
+
+        // Absorb emission
+        int w = s >> 6;
+        int bit = s & 63;
+        if (w != cur_word) {
+            xor_w = packed[(long long)hi * n_words + w]
+                  ^ packed[(long long)hj * n_words + w];
+            cur_word = w;
+        }
+        if ((xor_w >> bit) & 1ULL) {
+            float alpha = __exp10f(-2.0f * c) + 1.0f;
+            float a_log = __log10f(alpha);
+            float b_log = -2.0f * c - m;
+            m = a_log - b_log;
+            c = -0.5f * a_log;
+        }
+
+        // Transition to s-1
+        if (s > 0) {
+            int gap_steps = (int)(positions[s] - positions[s - 1] + 0.5);
+            if (gap_steps > 0)
+                cache_advance(m, c, cache_mean, cache_cv, gap_steps, n_max_steps);
+        }
+    }
+}
+
+// ============================================================
+// Host launcher — cached version
+// ============================================================
+void gamma_smc_flow_cached_fb_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    const float* d_cache_mean, const float* d_cache_cv,
+    int n_max_steps,
+    float* fwd_buf,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,
+    float* tmrca_upper_out)
+{
+    const int block = 256;
+    int grid = (n_pairs + block - 1) / block;
+
+    float* fwd_mean = fwd_buf;
+    float* fwd_cv   = fwd_buf + (long long)S * n_pairs;
+
+    // Forward
+    gamma_smc_cached_forward_kernel<<<grid, block>>>(
+        packed, n_words, positions, S,
+        pair_i, pair_j, n_pairs,
+        d_cache_mean, d_cache_cv, n_max_steps,
+        fwd_mean, fwd_cv);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "gamma_smc_cached forward: %s\n", cudaGetErrorString(err));
+        return;
+    }
+    cudaDeviceSynchronize();
+
+    // Backward + combine
+    bool ci = (tmrca_lower_out != nullptr && tmrca_upper_out != nullptr);
+    if (ci) {
+        gamma_smc_cached_backward_kernel<true><<<grid, block>>>(
+            packed, n_words, positions, S, Ne,
+            pair_i, pair_j, n_pairs,
+            d_cache_mean, d_cache_cv, n_max_steps,
+            fwd_mean, fwd_cv,
+            tmrca_mean_out, tmrca_lower_out, tmrca_upper_out);
+    } else {
+        gamma_smc_cached_backward_kernel<false><<<grid, block>>>(
+            packed, n_words, positions, S, Ne,
+            pair_i, pair_j, n_pairs,
+            d_cache_mean, d_cache_cv, n_max_steps,
+            fwd_mean, fwd_cv,
+            tmrca_mean_out, nullptr, nullptr);
+    }
+
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "gamma_smc_cached backward: %s\n", cudaGetErrorString(err));
+        return;
+    }
+    cudaDeviceSynchronize();
+}
