@@ -28,7 +28,9 @@ from tmrca_cu._core import (
     gamma_smc_forward,
     gamma_smc_flow_fb,
     gamma_smc_flow_cached_fb,
+    gamma_smc_flow_cached_fwd,
     HMMContext,
+    FlowContext,
 )
 
 from tmrca_cu.estimator import (
@@ -55,7 +57,9 @@ __all__ = [
     "gamma_smc_forward",
     "gamma_smc_flow_fb",
     "gamma_smc_flow_cached_fb",
+    "gamma_smc_flow_cached_fwd",
     "HMMContext",
+    "FlowContext",
     "CoalescenceEstimator",
     "TMRCAResult",
     "Segment",

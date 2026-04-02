@@ -1222,7 +1222,6 @@ __global__ void gamma_smc_cached_backward_reduce_kernel(
 
     int hi = pair_i[pid];
     int hj = pair_j[pid];
-    int lane = threadIdx.x & 31;
 
     float m = 0.0f, c = 0.0f;
     float unscale = 2.0f * Ne;
@@ -1242,37 +1241,9 @@ __global__ void gamma_smc_cached_backward_reduce_kernel(
         float b_s = fmaxf(fwd_b + bwd_b - 1.0f, 1e-10f);
         float mean_gen = (a_s / b_s) * unscale;
 
-        // Warp-level reduction: sum across 32 threads
-        float warp_sum = mean_gen;
-        #pragma unroll
-        for (int offset = 16; offset > 0; offset >>= 1)
-            warp_sum += __shfl_down_sync(0xFFFFFFFF, warp_sum, offset);
+        // Simple per-thread atomicAdd (no warp shuffle needed)
+        atomicAdd(&site_sum[s], mean_gen);
 
-        if (lane == 0) {
-            atomicAdd(&site_sum[s], warp_sum);
-        }
-
-        // Min/max via warp reduction
-        if (site_min) {
-            float warp_min = mean_gen;
-            #pragma unroll
-            for (int offset = 16; offset > 0; offset >>= 1)
-                warp_min = fminf(warp_min, __shfl_down_sync(0xFFFFFFFF, warp_min, offset));
-            if (lane == 0) {
-                // atomicMin for float: use int reinterpretation trick
-                // Only works for positive floats (which TMRCA always is)
-                atomicMin((int*)&site_min[s], __float_as_int(warp_min));
-            }
-        }
-        if (site_max) {
-            float warp_max = mean_gen;
-            #pragma unroll
-            for (int offset = 16; offset > 0; offset >>= 1)
-                warp_max = fmaxf(warp_max, __shfl_down_sync(0xFFFFFFFF, warp_max, offset));
-            if (lane == 0) {
-                atomicMax((int*)&site_max[s], __float_as_int(warp_max));
-            }
-        }
 
         // Absorb emission for backward propagation
         int w = s >> 6;
@@ -1333,24 +1304,14 @@ void gamma_smc_flow_cached_fb_reduce_gpu(
 
     // Zero accumulators
     cudaMemset(site_mean_out, 0, S * sizeof(float));
-    if (site_min_out) {
-        // Initialize min to +INF (0x7f800000)
-        float inf_val = INFINITY;
-        int inf_int = *(int*)&inf_val;
-        cudaMemset(site_min_out, 0x7f, S * sizeof(float));
-    }
-    if (site_max_out) {
-        // Initialize max to 0
-        cudaMemset(site_max_out, 0, S * sizeof(float));
-    }
 
-    // Fused backward + reduce
+    // Fused backward + reduce (pass NULL for min/max to skip atomic float ops)
     gamma_smc_cached_backward_reduce_kernel<<<grid, block>>>(
         packed, n_words, positions, S, Ne,
         pair_i, pair_j, n_pairs,
         d_cache_mean, d_cache_cv, n_max_steps,
         fwd_mean, fwd_cv,
-        site_mean_out, site_min_out, site_max_out);
+        site_mean_out, nullptr, nullptr);
     cudaDeviceSynchronize();
 
     // Finalize: divide by n_pairs

@@ -1,0 +1,216 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldcontentsline\contentsline
+\gdef\contentsline#1#2#3#4{\oldcontentsline{#1}{#2}{#3}}
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\contentsline\oldcontentsline
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\citation{Li2011,Schiffels2014,Terhorst2017}
+\citation{Stern2019}
+\citation{Li2011}
+\citation{Schiffels2014}
+\citation{Schiffels2020}
+\citation{Kelleher2019}
+\citation{Speidel2019}
+\citation{Zhang2023}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{1}{1}{Introduction}{section.1}{}}
+\citation{Baumdicker2022}
+\citation{Li2011,McVean2005}
+\citation{Schiffels2014}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Model}{2}{section.2}\protected@file@percent }
+\newlabel{sec:model}{{2}{2}{Model}{section.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}Sequentially Markov Coalescent}{2}{subsection.2.1}\protected@file@percent }
+\newlabel{sec:smc}{{2.1}{2}{Sequentially Markov Coalescent}{subsection.2.1}{}}
+\newlabel{eq:time_grid}{{1}{2}{Sequentially Markov Coalescent}{equation.2.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Coalescent prior}{2}{subsection.2.2}\protected@file@percent }
+\newlabel{sec:prior}{{2.2}{2}{Coalescent prior}{subsection.2.2}{}}
+\newlabel{eq:coal_prior}{{2}{2}{Coalescent prior}{equation.2.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}Emission model}{2}{subsection.2.3}\protected@file@percent }
+\newlabel{sec:emissions}{{2.3}{2}{Emission model}{subsection.2.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Site emission.}{2}{section*.1}\protected@file@percent }
+\newlabel{eq:site_emission}{{3}{2}{Site emission}{equation.2.3}{}}
+\citation{Li2011}
+\citation{Killick2012}
+\@writefile{toc}{\contentsline {paragraph}{Gap emission.}{3}{section*.2}\protected@file@percent }
+\newlabel{eq:gap_emission}{{4}{3}{Gap emission}{equation.2.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Transition model}{3}{subsection.2.4}\protected@file@percent }
+\newlabel{sec:transitions}{{2.4}{3}{Transition model}{subsection.2.4}{}}
+\newlabel{eq:transition}{{5}{3}{Transition model}{equation.2.5}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Methods}{3}{section.3}\protected@file@percent }
+\newlabel{sec:methods}{{3}{3}{Methods}{section.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}System architecture}{3}{subsection.3.1}\protected@file@percent }
+\newlabel{sec:architecture}{{3.1}{3}{System architecture}{subsection.3.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Genotype representation: bitpacking}{3}{subsection.3.2}\protected@file@percent }
+\newlabel{sec:bitpack}{{3.2}{3}{Genotype representation: bitpacking}{subsection.3.2}{}}
+\newlabel{eq:bitpack}{{6}{3}{Genotype representation: bitpacking}{equation.3.6}{}}
+\citation{Killick2012}
+\citation{Killick2012}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Pairwise XOR prefix scan (Tier\nobreakspace  {}1)}{4}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:prefix_scan}{{3.3}{4}{Pairwise XOR prefix scan (Tier~1)}{subsection.3.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}PELT changepoint detection (Tier\nobreakspace  {}2)}{4}{subsection.3.4}\protected@file@percent }
+\newlabel{sec:pelt}{{3.4}{4}{PELT changepoint detection (Tier~2)}{subsection.3.4}{}}
+\newlabel{eq:pelt_objective}{{7}{4}{PELT changepoint detection (Tier~2)}{equation.3.7}{}}
+\newlabel{eq:pelt_cost}{{8}{4}{PELT changepoint detection (Tier~2)}{equation.3.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Batched HMM forward--backward (Tier\nobreakspace  {}3)}{4}{subsection.3.5}\protected@file@percent }
+\newlabel{sec:hmm}{{3.5}{4}{Batched HMM forward--backward (Tier~3)}{subsection.3.5}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.1}Forward pass}{4}{subsubsection.3.5.1}\protected@file@percent }
+\newlabel{sec:kernel_forward}{{3.5.1}{4}{Forward pass}{subsubsection.3.5.1}{}}
+\@writefile{toc}{\contentsline {paragraph}{Initialization.}{4}{section*.3}\protected@file@percent }
+\newlabel{eq:forward_init}{{9}{4}{Initialization}{equation.3.9}{}}
+\@writefile{toc}{\contentsline {paragraph}{Recursion.}{4}{section*.4}\protected@file@percent }
+\newlabel{eq:forward_recursion}{{10}{4}{Recursion}{equation.3.10}{}}
+\@writefile{toc}{\contentsline {paragraph}{Storage.}{4}{section*.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.2}Backward pass}{5}{subsubsection.3.5.2}\protected@file@percent }
+\newlabel{sec:kernel_backward}{{3.5.2}{5}{Backward pass}{subsubsection.3.5.2}{}}
+\@writefile{toc}{\contentsline {paragraph}{Initialization.}{5}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Recursion.}{5}{section*.7}\protected@file@percent }
+\newlabel{eq:backward_recursion}{{11}{5}{Recursion}{equation.3.11}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.5.3}Posterior marginals and summaries}{5}{subsubsection.3.5.3}\protected@file@percent }
+\newlabel{sec:posterior}{{3.5.3}{5}{Posterior marginals and summaries}{subsubsection.3.5.3}{}}
+\newlabel{eq:posterior}{{12}{5}{Posterior marginals and summaries}{equation.3.12}{}}
+\newlabel{eq:mean}{{13}{5}{Posterior marginals and summaries}{equation.3.13}{}}
+\newlabel{eq:ci_lower}{{14}{5}{Posterior marginals and summaries}{equation.3.14}{}}
+\newlabel{eq:ci_upper}{{15}{5}{Posterior marginals and summaries}{equation.3.15}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Adaptive prior via EM (Tier\nobreakspace  {}4)}{5}{subsection.3.6}\protected@file@percent }
+\newlabel{sec:em}{{3.6}{5}{Adaptive prior via EM (Tier~4)}{subsection.3.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}Expectation propagation with ultrametric constraints}{5}{subsection.3.7}\protected@file@percent }
+\newlabel{sec:ep}{{3.7}{5}{Expectation propagation with ultrametric constraints}{subsection.3.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}GPU Kernel Design and Optimization}{6}{section.4}\protected@file@percent }
+\newlabel{sec:gpu}{{4}{6}{GPU Kernel Design and Optimization}{section.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Kernel template parameterization}{6}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:template}{{4.1}{6}{Kernel template parameterization}{subsection.4.1}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {1}Kernel signature.}{6}{lstlisting.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Phase\nobreakspace  {}1: Emission precomputation and fast-math intrinsics}{6}{subsection.4.2}\protected@file@percent }
+\newlabel{sec:phase1}{{4.2}{6}{Phase~1: Emission precomputation and fast-math intrinsics}{subsection.4.2}{}}
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {2}Emission precomputation.}{6}{lstlisting.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Phase\nobreakspace  {}2: Single-precision arithmetic}{7}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:phase2}{{4.3}{7}{Phase~2: Single-precision arithmetic}{subsection.4.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Phase\nobreakspace  {}3: Multi-pair thread blocks}{7}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:phase3}{{4.4}{7}{Phase~3: Multi-pair thread blocks}{subsection.4.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Phase\nobreakspace  {}4: Fused summary extraction and EM accumulation}{7}{subsection.4.5}\protected@file@percent }
+\newlabel{sec:fused_summary}{{4.5}{7}{Phase~4: Fused summary extraction and EM accumulation}{subsection.4.5}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.1}Eliminating the gamma array transfer}{7}{subsubsection.4.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Mean.}{7}{section*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{95\% credible interval.}{8}{section*.9}\protected@file@percent }
+\@writefile{lol}{\contentsline {lstlisting}{\numberline {3}CDF scan via warp shuffle ($K\!=\!32$).}{8}{lstlisting.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.5.2}Fused EM accumulation}{8}{subsubsection.4.5.2}\protected@file@percent }
+\newlabel{sec:fused_em}{{4.5.2}{8}{Fused EM accumulation}{subsubsection.4.5.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}Phase\nobreakspace  {}5: Persistent GPU context and memory management}{8}{subsection.4.6}\protected@file@percent }
+\newlabel{sec:persistent}{{4.6}{8}{Phase~5: Persistent GPU context and memory management}{subsection.4.6}{}}
+\newlabel{eq:chunking}{{16}{8}{Phase~5: Persistent GPU context and memory management}{equation.4.16}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.7}Warp-level and block-level reductions}{8}{subsection.4.7}\protected@file@percent }
+\newlabel{sec:reductions}{{4.7}{8}{Warp-level and block-level reductions}{subsection.4.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{Warp reduction (float).}{9}{section*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Block reduction (templated on $K$).}{9}{section*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.8}XOR bit caching}{9}{subsection.4.8}\protected@file@percent }
+\newlabel{sec:xor_cache}{{4.8}{9}{XOR bit caching}{subsection.4.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.9}Loop unrolling}{9}{subsection.4.9}\protected@file@percent }
+\newlabel{sec:unroll}{{4.9}{9}{Loop unrolling}{subsection.4.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Ancillary GPU Kernels}{9}{section.5}\protected@file@percent }
+\newlabel{sec:ancillary}{{5}{9}{Ancillary GPU Kernels}{section.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Site frequency spectrum}{9}{subsection.5.1}\protected@file@percent }
+\newlabel{sec:sfs}{{5.1}{9}{Site frequency spectrum}{subsection.5.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Ultrametric projection}{9}{subsection.5.2}\protected@file@percent }
+\newlabel{sec:ultrametric_kernel}{{5.2}{9}{Ultrametric projection}{subsection.5.2}{}}
+\citation{prefix_pixi}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Convergence monitoring}{10}{subsection.5.3}\protected@file@percent }
+\newlabel{sec:convergence_kernel}{{5.3}{10}{Convergence monitoring}{subsection.5.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Software Implementation}{10}{section.6}\protected@file@percent }
+\newlabel{sec:software}{{6}{10}{Software Implementation}{section.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Build system}{10}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Python bindings}{10}{subsection.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Memory layout}{10}{subsection.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Validation}{10}{section.7}\protected@file@percent }
+\newlabel{sec:validation}{{7}{10}{Validation}{section.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Reference implementation}{10}{subsection.7.1}\protected@file@percent }
+\newlabel{sec:reference}{{7.1}{10}{Reference implementation}{subsection.7.1}{}}
+\citation{Baumdicker2022}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}Unit tests}{11}{subsection.7.2}\protected@file@percent }
+\newlabel{sec:unit_tests}{{7.2}{11}{Unit tests}{subsection.7.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.3}Statistical validation against msprime}{11}{subsection.7.3}\protected@file@percent }
+\newlabel{sec:msprime_validation}{{7.3}{11}{Statistical validation against msprime}{subsection.7.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {7.3.1}Demographic scenarios}{11}{subsubsection.7.3.1}\protected@file@percent }
+\newlabel{sec:scenarios}{{7.3.1}{11}{Demographic scenarios}{subsubsection.7.3.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Demographic scenarios for validation.\relax }}{11}{table.caption.12}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:scenarios}{{1}{11}{Demographic scenarios for validation.\relax }{table.caption.12}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {7.3.2}Accuracy metrics}{11}{subsubsection.7.3.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Cumulative kernel throughput after each optimization phase. Measured throughput in millions of site$\cdot $pairs/s ($K = 32$, $S = 50{,}000$).\relax }}{12}{table.caption.13}\protected@file@percent }
+\newlabel{tab:speedup}{{2}{12}{Cumulative kernel throughput after each optimization phase. Measured throughput in millions of site$\cdot $pairs/s ($K = 32$, $S = 50{,}000$).\relax }{table.caption.13}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {8}Results}{12}{section.8}\protected@file@percent }
+\newlabel{sec:results}{{8}{12}{Results}{section.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.1}Kernel throughput}{12}{subsection.8.1}\protected@file@percent }
+\newlabel{sec:throughput}{{8.1}{12}{Kernel throughput}{subsection.8.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.2}Projected wall-clock times}{12}{subsection.8.2}\protected@file@percent }
+\newlabel{sec:wallclock}{{8.2}{12}{Projected wall-clock times}{subsection.8.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Projected wall-clock time for all-pairs TMRCA inference on human chr1 ($S = 4.5\text  {M}$ SNPs), single A100.\relax }}{12}{table.caption.15}\protected@file@percent }
+\newlabel{tab:wallclock}{{3}{12}{Projected wall-clock time for all-pairs TMRCA inference on human chr1 ($S = 4.5\text {M}$ SNPs), single A100.\relax }{table.caption.15}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.3}Numerical accuracy}{12}{subsection.8.3}\protected@file@percent }
+\newlabel{sec:accuracy}{{8.3}{12}{Numerical accuracy}{subsection.8.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {8.3.1}GPU versus NumPy reference}{12}{subsubsection.8.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {8.3.2}Correlation with true TMRCA}{12}{subsubsection.8.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {8.3.3}Credible interval calibration}{12}{subsubsection.8.3.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces \textbf  {Kernel optimization trajectory and throughput scaling.} (\textit  {Left})\nobreakspace  {}Cumulative throughput (millions of site$\cdot $pairs/s) after each of the five optimization phases, measured on an A100 with $K = 32$, $S = 50{,}000$\nobreakspace  {}sites. The dominant contribution comes from emission precomputation and fast-math intrinsics (Phase\nobreakspace  {}1, $3.5\times $). (\textit  {Right})\nobreakspace  {}Throughput as a function of the number of pairs, demonstrating near-constant performance from 500 to 5{,}000\nobreakspace  {}pairs.\relax }}{13}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:speedup}{{1}{13}{\textbf {Kernel optimization trajectory and throughput scaling.} (\textit {Left})~Cumulative throughput (millions of site$\cdot $pairs/s) after each of the five optimization phases, measured on an A100 with $K = 32$, $S = 50{,}000$~sites. The dominant contribution comes from emission precomputation and fast-math intrinsics (Phase~1, $3.5\times $). (\textit {Right})~Throughput as a function of the number of pairs, demonstrating near-constant performance from 500 to 5{,}000~pairs.\relax }{figure.caption.14}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {8.3.4}Prior recovery}{13}{subsubsection.8.3.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces \textbf  {Projected wall-clock time for chromosome\nobreakspace  {}1 all-pairs inference.} Log-log plot of total compute time versus sample size ($2N$) for human chr1 ($S = 4.5$M SNPs) on a single A100. The baseline kernel (9.1M site$\cdot $pairs/s, dashed) is compared with the optimized kernel (93M site$\cdot $pairs/s, solid). Horizontal reference lines indicate 1\nobreakspace  {}hour, 1\nobreakspace  {}day, and 1\nobreakspace  {}week. At $2N = 1{,}000$, the optimized kernel completes in ${\sim }\,7$\nobreakspace  {}hours versus 69\nobreakspace  {}hours at baseline.\relax }}{14}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:wallclock}{{2}{14}{\textbf {Projected wall-clock time for chromosome~1 all-pairs inference.} Log-log plot of total compute time versus sample size ($2N$) for human chr1 ($S = 4.5$M SNPs) on a single A100. The baseline kernel (9.1M site$\cdot $pairs/s, dashed) is compared with the optimized kernel (93M site$\cdot $pairs/s, solid). Horizontal reference lines indicate 1~hour, 1~day, and 1~week. At $2N = 1{,}000$, the optimized kernel completes in ${\sim }\,7$~hours versus 69~hours at baseline.\relax }{figure.caption.16}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {9}Discussion}{14}{section.9}\protected@file@percent }
+\newlabel{sec:discussion}{{9}{14}{Discussion}{section.9}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.1}Speedup analysis}{14}{subsection.9.1}\protected@file@percent }
+\citation{Li2011}
+\citation{Schiffels2020}
+\citation{Speidel2019}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Per-site Pearson $r$ between estimated and true TMRCA. $n = 50$ diploid individuals, 1\nobreakspace  {}Mb, $K = 64$.\relax }}{15}{table.caption.17}\protected@file@percent }
+\newlabel{tab:accuracy}{{4}{15}{Per-site Pearson $r$ between estimated and true TMRCA. $n = 50$ diploid individuals, 1~Mb, $K = 64$.\relax }{table.caption.17}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.2}Scalability}{15}{subsection.9.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.3}Accuracy considerations}{15}{subsection.9.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.4}Comparison with existing methods}{15}{subsection.9.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {9.4.1}Detailed scaling comparison with \texttt  {gamma\_smc}}{15}{subsubsection.9.4.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces \textbf  {TMRCA estimation accuracy under constant demography.} (\textit  {Left})\nobreakspace  {}Hexbin density of estimated versus true per-site TMRCA for 45\nobreakspace  {}pairs at 1\nobreakspace  {}Mb ($r = 0.78$, $K = 32$, $N_\mathrm  {e}= 10{,}000$). (\textit  {Centre})\nobreakspace  {}Genomic landscape of estimated TMRCA (blue) with 95\% credible intervals (shaded band) versus true TMRCA (coral) for a representative pair across a 200\nobreakspace  {}kb window. (\textit  {Right})\nobreakspace  {}Distribution of 95\% CI coverage across pairs (median = 0.94).\relax }}{16}{figure.caption.18}\protected@file@percent }
+\newlabel{fig:accuracy}{{3}{16}{\textbf {TMRCA estimation accuracy under constant demography.} (\textit {Left})~Hexbin density of estimated versus true per-site TMRCA for 45~pairs at 1~Mb ($r = 0.78$, $K = 32$, $\Ne = 10{,}000$). (\textit {Centre})~Genomic landscape of estimated TMRCA (blue) with 95\% credible intervals (shaded band) versus true TMRCA (coral) for a representative pair across a 200~kb window. (\textit {Right})~Distribution of 95\% CI coverage across pairs (median = 0.94).\relax }{figure.caption.18}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces \textbf  {EM recovery of the coalescent prior under a bottleneck.} Step plot comparing the true coalescent time distribution (black) under a bottleneck scenario ($N_\mathrm  {e}: 10{,}000 \to 500 \to 20{,}000$) with the initial constant-$N_\mathrm  {e}$ prior (dashed grey) and the EM-estimated prior after 10\nobreakspace  {}iterations (blue, $K = 64$). The EM successfully recovers the bimodal structure characteristic of a population bottleneck.\relax }}{17}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:prior_recovery}{{4}{17}{\textbf {EM recovery of the coalescent prior under a bottleneck.} Step plot comparing the true coalescent time distribution (black) under a bottleneck scenario ($\Ne : 10{,}000 \to 500 \to 20{,}000$) with the initial constant-$\Ne $ prior (dashed grey) and the EM-estimated prior after 10~iterations (blue, $K = 64$). The EM successfully recovers the bimodal structure characteristic of a population bottleneck.\relax }{figure.caption.19}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {9.5}Limitations and future work}{17}{subsection.9.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {10}Conclusion}{17}{section.10}\protected@file@percent }
+\newlabel{sec:conclusion}{{10}{17}{Conclusion}{section.10}{}}
+\citation{Baumdicker2022}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces \textbf  {Benchmark against existing methods.} (\textit  {Left})\nobreakspace  {}Single-pair inference time for sequences of 1--50\nobreakspace  {}Mb: PSMC (25\nobreakspace  {}EM iterations), \texttt  {gamma\_smc}, and \texttt  {tmrca.cu} on GPU\spacefactor \@m {}. \texttt  {tmrca.cu} achieves 15--143$\times $ speedup over \texttt  {gamma\_smc} and orders of magnitude over PSMC\spacefactor \@m {}. (\textit  {Right})\nobreakspace  {}Multi-pair throughput at 1\nobreakspace  {}Mb for 10, 50, and 100 haplotypes. \texttt  {tmrca.cu}'s batch parallelism yields 48--182$\times $ speedup, with the advantage growing as the number of pairs increases.\relax }}{18}{figure.caption.20}\protected@file@percent }
+\newlabel{fig:competitors}{{5}{18}{\textbf {Benchmark against existing methods.} (\textit {Left})~Single-pair inference time for sequences of 1--50~Mb: PSMC (25~EM iterations), \texttt {gamma\_smc}, and \texttt {tmrca.cu} on GPU\@. \texttt {tmrca.cu} achieves 15--143$\times $ speedup over \texttt {gamma\_smc} and orders of magnitude over PSMC\@. (\textit {Right})~Multi-pair throughput at 1~Mb for 10, 50, and 100 haplotypes. \texttt {tmrca.cu}'s batch parallelism yields 48--182$\times $ speedup, with the advantage growing as the number of pairs increases.\relax }{figure.caption.20}{}}
+\bibstyle{plos2015}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces \textbf  {Scaling comparison with \texttt  {gamma\_smc}.} (\textit  {a})\nobreakspace  {}Wall-clock time versus number of haplotypes at 1\nobreakspace  {}Mb; annotations show the speedup factor at each point. (\textit  {b})\nobreakspace  {}Wall-clock time versus sequence length at $n = 50$ haplotypes. (\textit  {c})\nobreakspace  {}Speedup heatmap across the full grid of sample sizes and sequence lengths. Speedup ranges from $13\times $ ($n = 200$, $5$\nobreakspace  {}Mb) to $453\times $ ($n = 10$, $1$\nobreakspace  {}Mb).\relax }}{19}{figure.caption.21}\protected@file@percent }
+\newlabel{fig:gamma_deep}{{6}{19}{\textbf {Scaling comparison with \texttt {gamma\_smc}.} (\textit {a})~Wall-clock time versus number of haplotypes at 1~Mb; annotations show the speedup factor at each point. (\textit {b})~Wall-clock time versus sequence length at $n = 50$ haplotypes. (\textit {c})~Speedup heatmap across the full grid of sample sizes and sequence lengths. Speedup ranges from $13\times $ ($n = 200$, $5$~Mb) to $453\times $ ($n = 10$, $1$~Mb).\relax }{figure.caption.21}{}}
+\bibcite{Li2011}{{1}{}{{}}{{}}}
+\bibcite{Schiffels2014}{{2}{}{{}}{{}}}
+\bibcite{Schiffels2020}{{3}{}{{}}{{}}}
+\bibcite{Terhorst2017}{{4}{}{{}}{{}}}
+\bibcite{Stern2019}{{5}{}{{}}{{}}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces \textbf  {Throughput and amortized per-pair cost at 1\nobreakspace  {}Mb.} (\textit  {a})\nobreakspace  {}Throughput in millions of site$\cdot $pairs/s for each tool at varying sample sizes. \texttt  {tmrca.cu} maintains $10$--$100\times $ higher throughput across all configurations. (\textit  {b})\nobreakspace  {}Amortized per-pair inference time (ms) versus number of pairs. Both tools exhibit decreasing per-pair cost due to I/O amortization, but \texttt  {tmrca.cu}'s GPU parallelism yields a steeper decrease, saturating at ${\sim }\,0.04$\nobreakspace  {}ms/pair.\relax }}{20}{figure.caption.22}\protected@file@percent }
+\newlabel{fig:gamma_throughput}{{7}{20}{\textbf {Throughput and amortized per-pair cost at 1~Mb.} (\textit {a})~Throughput in millions of site$\cdot $pairs/s for each tool at varying sample sizes. \texttt {tmrca.cu} maintains $10$--$100\times $ higher throughput across all configurations. (\textit {b})~Amortized per-pair inference time (ms) versus number of pairs. Both tools exhibit decreasing per-pair cost due to I/O amortization, but \texttt {tmrca.cu}'s GPU parallelism yields a steeper decrease, saturating at ${\sim }\,0.04$~ms/pair.\relax }{figure.caption.22}{}}
+\bibcite{McVean2005}{{6}{}{{}}{{}}}
+\bibcite{Kelleher2019}{{7}{}{{}}{{}}}
+\bibcite{Speidel2019}{{8}{}{{}}{{}}}
+\bibcite{Zhang2023}{{9}{}{{}}{{}}}
+\bibcite{Killick2012}{{10}{}{{}}{{}}}
+\bibcite{Baumdicker2022}{{11}{}{{}}{{}}}
+\bibcite{prefix_pixi}{{12}{}{{}}{{}}}
+\@writefile{toc}{\contentsline {section}{\numberline {A}Detailed kernel pseudocode}{21}{appendix.A}\protected@file@percent }
+\newlabel{app:pseudocode}{{A}{21}{Detailed kernel pseudocode}{appendix.A}{}}
+\providecommand\NAT@force@numbers{}\NAT@force@numbers
+\@writefile{toc}{\contentsline {section}{\numberline {B}Memory budget}{22}{appendix.B}\protected@file@percent }
+\newlabel{app:memory}{{B}{22}{Memory budget}{appendix.B}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces GPU memory budget per component.\relax }}{22}{table.caption.26}\protected@file@percent }
+\newlabel{tab:memory}{{5}{22}{GPU memory budget per component.\relax }{table.caption.26}{}}
+\gdef \@abspage@last{22}

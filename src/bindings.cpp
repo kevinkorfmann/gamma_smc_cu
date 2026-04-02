@@ -2352,6 +2352,8 @@ class FlowContext {
     int n_haps_, n_words_, S_;
     int max_pairs_;      // current device output allocation size
     bool has_ci_;
+    float* d_fwd_buf_ = nullptr;
+    int fwd_buf_pairs_ = 0;  // how many pairs the fwd_buf can hold
 
     void alloc_output(int n_pairs, bool ci) {
         if (n_pairs <= max_pairs_ && ci == has_ci_) return;
@@ -2367,6 +2369,14 @@ class FlowContext {
         }
         CUDA_CHECK(cudaMalloc(&d_pi_, n_pairs * sizeof(int)));
         CUDA_CHECK(cudaMalloc(&d_pj_, n_pairs * sizeof(int)));
+    }
+
+    void alloc_fwd_buf(int n_pairs) {
+        if (n_pairs <= fwd_buf_pairs_) return;
+        if (d_fwd_buf_) { cudaFree(d_fwd_buf_); d_fwd_buf_ = nullptr; }
+        size_t bytes = 2ULL * S_ * n_pairs * sizeof(float);
+        CUDA_CHECK(cudaMalloc(&d_fwd_buf_, bytes));
+        fwd_buf_pairs_ = n_pairs;
     }
 
     void free_output() {
@@ -2426,6 +2436,7 @@ public:
 
     ~FlowContext() {
         free_output();
+        if (d_fwd_buf_) cudaFree(d_fwd_buf_);
         if (d_packed_) cudaFree(d_packed_);
         if (d_pos_) cudaFree(d_pos_);
     }
@@ -2441,9 +2452,7 @@ public:
             return result;
         }
 
-        size_t fwd_buf_bytes = 2ULL * S_ * n_pairs * sizeof(float);
-        float* d_fwd_buf;
-        CUDA_CHECK(cudaMalloc(&d_fwd_buf, fwd_buf_bytes));
+        alloc_fwd_buf(n_pairs);
 
         float *d_site_mean, *d_site_min, *d_site_max;
         CUDA_CHECK(cudaMalloc(&d_site_mean, S_ * sizeof(float)));
@@ -2463,10 +2472,8 @@ public:
             d_packed_, n_words_, d_pos_, S_, g_cache_Ne,
             d_pi_, d_pj_, n_pairs,
             g_d_cache_mean, g_d_cache_cv, g_cache_n_steps,
-            d_fwd_buf,
+            d_fwd_buf_,
             d_site_mean, d_site_min, d_site_max);
-
-        cudaFree(d_fwd_buf);
 
         auto mean_out = py::array_t<float>((ssize_t)S_);
         auto min_out = py::array_t<float>((ssize_t)S_);

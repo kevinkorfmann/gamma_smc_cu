@@ -1,0 +1,274 @@
+#include "tmrca_cu/gamma_smc.h"
+#include <cmath>
+#include <cstdio>
+
+// ============================================================
+// Output mode constants (template parameter)
+// ============================================================
+// 0: mean-only float32
+// 1: mean + CI float32
+// 2: mean-only uint8 log-quantized
+// 3: mean-only uint4 log-quantized (packed, 2 per byte)
+
+// ============================================================
+// Core filtering loop — shared by all output modes.
+// Factored as a device function to avoid code duplication.
+// Returns (alpha, beta) at each site via the output callback.
+// ============================================================
+
+// Log-quantize: map float TMRCA to uint8 in log-space
+// q = clamp(round((log(t) - log_min) * scale), 0, 255)
+__device__ __forceinline__ unsigned char log_quantize_u8(
+    float mean, float log_min, float inv_log_range)
+{
+    float log_t = __logf(fmaxf(mean, 1.0f));
+    float q = (log_t - log_min) * inv_log_range * 255.0f + 0.5f;
+    return (unsigned char)fminf(fmaxf(q, 0.0f), 255.0f);
+}
+
+// Log-quantize to 4-bit: map float TMRCA to uint4 (0-15)
+__device__ __forceinline__ unsigned char log_quantize_u4(
+    float mean, float log_min, float inv_log_range)
+{
+    float log_t = __logf(fmaxf(mean, 1.0f));
+    float q = (log_t - log_min) * inv_log_range * 15.0f + 0.5f;
+    return (unsigned char)fminf(fmaxf(q, 0.0f), 15.0f);
+}
+
+// ============================================================
+// Kernel: Gamma-SMC forward filtering
+// One thread per pair. O(1) state, O(S) work per thread.
+// Template MODE: 0=f32 mean, 1=f32 mean+CI, 2=u8 mean, 3=u4 mean
+// ============================================================
+template<int MODE>
+__global__ void gamma_smc_forward_kernel(
+    const uint64_t* __restrict__ packed,
+    int n_words,
+    const double* __restrict__ positions,
+    int S,
+    float mu, float rho, float Ne,
+    const int* __restrict__ pair_i,
+    const int* __restrict__ pair_j,
+    int n_pairs,
+    float* __restrict__ mean_out,       // MODE 0,1
+    float* __restrict__ lower_out,      // MODE 1
+    float* __restrict__ upper_out,      // MODE 1
+    unsigned char* __restrict__ q_out,  // MODE 2,3
+    float log_min, float inv_log_range, // MODE 2,3
+    int stride,
+    int out_S)
+{
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= n_pairs) return;
+
+    int hi = pair_i[pid];
+    int hj = pair_j[pid];
+
+    float lambda = 1.0f / (2.0f * Ne);
+    float two_mu = 2.0f * mu;
+    float inv_lambda = 2.0f * Ne;
+
+    // Prior: Gamma(1, lambda)
+    float alpha = 1.0f;
+    float beta = lambda;
+
+    // XOR word cache
+    int cur_word = -1;
+    uint64_t xor_w = 0;
+    double prev_pos = 0.0;
+
+    // Precompute prior second moment (constant)
+    float prior_m2 = 2.0f * inv_lambda * inv_lambda;
+
+    int next_out = 0;
+
+    // For MODE 3 (4-bit packed), we accumulate pairs of nibbles
+    unsigned char nibble_buf = 0;
+    int nibble_count = 0;
+
+    for (int s = 0; s < S; s++) {
+        double pos = positions[s];
+        float gap = (float)(pos - prev_pos);
+        prev_pos = pos;
+
+        if (s > 0) {
+            // 1. Recombination transition (moment-match mixture)
+            float p = 1.0f - __expf(-rho * gap);
+            if (p > 1e-7f) {
+                float ib = __frcp_rn(beta);
+                float q = 1.0f - p;
+                float filt_mean = alpha * ib;
+
+                float m1 = __fmaf_rn(q, filt_mean, p * inv_lambda);
+                float ib2 = ib * ib;
+                float filt_m2 = __fmaf_rn(q, alpha * (alpha + 1.0f) * ib2,
+                                           p * prior_m2);
+
+                float var = __fmaf_rn(-m1, m1, filt_m2);
+                if (var > 1e-30f) {
+                    beta = __fdividef(m1, var);
+                    alpha = m1 * beta;
+                }
+            }
+
+            // 2. Gap emission
+            beta = __fmaf_rn(two_mu, gap, beta);
+        }
+
+        // 3. Site emission — branchless
+        int w = s >> 6;
+        int bit = s & 63;
+        if (w != cur_word) {
+            xor_w = packed[(long long)hi * n_words + w]
+                  ^ packed[(long long)hj * n_words + w];
+            cur_word = w;
+        }
+        alpha += (float)((xor_w >> bit) & 1ULL);
+
+        // 4. Output
+        if (s == next_out) {
+            int out_s = (stride == 1) ? s : s / stride;
+            float inv_beta = __frcp_rn(beta);
+            float mean = alpha * inv_beta;
+
+            if constexpr (MODE == 0) {
+                // Float32 mean-only
+                long long idx = (long long)out_s * n_pairs + pid;
+                mean_out[idx] = mean;
+
+            } else if constexpr (MODE == 1) {
+                // Float32 mean + CI
+                long long idx = (long long)out_s * n_pairs + pid;
+                mean_out[idx] = mean;
+                float inv9a = __frcp_rn(9.0f * alpha);
+                float sq = __fsqrt_rn(inv9a);
+                float base = 1.0f - inv9a;
+                float lo_f = fmaxf(base - 1.96f * sq, 0.0f);
+                float hi_f = base + 1.96f * sq;
+                lower_out[idx] = fmaxf(mean * lo_f * lo_f * lo_f, 0.0f);
+                upper_out[idx] = mean * hi_f * hi_f * hi_f;
+
+            } else if constexpr (MODE == 2) {
+                // uint8 log-quantized
+                long long idx = (long long)out_s * n_pairs + pid;
+                q_out[idx] = log_quantize_u8(mean, log_min, inv_log_range);
+
+            } else if constexpr (MODE == 3) {
+                // uint4 log-quantized, packed 2 per byte
+                unsigned char nib = log_quantize_u4(mean, log_min, inv_log_range);
+                if ((nibble_count & 1) == 0) {
+                    nibble_buf = nib;  // low nibble
+                } else {
+                    nibble_buf |= (nib << 4);  // high nibble
+                    // Write packed byte: site-major layout
+                    long long byte_s = nibble_count >> 1;  // which packed site
+                    long long idx = byte_s * n_pairs + pid;
+                    q_out[idx] = nibble_buf;
+                }
+                nibble_count++;
+            }
+
+            next_out += stride;
+        }
+    }
+
+    // MODE 3: flush last nibble if odd number of output sites
+    if constexpr (MODE == 3) {
+        if (nibble_count & 1) {
+            long long byte_s = nibble_count >> 1;
+            long long idx = byte_s * n_pairs + pid;
+            q_out[idx] = nibble_buf;  // low nibble only, high = 0
+        }
+    }
+}
+
+// ============================================================
+// Host launcher — float32 modes (0, 1)
+// ============================================================
+void gamma_smc_forward_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    float mu, float rho, float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,
+    float* tmrca_upper_out,
+    int stride)
+{
+    int out_S = (stride == 1) ? S : (S + stride - 1) / stride;
+
+    const int block_size = 256;
+    int grid_size = (n_pairs + block_size - 1) / block_size;
+
+    bool write_ci = (tmrca_lower_out != nullptr && tmrca_upper_out != nullptr);
+
+    if (write_ci) {
+        gamma_smc_forward_kernel<1><<<grid_size, block_size>>>(
+            packed, n_words, positions, S,
+            mu, rho, Ne,
+            pair_i, pair_j, n_pairs,
+            tmrca_mean_out, tmrca_lower_out, tmrca_upper_out,
+            nullptr, 0.0f, 0.0f,
+            stride, out_S);
+    } else {
+        gamma_smc_forward_kernel<0><<<grid_size, block_size>>>(
+            packed, n_words, positions, S,
+            mu, rho, Ne,
+            pair_i, pair_j, n_pairs,
+            tmrca_mean_out, nullptr, nullptr,
+            nullptr, 0.0f, 0.0f,
+            stride, out_S);
+    }
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "gamma_smc_forward_kernel launch failed: %s\n",
+                cudaGetErrorString(err));
+    }
+    cudaDeviceSynchronize();
+}
+
+// ============================================================
+// Host launcher — quantized modes (2=uint8, 3=uint4)
+// ============================================================
+void gamma_smc_forward_quantized_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    float mu, float rho, float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    unsigned char* q_out,
+    float log_min, float log_max,
+    int stride, int bits)
+{
+    int out_S = (stride == 1) ? S : (S + stride - 1) / stride;
+
+    const int block_size = 256;
+    int grid_size = (n_pairs + block_size - 1) / block_size;
+
+    float inv_log_range = 1.0f / (log_max - log_min);
+
+    if (bits == 8) {
+        gamma_smc_forward_kernel<2><<<grid_size, block_size>>>(
+            packed, n_words, positions, S,
+            mu, rho, Ne,
+            pair_i, pair_j, n_pairs,
+            nullptr, nullptr, nullptr,
+            q_out, log_min, inv_log_range,
+            stride, out_S);
+    } else {
+        gamma_smc_forward_kernel<3><<<grid_size, block_size>>>(
+            packed, n_words, positions, S,
+            mu, rho, Ne,
+            pair_i, pair_j, n_pairs,
+            nullptr, nullptr, nullptr,
+            q_out, log_min, inv_log_range,
+            stride, out_S);
+    }
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "gamma_smc_forward_quantized_kernel launch failed: %s\n",
+                cudaGetErrorString(err));
+    }
+    cudaDeviceSynchronize();
+}
