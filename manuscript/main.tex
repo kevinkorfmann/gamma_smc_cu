@@ -1219,6 +1219,62 @@ pairs increases.}
 \label{fig:competitors}
 \end{figure}
 
+\subsubsection{Detailed scaling comparison with \texttt{gamma\_smc}}
+
+We conduct a systematic comparison across a grid of sample sizes
+($2$--$200$ haplotypes) and sequence lengths ($0.5$--$10$~Mb),
+using msprime-simulated data under constant $\Ne = 10{,}000$
+(Fig.~\ref{fig:gamma_deep}).
+
+Three scaling regimes emerge.  First, at small sample sizes
+($n = 2$--$10$), \texttt{gamma\_smc}'s ${\sim}\,6$s constant overhead
+(VCF parsing and model initialization) dominates, yielding apparent
+speedups of $200$--$450\times$.  Second, at moderate sample sizes
+($n = 20$--$100$), both tools scale quadratically with the number of
+haplotypes, but \texttt{tmrca.cu}'s GPU parallelism maintains a
+$16$--$190\times$ advantage.  Third, at the largest configurations
+($n = 200$, $10$~Mb), the speedup narrows to ${\sim}\,13\times$ as
+\texttt{tmrca.cu} approaches GPU memory limits and must auto-chunk
+into multiple batches.
+
+The amortized per-pair cost (Fig.~\ref{fig:gamma_throughput}b)
+reveals the underlying scaling: \texttt{gamma\_smc}'s per-pair time
+decreases from ${\sim}\,6$~s (1~pair, dominated by I/O) to
+${\sim}\,0.7$~ms ($19{,}900$~pairs), while \texttt{tmrca.cu}'s drops
+from ${\sim}\,300$~ms (1~pair, kernel launch overhead) to
+${\sim}\,0.04$~ms ($19{,}900$~pairs).  At saturation, the GPU
+achieves ${\sim}\,77$M site$\cdot$pairs/s versus
+${\sim}\,4$M for \texttt{gamma\_smc}, a $19\times$ throughput
+ratio that reflects the fundamental hardware advantage.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=\textwidth]{fig7_gamma_deep.pdf}
+\caption{\textbf{Scaling comparison with \texttt{gamma\_smc}.}
+(\textit{a})~Wall-clock time versus number of haplotypes at 1~Mb;
+annotations show the speedup factor at each point.
+(\textit{b})~Wall-clock time versus sequence length at $n = 50$
+haplotypes.
+(\textit{c})~Speedup heatmap across the full grid of sample sizes and
+sequence lengths.  Speedup ranges from $13\times$ ($n = 200$, $5$~Mb)
+to $453\times$ ($n = 10$, $1$~Mb).}
+\label{fig:gamma_deep}
+\end{figure}
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.85\textwidth]{fig8_gamma_throughput.pdf}
+\caption{\textbf{Throughput and amortized per-pair cost at 1~Mb.}
+(\textit{a})~Throughput in millions of site$\cdot$pairs/s for each
+tool at varying sample sizes.  \texttt{tmrca.cu} maintains
+$10$--$100\times$ higher throughput across all configurations.
+(\textit{b})~Amortized per-pair inference time (ms) versus number of
+pairs.  Both tools exhibit decreasing per-pair cost due to I/O
+amortization, but \texttt{tmrca.cu}'s GPU parallelism yields a
+steeper decrease, saturating at ${\sim}\,0.04$~ms/pair.}
+\label{fig:gamma_throughput}
+\end{figure}
+
 \subsection{Limitations and future work}
 
 \begin{enumerate}
