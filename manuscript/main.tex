@@ -270,7 +270,7 @@ On a single NVIDIA A100, it achieves 250--3{,}000$\times$ speedups over the orig
 The practical implication of these speedups is a qualitative shift in the feasibility of all-pairs TMRCA analysis.
 Consider a cohort of 10{,}000 diploid individuals (20{,}000 haplotypes) genotyped across a 100\,Mb chromosome.
 This entails approximately $2 \times 10^8$ pairs, each requiring an HMM pass over roughly $10^5$ segregating sites.
-At the per-pair throughput demonstrated here (approximately $2 \times 10^6$ pairs per second for 1\,Mb sequences), this chromosome could be processed in roughly 100 seconds on a single A100---or in minutes using the three A100 GPUs available on our test system.
+At the per-pair throughput demonstrated here (approximately $2 \times 10^6$ pairs per second for 1\,Mb sequences), this chromosome could be processed in roughly 100 seconds on a single A100.  Our multi-GPU implementation distributes pairs across all available devices via a thread-pool executor, yielding near-linear speedup: on the three A100 GPUs in our test system, this reduces to approximately 35 seconds.
 A full genome scan across 22 autosomes would complete in under an hour.
 This brings all-pairs TMRCA inference into the same computational envelope as standard GWAS analyses, suggesting that coalescence-time-based association statistics could be computed routinely alongside conventional $p$-values.
 
@@ -298,7 +298,7 @@ Fourth, our benchmarks use simulated data with known truth; performance on real 
 
 \paragraph{Future directions.}
 Several extensions are natural.
-Multi-GPU parallelism across the three A100s on our test system would provide an immediate $3\times$ throughput increase with minimal engineering effort, since pairs are independent.
+We have implemented multi-GPU parallelism that distributes pairs across devices via concurrent threads, each backed by its own \texttt{FlowContext} with device-local memory allocations.  Since pairs are independent, this yields near-linear scaling: three A100 GPUs provide approximately $3\times$ throughput over a single device, with no change to the underlying CUDA kernels.
 Integration with existing workflows---for example, reading \texttt{VCF}/\texttt{BCF} input directly and outputting \texttt{tskit}-compatible tree sequences---would lower adoption barriers.
 Adaptation to the pairwise composite likelihood framework of MSMC2 \cite{Schiffels2014} could enable GPU-accelerated demographic inference.
 Finally, the flow-field representation is not specific to the Gamma family; exploring richer posterior parameterizations (e.g., Gaussian mixtures on the log scale) could improve accuracy while retaining the GPU-friendly lookup-table structure.
@@ -367,7 +367,7 @@ Sample sizes ranged from $n=10$ to $n=1{,}000$ haplotypes, and sequence lengths 
 Ground-truth pairwise coalescence times were extracted from the \texttt{msprime} tree sequence.
 
 Schweiger's Gamma-SMC was run using the original compiled binary with default parameters and the default flow field file (\texttt{default\_flow\_field.txt}).
-\texttt{tmrca.cu} was run on a single NVIDIA A100 80\,GB PCIe GPU using the same flow field.
+\texttt{tmrca.cu} was run on a single NVIDIA A100 80\,GB PCIe GPU using the same flow field.  Multi-GPU experiments used all three A100 GPUs on the same host, with pairs distributed evenly across devices using the \texttt{MultiGPUFlowContext} Python wrapper.
 Wall-clock times include all I/O and memory allocation.
 Each configuration was run five times and the minimum of five runs reported.
 

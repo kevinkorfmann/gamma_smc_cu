@@ -2358,6 +2358,7 @@ class FlowContext {
     int device_id_ = 0;  // GPU device this context lives on
     float* ctx_cache_mean_ = nullptr;
     float* ctx_cache_cv_ = nullptr;
+    void* ctx_cache_h2_ = nullptr;
     int ctx_cache_steps_ = 0;
     float ctx_cache_Ne_ = 0;
 
@@ -2457,6 +2458,7 @@ public:
                 // Save the device-local pointers
                 ctx_cache_mean_ = g_d_cache_mean;
                 ctx_cache_cv_ = g_d_cache_cv;
+                ctx_cache_h2_ = g_d_cache_h2;
                 ctx_cache_steps_ = g_cache_n_steps;
                 ctx_cache_Ne_ = g_cache_Ne;
                 
@@ -2470,6 +2472,7 @@ public:
                 // Same device or first time: use globals directly
                 ctx_cache_mean_ = g_d_cache_mean;
                 ctx_cache_cv_ = g_d_cache_cv;
+                ctx_cache_h2_ = g_d_cache_h2;
                 ctx_cache_steps_ = g_cache_n_steps;
                 ctx_cache_Ne_ = g_cache_Ne;
             }
@@ -2578,7 +2581,7 @@ public:
         gamma_smc_flow_h2_fwd_gpu(
             d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
             d_pi_, d_pj_, n_pairs,
-            g_d_cache_h2, ctx_cache_steps_,
+            ctx_cache_h2_, ctx_cache_steps_,
             d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr);
 
         // D2H directly to numpy-managed memory

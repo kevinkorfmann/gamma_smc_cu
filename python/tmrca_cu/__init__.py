@@ -39,6 +39,8 @@ from tmrca_cu.estimator import (
     Segment,
 )
 
+from tmrca_cu.multigpu import MultiGPUFlowContext
+
 __all__ = [
     "bitpack",
     "unpack",
@@ -60,6 +62,7 @@ __all__ = [
     "gamma_smc_flow_cached_fwd",
     "HMMContext",
     "FlowContext",
+    "MultiGPUFlowContext",
     "CoalescenceEstimator",
     "TMRCAResult",
     "Segment",

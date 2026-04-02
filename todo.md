@@ -21,7 +21,7 @@
 - [ ] Run full benchmark at 10Mb and 100Mb with real Schweiger times to fill Table 1
 - [ ] Clean up src/kernels/gamma_smc.cu.bak (delete or gitignore)
 - [ ] Consolidate make_figures.py and nature_figures.py into one script
-- [ ] Implement multi-GPU support (3x more available, mentioned as future work)
+- [x] Implement multi-GPU support (3x more available, mentioned as future work)
 
 ## Before submission
 - [ ] Replace GitHub URL placeholder in Methods section
