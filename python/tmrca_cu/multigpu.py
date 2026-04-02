@@ -1,11 +1,11 @@
 """
 MultiGPUFlowContext: thread-based multi-GPU using per-context device management.
 Each FlowContext stores its device_id and cache pointers, and calls
-cudaSetDevice at the start of each method.
+cudaSetDevice at the start of each method.  The GIL is released during
+GPU work so threads truly run concurrently.
 
 Splits pairs evenly across available GPUs, runs kernels concurrently via
-a thread pool (CUDA operations release the GIL in pybind11), and
-concatenates results.
+a persistent thread pool, and concatenates results.
 """
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
@@ -50,6 +50,12 @@ class MultiGPUFlowContext:
             self.contexts.append(ctx)
         _core.set_device(gpu_ids[0])
 
+        # Persistent thread pool avoids per-call ThreadPoolExecutor overhead
+        self._pool = ThreadPoolExecutor(max_workers=self.n_gpus)
+
+    def __del__(self):
+        self._pool.shutdown(wait=False)
+
     def _split_pairs(self, pairs):
         """Split pairs list into per-GPU chunks."""
         n_pairs = len(pairs)
@@ -72,8 +78,7 @@ class MultiGPUFlowContext:
 
         gpu_pairs = self._split_pairs(pairs)
 
-        def run_gpu(args):
-            gpu_idx, gpairs = args
+        def run_gpu(gpu_idx, gpairs):
             if not gpairs:
                 return np.zeros(self.S, dtype=np.float64), 0
             ctx = self.contexts[gpu_idx]
@@ -86,12 +91,13 @@ class MultiGPUFlowContext:
                 total += len(chunk)
             return site_sum, total
 
-        with ThreadPoolExecutor(max_workers=self.n_gpus) as ex:
-            results = list(ex.map(run_gpu, enumerate(gpu_pairs)))
+        futures = [self._pool.submit(run_gpu, i, gp)
+                   for i, gp in enumerate(gpu_pairs)]
 
         total_sum = np.zeros(self.S, dtype=np.float64)
         total_pairs = 0
-        for ss, c in results:
+        for f in futures:
+            ss, c = f.result()
             total_sum += ss
             total_pairs += c
 
@@ -117,23 +123,20 @@ class MultiGPUFlowContext:
 
         gpu_pairs = self._split_pairs(pairs)
 
-        def run_gpu(args):
-            gpu_idx, gpairs = args
+        def run_gpu(gpu_idx, gpairs):
             if not gpairs:
                 return None
             return self.contexts[gpu_idx].run_fwd(gpairs, mean_only)
 
-        with ThreadPoolExecutor(max_workers=self.n_gpus) as ex:
-            results = list(ex.map(run_gpu, enumerate(gpu_pairs)))
+        futures = [self._pool.submit(run_gpu, i, gp)
+                   for i, gp in enumerate(gpu_pairs)]
+        results = [f.result() for f in futures]
 
-        # Concatenate along pair axis (axis=1 for [S, n_pairs] layout)
         means = [r["mean"] for r in results if r is not None]
         out = {"mean": np.concatenate(means, axis=1)}
         if not mean_only:
-            lowers = [r["lower"] for r in results if r is not None]
-            uppers = [r["upper"] for r in results if r is not None]
-            out["lower"] = np.concatenate(lowers, axis=1)
-            out["upper"] = np.concatenate(uppers, axis=1)
+            out["lower"] = np.concatenate([r["lower"] for r in results if r is not None], axis=1)
+            out["upper"] = np.concatenate([r["upper"] for r in results if r is not None], axis=1)
         return out
 
     # ------------------------------------------------------------------
@@ -155,22 +158,20 @@ class MultiGPUFlowContext:
 
         gpu_pairs = self._split_pairs(pairs)
 
-        def run_gpu(args):
-            gpu_idx, gpairs = args
+        def run_gpu(gpu_idx, gpairs):
             if not gpairs:
                 return None
             return self.contexts[gpu_idx].run_fb(gpairs, mean_only)
 
-        with ThreadPoolExecutor(max_workers=self.n_gpus) as ex:
-            results = list(ex.map(run_gpu, enumerate(gpu_pairs)))
+        futures = [self._pool.submit(run_gpu, i, gp)
+                   for i, gp in enumerate(gpu_pairs)]
+        results = [f.result() for f in futures]
 
         means = [r["mean"] for r in results if r is not None]
         out = {"mean": np.concatenate(means, axis=1)}
         if not mean_only:
-            lowers = [r["lower"] for r in results if r is not None]
-            uppers = [r["upper"] for r in results if r is not None]
-            out["lower"] = np.concatenate(lowers, axis=1)
-            out["upper"] = np.concatenate(uppers, axis=1)
+            out["lower"] = np.concatenate([r["lower"] for r in results if r is not None], axis=1)
+            out["upper"] = np.concatenate([r["upper"] for r in results if r is not None], axis=1)
         return out
 
     @property

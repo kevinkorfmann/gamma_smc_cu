@@ -2502,7 +2502,6 @@ public:
     FlowContext& operator=(const FlowContext&) = delete;
 
     py::dict run_fb_summary(std::vector<std::pair<int, int>> pairs) {
-        cudaSetDevice(device_id_);  // ensure correct GPU
         int n_pairs = (int)pairs.size();
         if (n_pairs == 0) {
             py::dict result;
@@ -2510,39 +2509,48 @@ public:
             return result;
         }
 
-        alloc_fwd_buf(n_pairs);
-
-        float *d_site_mean, *d_site_min, *d_site_max;
-        CUDA_CHECK(cudaMalloc(&d_site_mean, S_ * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&d_site_min, S_ * sizeof(float)));
-        CUDA_CHECK(cudaMalloc(&d_site_max, S_ * sizeof(float)));
-
-        alloc_output(n_pairs, false);
         std::vector<int> pi(n_pairs), pj(n_pairs);
         for (int p = 0; p < n_pairs; p++) {
             pi[p] = pairs[p].first;
             pj[p] = pairs[p].second;
         }
-        CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
-
-        gamma_smc_flow_cached_fb_reduce_gpu(
-            d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
-            d_pi_, d_pj_, n_pairs,
-            ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
-            d_fwd_buf_,
-            d_site_mean, d_site_min, d_site_max);
 
         auto mean_out = py::array_t<float>((ssize_t)S_);
         auto min_out = py::array_t<float>((ssize_t)S_);
         auto max_out = py::array_t<float>((ssize_t)S_);
-        CUDA_CHECK(cudaMemcpy(mean_out.mutable_data(), d_site_mean, S_ * sizeof(float), cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(min_out.mutable_data(), d_site_min, S_ * sizeof(float), cudaMemcpyDeviceToHost));
-        CUDA_CHECK(cudaMemcpy(max_out.mutable_data(), d_site_max, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+        float* h_mean = mean_out.mutable_data();
+        float* h_min = min_out.mutable_data();
+        float* h_max = max_out.mutable_data();
 
-        cudaFree(d_site_mean);
-        cudaFree(d_site_min);
-        cudaFree(d_site_max);
+        {
+            py::gil_scoped_release release;
+            cudaSetDevice(device_id_);
+            alloc_fwd_buf(n_pairs);
+            alloc_output(n_pairs, false);
+
+            CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+
+            float *d_site_mean, *d_site_min, *d_site_max;
+            CUDA_CHECK(cudaMalloc(&d_site_mean, S_ * sizeof(float)));
+            CUDA_CHECK(cudaMalloc(&d_site_min, S_ * sizeof(float)));
+            CUDA_CHECK(cudaMalloc(&d_site_max, S_ * sizeof(float)));
+
+            gamma_smc_flow_cached_fb_reduce_gpu(
+                d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
+                d_pi_, d_pj_, n_pairs,
+                ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
+                d_fwd_buf_,
+                d_site_mean, d_site_min, d_site_max);
+
+            CUDA_CHECK(cudaMemcpy(h_mean, d_site_mean, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(h_min, d_site_min, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(h_max, d_site_max, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+
+            cudaFree(d_site_mean);
+            cudaFree(d_site_min);
+            cudaFree(d_site_max);
+        }
 
         py::dict result;
         result["site_mean"] = mean_out;
@@ -2557,7 +2565,6 @@ public:
     int device_id() const { return device_id_; }
 
     py::dict run_fwd(std::vector<std::pair<int, int>> pairs, bool mean_only) {
-        cudaSetDevice(device_id_);
         int n_pairs = (int)pairs.size();
         if (n_pairs == 0) {
             py::dict result;
@@ -2566,46 +2573,55 @@ public:
         }
 
         bool ci = !mean_only;
-        alloc_output(n_pairs, ci);
+        size_t bytes = (size_t)S_ * n_pairs * sizeof(float);
 
-        // Upload pair indices
         std::vector<int> pi(n_pairs), pj(n_pairs);
         for (int p = 0; p < n_pairs; p++) {
             pi[p] = pairs[p].first;
             pj[p] = pairs[p].second;
         }
-        CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
 
-        // Kernel — use fp16 cache for halved L2 traffic
-        gamma_smc_flow_h2_fwd_gpu(
-            d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
-            d_pi_, d_pj_, n_pairs,
-            ctx_cache_h2_, ctx_cache_steps_,
-            d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr);
-
-        // D2H directly to numpy-managed memory
-        size_t bytes = (size_t)S_ * n_pairs * sizeof(float);
         auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
-        CUDA_CHECK(cudaMemcpy(mean_out.mutable_data(), d_mean_, bytes, cudaMemcpyDeviceToHost));
+        py::array_t<float> lower_out, upper_out;
+        if (ci) {
+            lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        }
+        float* h_mean = mean_out.mutable_data();
+        float* h_lower = ci ? lower_out.mutable_data() : nullptr;
+        float* h_upper = ci ? upper_out.mutable_data() : nullptr;
+
+        {
+            py::gil_scoped_release release;
+            cudaSetDevice(device_id_);
+            alloc_output(n_pairs, ci);
+
+            CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+
+            gamma_smc_flow_h2_fwd_gpu(
+                d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
+                d_pi_, d_pj_, n_pairs,
+                ctx_cache_h2_, ctx_cache_steps_,
+                d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr);
+
+            CUDA_CHECK(cudaMemcpy(h_mean, d_mean_, bytes, cudaMemcpyDeviceToHost));
+            if (ci) {
+                CUDA_CHECK(cudaMemcpy(h_lower, d_lower_, bytes, cudaMemcpyDeviceToHost));
+                CUDA_CHECK(cudaMemcpy(h_upper, d_upper_, bytes, cudaMemcpyDeviceToHost));
+            }
+        }
 
         py::dict result;
         result["mean"] = mean_out;
-
         if (ci) {
-            auto lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
-            auto upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
-            CUDA_CHECK(cudaMemcpy(lower_out.mutable_data(), d_lower_, bytes, cudaMemcpyDeviceToHost));
-            CUDA_CHECK(cudaMemcpy(upper_out.mutable_data(), d_upper_, bytes, cudaMemcpyDeviceToHost));
             result["lower"] = lower_out;
             result["upper"] = upper_out;
         }
-
         return result;
     }
 
     py::dict run_fb(std::vector<std::pair<int, int>> pairs, bool mean_only) {
-        cudaSetDevice(device_id_);
         int n_pairs = (int)pairs.size();
         if (n_pairs == 0) {
             py::dict result;
@@ -2614,42 +2630,55 @@ public:
         }
 
         bool ci = !mean_only;
-
-        // Need forward buffer for FB
-        size_t fwd_buf_bytes = 2ULL * S_ * n_pairs * sizeof(float);
-        float* d_fwd_buf;
-        CUDA_CHECK(cudaMalloc(&d_fwd_buf, fwd_buf_bytes));
-
-        alloc_output(n_pairs, ci);
+        size_t bytes = (size_t)S_ * n_pairs * sizeof(float);
 
         std::vector<int> pi(n_pairs), pj(n_pairs);
         for (int p = 0; p < n_pairs; p++) {
             pi[p] = pairs[p].first;
             pj[p] = pairs[p].second;
         }
-        CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
-        CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
 
-        gamma_smc_flow_cached_fb_gpu(
-            d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
-            d_pi_, d_pj_, n_pairs,
-            ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
-            d_fwd_buf,
-            d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr);
-
-        cudaFree(d_fwd_buf);
-
-        size_t bytes = (size_t)S_ * n_pairs * sizeof(float);
         auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
-        CUDA_CHECK(cudaMemcpy(mean_out.mutable_data(), d_mean_, bytes, cudaMemcpyDeviceToHost));
+        py::array_t<float> lower_out, upper_out;
+        if (ci) {
+            lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        }
+        float* h_mean = mean_out.mutable_data();
+        float* h_lower = ci ? lower_out.mutable_data() : nullptr;
+        float* h_upper = ci ? upper_out.mutable_data() : nullptr;
+
+        {
+            py::gil_scoped_release release;
+            cudaSetDevice(device_id_);
+
+            size_t fwd_buf_bytes = 2ULL * S_ * n_pairs * sizeof(float);
+            float* d_fwd_buf;
+            CUDA_CHECK(cudaMalloc(&d_fwd_buf, fwd_buf_bytes));
+            alloc_output(n_pairs, ci);
+
+            CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+
+            gamma_smc_flow_cached_fb_gpu(
+                d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
+                d_pi_, d_pj_, n_pairs,
+                ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
+                d_fwd_buf,
+                d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr);
+
+            cudaFree(d_fwd_buf);
+
+            CUDA_CHECK(cudaMemcpy(h_mean, d_mean_, bytes, cudaMemcpyDeviceToHost));
+            if (ci) {
+                CUDA_CHECK(cudaMemcpy(h_lower, d_lower_, bytes, cudaMemcpyDeviceToHost));
+                CUDA_CHECK(cudaMemcpy(h_upper, d_upper_, bytes, cudaMemcpyDeviceToHost));
+            }
+        }
 
         py::dict result;
         result["mean"] = mean_out;
         if (ci) {
-            auto lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
-            auto upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
-            CUDA_CHECK(cudaMemcpy(lower_out.mutable_data(), d_lower_, bytes, cudaMemcpyDeviceToHost));
-            CUDA_CHECK(cudaMemcpy(upper_out.mutable_data(), d_upper_, bytes, cudaMemcpyDeviceToHost));
             result["lower"] = lower_out;
             result["upper"] = upper_out;
         }

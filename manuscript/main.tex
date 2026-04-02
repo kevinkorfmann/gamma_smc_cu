@@ -258,6 +258,38 @@ $n$ & Seq.\ length & Pairs & Gamma-SMC (s) & \texttt{tmrca.cu} (s) & Speedup & $
 \end{tabular}
 \end{table}
 
+\begin{table}[!ht]
+\centering
+\caption{\textbf{Multi-GPU scaling.}
+Wall-clock time (best of 5 runs) for forward--backward inference using 1, 2, and 3 NVIDIA A100 80\,GB GPUs.
+Pairs are split evenly across devices and processed concurrently via GIL-released threads.}
+\label{tab:multigpu}
+\begin{tabular}{rrrrrrrr}
+\toprule
+$ & Seq.\ length & Pairs & 1 GPU (s) & 2 GPUs (s) & 3 GPUs (s) & \times$ speedup & \times$ speedup \
+\midrule
+100 & 1\,Mb & 4{,}950 & 0.016 & 0.009 & 0.008 & 1.86$\times$ & 2.11$\times$ \
+200 & 1\,Mb & 19{,}900 & 0.053 & 0.031 & 0.024 & 1.69$\times$ & 2.20$\times$ \
+500 & 1\,Mb & 124{,}750 & 0.359 & 0.187 & 0.134 & 1.92$\times$ & 2.67$\times$ \
+1{,}000 & 1\,Mb & 499{,}500 & 1.568 & 0.807 & 0.580 & 1.94$\times$ & 2.70$\times$ \
+200 & 5\,Mb & 19{,}900 & 0.269 & 0.154 & 0.119 & 1.74$\times$ & 2.27$\times$ \
+500 & 5\,Mb & 124{,}750 & 1.742 & 0.896 & 0.624 & 1.95$\times$ & 2.79$\times$ \
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.8\textwidth]{fig7_multigpu.pdf}
+\caption{\textbf{Multi-GPU scaling.}
+(\textbf{a})~Wall-clock time versus number of GPUs (log-scaled) for six benchmark configurations.
+(\textbf{b})~Speedup relative to a single A100.
+The dashed line indicates ideal linear scaling.
+At large pair counts ( \geq 500$), three GPUs achieve .7\times$ speedup, approaching the \times$ theoretical maximum.}
+\label{fig:multigpu}
+\end{figure}
+
+
 % ============================================================================
 % DISCUSSION
 % ============================================================================
@@ -270,7 +302,7 @@ On a single NVIDIA A100, it achieves 250--3{,}000$\times$ speedups over the orig
 The practical implication of these speedups is a qualitative shift in the feasibility of all-pairs TMRCA analysis.
 Consider a cohort of 10{,}000 diploid individuals (20{,}000 haplotypes) genotyped across a 100\,Mb chromosome.
 This entails approximately $2 \times 10^8$ pairs, each requiring an HMM pass over roughly $10^5$ segregating sites.
-At the per-pair throughput demonstrated here (approximately $2 \times 10^6$ pairs per second for 1\,Mb sequences), this chromosome could be processed in roughly 100 seconds on a single A100.  Our multi-GPU implementation distributes pairs across all available devices via a thread-pool executor, yielding near-linear speedup: on the three A100 GPUs in our test system, this reduces to approximately 35 seconds.
+At the per-pair throughput demonstrated here (approximately $2 \times 10^6$ pairs per second for 1\,Mb sequences), this chromosome could be processed in roughly 100 seconds on a single A100.  Our multi-GPU implementation distributes pairs across all available devices via a thread-pool executor with GIL-released CUDA calls, yielding near-linear speedup: on three A100 GPUs, we observe .7	imes$ speedup for 499{,}500 pairs over 1\,Mb (0.58\,s vs.\ 1.57\,s on a single GPU), reducing the projected chromosome processing time to approximately 37 seconds.
 A full genome scan across 22 autosomes would complete in under an hour.
 This brings all-pairs TMRCA inference into the same computational envelope as standard GWAS analyses, suggesting that coalescence-time-based association statistics could be computed routinely alongside conventional $p$-values.
 
