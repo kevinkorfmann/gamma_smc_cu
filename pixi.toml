@@ -1,6 +1,6 @@
 [workspace]
 authors = ["kevinkorfmann <kevin.korfmann@gmail.com>"]
-channels = ["conda-forge", "nvidia"]
+channels = ["conda-forge", "nvidia", "bioconda"]
 name = "tmrca.cu"
 platforms = ["linux-64"]
 version = "0.1.0"
@@ -19,6 +19,9 @@ msprime = ">=1.2"
 tskit = ">=0.5"
 scipy = ">=1.10"
 matplotlib = "*"
+boost-cpp = ">=1.85.0,<2"
+boost = ">=1.85.0,<2"
+htslib = ">=1.23,<2"
 
 [activation.env]
 PYTHONPATH = "${PIXI_PROJECT_ROOT}/python:${PIXI_PROJECT_ROOT}"

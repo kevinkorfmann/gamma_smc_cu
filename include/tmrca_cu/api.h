@@ -5,3 +5,4 @@
 #include "hmm.h"
 #include "pelt.h"
 #include "ultrametric.h"
+#include "gamma_smc.h"

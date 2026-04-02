@@ -26,6 +26,7 @@ add_library(tmrcacu_kernels SHARED
     src/kernels/ultrametric.cu
     src/kernels/convergence.cu
     src/kernels/adaptive_prior.cu
+    src/kernels/gamma_smc.cu
     src/demography.cpp
 )
 target_include_directories(tmrcacu_kernels PUBLIC ${CMAKE_SOURCE_DIR}/include)

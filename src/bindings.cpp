@@ -1519,6 +1519,287 @@ public:
 };
 
 // ============================================================
+// Gamma-SMC forward filtering
+// ============================================================
+py::dict py_gamma_smc_forward(
+    py::array_t<uint8_t, py::array::c_style> G,
+    py::array_t<double, py::array::c_style> positions_arr,
+    std::vector<std::pair<int, int>> pairs,
+    double Ne,
+    double mu_scalar,
+    double rho_scalar,
+    int stride,
+    bool mean_only)
+{
+    auto g_buf = G.request();
+    auto pos_buf = positions_arr.request();
+
+    int n = (int)g_buf.shape[0];
+    int S = (int)g_buf.shape[1];
+    int n_words = (S + 63) / 64;
+    int n_pairs = (int)pairs.size();
+    int out_S = (stride == 1) ? S : (S + stride - 1) / stride;
+
+    // Pair indices
+    std::vector<int> pi(n_pairs), pj(n_pairs);
+    for (int p = 0; p < n_pairs; p++) {
+        pi[p] = pairs[p].first;
+        pj[p] = pairs[p].second;
+    }
+
+    // GPU allocations
+    uint8_t* d_G;
+    uint64_t* d_packed;
+    double* d_pos;
+    int *d_pi, *d_pj;
+    float *d_mean, *d_lower, *d_upper;
+
+    CUDA_CHECK(cudaMalloc(&d_G, (size_t)n * S * sizeof(uint8_t)));
+    CUDA_CHECK(cudaMalloc(&d_packed, (size_t)n * n_words * sizeof(uint64_t)));
+    CUDA_CHECK(cudaMemset(d_packed, 0, (size_t)n * n_words * sizeof(uint64_t)));
+    CUDA_CHECK(cudaMemcpy(d_G, g_buf.ptr, (size_t)n * S * sizeof(uint8_t),
+                          cudaMemcpyHostToDevice));
+    bitpack_genotypes_gpu(d_G, d_packed, n, S, n_words);
+    cudaFree(d_G);
+
+    CUDA_CHECK(cudaMalloc(&d_pos, S * sizeof(double)));
+    CUDA_CHECK(cudaMemcpy(d_pos, pos_buf.ptr, S * sizeof(double),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_CHECK(cudaMalloc(&d_pi, n_pairs * sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&d_pj, n_pairs * sizeof(int)));
+    CUDA_CHECK(cudaMemcpy(d_pi, pi.data(), n_pairs * sizeof(int),
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_pj, pj.data(), n_pairs * sizeof(int),
+                          cudaMemcpyHostToDevice));
+
+    // Determine chunk size based on available VRAM (70% of free)
+    int n_arrays = mean_only ? 1 : 3;
+    size_t free_mem = 0, total_mem = 0;
+    cudaMemGetInfo(&free_mem, &total_mem);
+    size_t output_per_pair = (size_t)out_S * n_arrays * sizeof(float);
+    size_t usable = (size_t)(free_mem * 0.7);
+    int chunk_pairs = n_pairs;
+    if (output_per_pair > 0 && (size_t)n_pairs * output_per_pair > usable) {
+        chunk_pairs = std::max(1, (int)(usable / output_per_pair));
+    }
+
+    // Allocate GPU output buffers for one chunk
+    size_t chunk_out_size = (size_t)chunk_pairs * out_S;
+    d_lower = nullptr;
+    d_upper = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_mean, chunk_out_size * sizeof(float)));
+    if (!mean_only) {
+        CUDA_CHECK(cudaMalloc(&d_lower, chunk_out_size * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(&d_upper, chunk_out_size * sizeof(float)));
+    }
+
+    // Host output: site-major [out_S × n_pairs], C-contiguous.
+    // User can .T for [n_pairs × out_S] view (free, no copy).
+    // Using [out_S, n_pairs] shape matches GPU layout → direct memcpy, no scatter.
+    auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)out_S, (ssize_t)n_pairs});
+    py::array_t<float> lower_out, upper_out;
+    if (!mean_only) {
+        lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)out_S, (ssize_t)n_pairs});
+        upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)out_S, (ssize_t)n_pairs});
+    }
+
+    float* h_mean = mean_out.mutable_data();
+    float* h_lower = mean_only ? nullptr : lower_out.mutable_data();
+    float* h_upper = mean_only ? nullptr : upper_out.mutable_data();
+
+    if (chunk_pairs >= n_pairs) {
+        // Fast path: no chunking — single kernel launch + single memcpy
+        gamma_smc_forward_gpu(d_packed, n_words, d_pos, S,
+                              (float)mu_scalar, (float)rho_scalar, (float)Ne,
+                              d_pi, d_pj, n_pairs,
+                              d_mean, d_lower, d_upper, stride);
+
+        size_t total_bytes = (size_t)out_S * n_pairs * sizeof(float);
+        CUDA_CHECK(cudaMemcpy(h_mean, d_mean, total_bytes, cudaMemcpyDeviceToHost));
+        if (!mean_only) {
+            CUDA_CHECK(cudaMemcpy(h_lower, d_lower, total_bytes, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(h_upper, d_upper, total_bytes, cudaMemcpyDeviceToHost));
+        }
+    } else {
+        // Chunked path: kernel writes [out_S × chunk], D2H into correct
+        // position in host array. Since chunks slice along pair dimension,
+        // the site-major layout means chunk data for site s is at
+        // offset s*chunk in GPU buffer, and goes to s*n_pairs+offset in host.
+        for (int offset = 0; offset < n_pairs; offset += chunk_pairs) {
+            int chunk = std::min(chunk_pairs, n_pairs - offset);
+
+            gamma_smc_forward_gpu(d_packed, n_words, d_pos, S,
+                                  (float)mu_scalar, (float)rho_scalar, (float)Ne,
+                                  d_pi + offset, d_pj + offset, chunk,
+                                  d_mean, d_lower, d_upper, stride);
+
+            // Use cudaMemcpy2D: copy [out_S × chunk] into strided host buffer
+            // src: contiguous [out_S × chunk], pitch = chunk * sizeof(float)
+            // dst: [out_S × n_pairs] at column offset, pitch = n_pairs * sizeof(float)
+            auto copy2d = [&](float* d_src, float* h_dst) {
+                CUDA_CHECK(cudaMemcpy2D(
+                    h_dst + offset,                     // dst ptr (offset by pair)
+                    (size_t)n_pairs * sizeof(float),    // dst pitch
+                    d_src,                              // src ptr
+                    (size_t)chunk * sizeof(float),      // src pitch
+                    (size_t)chunk * sizeof(float),      // width (bytes per row)
+                    out_S,                              // height (number of rows/sites)
+                    cudaMemcpyDeviceToHost));
+            };
+            copy2d(d_mean, h_mean);
+            if (!mean_only) {
+                copy2d(d_lower, h_lower);
+                copy2d(d_upper, h_upper);
+            }
+        }
+    }
+
+    cudaFree(d_packed); cudaFree(d_pos);
+    cudaFree(d_pi); cudaFree(d_pj);
+    cudaFree(d_mean);
+    if (d_lower) cudaFree(d_lower);
+    if (d_upper) cudaFree(d_upper);
+
+    py::dict result;
+    result["mean"] = mean_out;
+    if (!mean_only) {
+        result["lower"] = lower_out;
+        result["upper"] = upper_out;
+    }
+    return result;
+}
+
+// ============================================================
+// Gamma-SMC quantized forward filtering
+// ============================================================
+py::dict py_gamma_smc_forward_quantized(
+    py::array_t<uint8_t, py::array::c_style> G,
+    py::array_t<double, py::array::c_style> positions_arr,
+    std::vector<std::pair<int, int>> pairs,
+    double Ne,
+    double mu_scalar,
+    double rho_scalar,
+    int stride,
+    int bits)
+{
+    auto g_buf = G.request();
+    auto pos_buf = positions_arr.request();
+
+    int n = (int)g_buf.shape[0];
+    int S = (int)g_buf.shape[1];
+    int n_words = (S + 63) / 64;
+    int n_pairs = (int)pairs.size();
+    int out_S = (stride == 1) ? S : (S + stride - 1) / stride;
+
+    if (bits != 4 && bits != 8)
+        throw std::runtime_error("bits must be 4 or 8");
+
+    // Log-scale range based on Ne: [1 generation, 20*Ne generations]
+    float log_min = 0.0f;                      // log(1)
+    float log_max = logf(20.0f * (float)Ne);   // log(20*Ne)
+
+    // Pair indices
+    std::vector<int> pi(n_pairs), pj(n_pairs);
+    for (int p = 0; p < n_pairs; p++) {
+        pi[p] = pairs[p].first;
+        pj[p] = pairs[p].second;
+    }
+
+    // GPU allocations
+    uint8_t* d_G;
+    uint64_t* d_packed;
+    double* d_pos;
+    int *d_pi, *d_pj;
+    unsigned char* d_q;
+
+    CUDA_CHECK(cudaMalloc(&d_G, (size_t)n * S * sizeof(uint8_t)));
+    CUDA_CHECK(cudaMalloc(&d_packed, (size_t)n * n_words * sizeof(uint64_t)));
+    CUDA_CHECK(cudaMemset(d_packed, 0, (size_t)n * n_words * sizeof(uint64_t)));
+    CUDA_CHECK(cudaMemcpy(d_G, g_buf.ptr, (size_t)n * S * sizeof(uint8_t),
+                          cudaMemcpyHostToDevice));
+    bitpack_genotypes_gpu(d_G, d_packed, n, S, n_words);
+    cudaFree(d_G);
+
+    CUDA_CHECK(cudaMalloc(&d_pos, S * sizeof(double)));
+    CUDA_CHECK(cudaMemcpy(d_pos, pos_buf.ptr, S * sizeof(double),
+                          cudaMemcpyHostToDevice));
+
+    CUDA_CHECK(cudaMalloc(&d_pi, n_pairs * sizeof(int)));
+    CUDA_CHECK(cudaMalloc(&d_pj, n_pairs * sizeof(int)));
+    CUDA_CHECK(cudaMemcpy(d_pi, pi.data(), n_pairs * sizeof(int),
+                          cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(d_pj, pj.data(), n_pairs * sizeof(int),
+                          cudaMemcpyHostToDevice));
+
+    // Output size depends on bits
+    int out_bytes_per_pair;
+    if (bits == 8) {
+        out_bytes_per_pair = out_S;
+    } else {
+        out_bytes_per_pair = (out_S + 1) / 2;  // ceil(out_S / 2)
+    }
+    size_t q_total = (size_t)out_bytes_per_pair * n_pairs;
+
+    // Chunk for VRAM
+    size_t free_mem = 0, total_mem = 0;
+    cudaMemGetInfo(&free_mem, &total_mem);
+    size_t usable = (size_t)(free_mem * 0.7);
+    int chunk_pairs = n_pairs;
+    if ((size_t)n_pairs * out_bytes_per_pair > usable) {
+        chunk_pairs = std::max(1, (int)(usable / out_bytes_per_pair));
+    }
+
+    size_t chunk_q_size = (size_t)chunk_pairs * out_bytes_per_pair;
+    CUDA_CHECK(cudaMalloc(&d_q, chunk_q_size));
+
+    // Host output
+    int q_height = (bits == 8) ? out_S : (out_S + 1) / 2;
+    auto q_out = py::array_t<uint8_t>(std::vector<ssize_t>{
+        (ssize_t)q_height, (ssize_t)n_pairs});
+    uint8_t* h_q = (uint8_t*)q_out.mutable_data();
+
+    if (chunk_pairs >= n_pairs) {
+        gamma_smc_forward_quantized_gpu(d_packed, n_words, d_pos, S,
+                                         (float)mu_scalar, (float)rho_scalar, (float)Ne,
+                                         d_pi, d_pj, n_pairs,
+                                         d_q, log_min, log_max, stride, bits);
+        CUDA_CHECK(cudaMemcpy(h_q, d_q, q_total, cudaMemcpyDeviceToHost));
+    } else {
+        for (int offset = 0; offset < n_pairs; offset += chunk_pairs) {
+            int chunk = std::min(chunk_pairs, n_pairs - offset);
+
+            gamma_smc_forward_quantized_gpu(d_packed, n_words, d_pos, S,
+                                             (float)mu_scalar, (float)rho_scalar, (float)Ne,
+                                             d_pi + offset, d_pj + offset, chunk,
+                                             d_q, log_min, log_max, stride, bits);
+
+            CUDA_CHECK(cudaMemcpy2D(
+                h_q + offset,
+                (size_t)n_pairs,
+                d_q,
+                (size_t)chunk,
+                (size_t)chunk,
+                q_height,
+                cudaMemcpyDeviceToHost));
+        }
+    }
+
+    cudaFree(d_packed); cudaFree(d_pos);
+    cudaFree(d_pi); cudaFree(d_pj);
+    cudaFree(d_q);
+
+    py::dict result;
+    result["quantized"] = q_out;
+    result["bits"] = bits;
+    result["log_min"] = log_min;
+    result["log_max"] = log_max;
+    result["out_S"] = out_S;
+    result["n_pairs"] = n_pairs;
+    return result;
+}
+
+// ============================================================
 // Module definition
 // ============================================================
 PYBIND11_MODULE(_core, m) {
@@ -1610,6 +1891,24 @@ PYBIND11_MODULE(_core, m) {
           py::arg("max_iterations") = 20,
           py::arg("blend_alpha") = 0.7,
           py::arg("convergence_tol") = 1e-6);
+
+    m.def("gamma_smc_forward", &py_gamma_smc_forward,
+          "Gamma-SMC forward filtering on GPU.\n"
+          "Returns dict with 'mean' (and 'lower','upper' unless mean_only=True).\n"
+          "Arrays are Fortran-order [n_pairs, out_S].",
+          py::arg("G"), py::arg("positions"), py::arg("pairs"),
+          py::arg("Ne") = 10000.0, py::arg("mu") = 1.25e-8,
+          py::arg("rho") = 1e-8, py::arg("stride") = 1,
+          py::arg("mean_only") = false);
+
+    m.def("gamma_smc_forward_quantized", &py_gamma_smc_forward_quantized,
+          "Gamma-SMC forward filtering with log-scale quantized output.\n"
+          "Returns dict with 'quantized' (uint8 array), 'bits', 'log_min', 'log_max'.\n"
+          "Dequantize: t = exp(log_min + (q / (2^bits-1)) * (log_max - log_min))",
+          py::arg("G"), py::arg("positions"), py::arg("pairs"),
+          py::arg("Ne") = 10000.0, py::arg("mu") = 1.25e-8,
+          py::arg("rho") = 1e-8, py::arg("stride") = 1,
+          py::arg("bits") = 8);
 
     py::class_<HMMContext>(m, "HMMContext",
         "Persistent GPU context for batched HMM inference.\n"

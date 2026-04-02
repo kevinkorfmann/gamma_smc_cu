@@ -99,7 +99,7 @@ def bench_gamma_smc(ts, tmpdir, timeout=GAMMA_MAX_WALL_S):
 
 
 def bench_tmrca_cu(ts, n_pairs_limit=None):
-    """Run tmrca.cu batched API. Returns (wall_time, n_pairs, n_sites)."""
+    """Run tmrca.cu batched HMM API. Returns (wall_time, n_pairs, n_sites)."""
     from tmrca_cu import _core
 
     G, positions = ts_to_genotype_matrix(ts)
@@ -116,6 +116,28 @@ def bench_tmrca_cu(ts, n_pairs_limit=None):
     t0 = time.perf_counter()
     _core.hmm_posterior_batched(
         G, positions, all_pairs, K, float(NE), MU, RHO, -1.0)
+    t_wall = time.perf_counter() - t0
+
+    return t_wall, len(all_pairs), S
+
+
+def bench_gamma_smc_gpu(ts, n_pairs_limit=None):
+    """Run tmrca.cu Gamma-SMC forward filtering. Returns (wall_time, n_pairs, n_sites)."""
+    from tmrca_cu import _core
+
+    G, positions = ts_to_genotype_matrix(ts)
+    n = G.shape[0]
+    S = G.shape[1]
+
+    if S < 10:
+        return None, 0, S
+
+    all_pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+    if n_pairs_limit is not None:
+        all_pairs = all_pairs[:n_pairs_limit]
+
+    t0 = time.perf_counter()
+    _core.gamma_smc_forward(G, positions, all_pairs, float(NE), MU, RHO, 1)
     t_wall = time.perf_counter() - t0
 
     return t_wall, len(all_pairs), S
@@ -138,6 +160,7 @@ def main():
         "seq_lengths": SEQ_LENGTHS,
         "gamma_wall": {},    # (n_hap, seq_len) -> seconds
         "cu_wall": {},       # (n_hap, seq_len) -> seconds
+        "cu_gamma_wall": {}, # (n_hap, seq_len) -> seconds (Tier 2.5)
         "n_snps": {},        # (n_hap, seq_len) -> int
         "n_pairs": {},       # n_hap -> int
     }
@@ -149,8 +172,8 @@ def main():
     print("Experiment 1: Scaling with sample size (seq_len = 1 Mb)")
     print("─" * 80)
     hdr = (f"{'n_hap':>6s}  {'pairs':>8s}  {'SNPs':>8s}  "
-           f"{'gamma_smc':>12s}  {'tmrca.cu':>12s}  "
-           f"{'gamma kp/s':>12s}  {'cu kp/s':>12s}  {'Speedup':>8s}")
+           f"{'gamma_smc':>12s}  {'HMM-GPU':>12s}  {'GammGPU':>12s}  "
+           f"{'HMM spdup':>10s}  {'Gamm spdup':>10s}")
     print(hdr)
     print("─" * len(hdr))
 
@@ -172,38 +195,40 @@ def main():
         results["gamma_wall"][(n_hap, seq_len)] = t_gamma
 
         if t_gamma is not None:
-            kpairs_gamma = n_pairs * n_snps / t_gamma / 1e3
             print(f"{t_gamma:>10.2f}s", end="  ", flush=True)
         else:
-            kpairs_gamma = 0
             print(f"{'TIMEOUT':>12s}", end="  ", flush=True)
 
-        # tmrca.cu
+        # tmrca.cu HMM
         try:
             t_cu, np_cu, S = bench_tmrca_cu(ts)
-            kpairs_cu = np_cu * S / t_cu / 1e3
             results["cu_wall"][(n_hap, seq_len)] = t_cu
             print(f"{t_cu:>10.3f}s", end="  ", flush=True)
         except Exception as e:
             t_cu = None
-            kpairs_cu = 0
             results["cu_wall"][(n_hap, seq_len)] = None
             print(f"{'ERR':>12s}", end="  ", flush=True)
 
-        # Rates (kilo-pairs·sites/s)
-        if t_gamma is not None:
-            print(f"{kpairs_gamma:>10.0f}", end="  ", flush=True)
-        else:
-            print(f"{'N/A':>12s}", end="  ", flush=True)
-        if t_cu is not None:
-            print(f"{kpairs_cu:>10.0f}", end="  ", flush=True)
-        else:
-            print(f"{'N/A':>12s}", end="  ", flush=True)
+        # tmrca.cu Gamma-SMC GPU (Tier 2.5)
+        try:
+            t_cu_g, _, _ = bench_gamma_smc_gpu(ts)
+            results["cu_gamma_wall"][(n_hap, seq_len)] = t_cu_g
+            print(f"{t_cu_g:>10.3f}s", end="  ", flush=True)
+        except Exception as e:
+            t_cu_g = None
+            results["cu_gamma_wall"][(n_hap, seq_len)] = None
+            print(f"{'ERR':>12s}", end="  ", flush=True)
 
+        # Speedups
         if t_gamma is not None and t_cu is not None and t_cu > 0:
-            print(f"{t_gamma/t_cu:>6.1f}x")
+            print(f"{t_gamma/t_cu:>8.1f}x", end="  ", flush=True)
         else:
-            print(f"{'N/A':>8s}")
+            print(f"{'N/A':>10s}", end="  ", flush=True)
+
+        if t_gamma is not None and t_cu_g is not None and t_cu_g > 0:
+            print(f"{t_gamma/t_cu_g:>8.1f}x")
+        else:
+            print(f"{'N/A':>10s}")
 
     # ═══════════════════════════════════════════════════════════
     # Experiment 2: Fixed n_hap=10, sweep seq_lengths
@@ -343,6 +368,7 @@ def main():
     # Convert dict keys to serializable arrays
     grid_gamma = np.full((len(N_HAPLOTYPES), len(SEQ_LENGTHS)), np.nan)
     grid_cu = np.full((len(N_HAPLOTYPES), len(SEQ_LENGTHS)), np.nan)
+    grid_cu_gamma = np.full((len(N_HAPLOTYPES), len(SEQ_LENGTHS)), np.nan)
     grid_snps = np.full((len(N_HAPLOTYPES), len(SEQ_LENGTHS)), np.nan)
 
     for i, nh in enumerate(N_HAPLOTYPES):
@@ -352,6 +378,8 @@ def main():
                 grid_gamma[i, j] = results["gamma_wall"][key]
             if results["cu_wall"].get(key) is not None:
                 grid_cu[i, j] = results["cu_wall"][key]
+            if results["cu_gamma_wall"].get(key) is not None:
+                grid_cu_gamma[i, j] = results["cu_gamma_wall"][key]
             if key in results["n_snps"]:
                 grid_snps[i, j] = results["n_snps"][key]
 
@@ -360,6 +388,7 @@ def main():
              seq_lengths=np.array(SEQ_LENGTHS),
              gamma_wall=grid_gamma,
              cu_wall=grid_cu,
+             cu_gamma_wall=grid_cu_gamma,
              n_snps=grid_snps)
     print(f"\nResults saved to {out_path}")
 

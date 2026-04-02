@@ -25,6 +25,8 @@ from tmrca_cu._core import (
     site_pi,
     pelt_changepoint,
     adaptive_prior_infer,
+    gamma_smc_forward,
+    HMMContext,
 )
 
 from tmrca_cu.estimator import (
@@ -48,6 +50,8 @@ __all__ = [
     "site_pi",
     "pelt_changepoint",
     "adaptive_prior_infer",
+    "gamma_smc_forward",
+    "HMMContext",
     "CoalescenceEstimator",
     "TMRCAResult",
     "Segment",
