@@ -3,10 +3,10 @@
 ## Problem
 
 Both tmrca.cu and the original gamma_smc produce biased TMRCA estimates under
-demographic misspecification because the flow field is precomputed under
-constant Ne. When the true demography has bottlenecks, expansions, or
-population splits, the recombination transitions encoded in the flow field
-assume equilibrium coalescent rates that don't hold.
+demographic misspecification. The root cause is that the flow field
+(default_flow_field.txt) is precomputed under constant Ne. Neither Schweiger's
+tool nor ours currently accounts for variable N(t) — this is a limitation of
+all existing Gamma-SMC implementations.
 
 Empirical accuracy under misspecification (2Mb, n=20, constant-Ne flow field):
 
@@ -16,114 +16,118 @@ Empirical accuracy under misspecification (2Mb, n=20, constant-Ne flow field):
 | Tennessen 2-pop           | 0.825     | 0.749      |
 | Tennessen African         | 0.882     | 0.863      |
 
-Both methods show the same directional bias (offset from truth in traces and
-marginal distributions). tmrca.cu does slightly better because forward-backward
-integration partially compensates for biased transitions.
+Both methods show the same directional bias: estimates are systematically too
+high under demographies with recent population growth, because the constant-Ne
+flow field pushes posteriors toward E[T] = 2*Ne at every recombination event.
 
 ## Root cause
 
 The flow field encodes: given current posterior Gamma(alpha, beta), after a
-recombination event with probability p, what is the new posterior? Under
-constant Ne, the "recoalesced" prior is exponential(1/2Ne). Under variable
-N(t), this prior depends on time -- the coalescent rate lambda(t) = 1/(2N(t))
-varies, so the marginal coalescence time distribution is no longer exponential.
+recombination event, what is the new posterior? Under constant Ne, the
+"recoalesced" lineage draws its new coalescence time from Exp(1) (in
+coalescent units). The flow field vectors are the linearized displacement in
+(log10_mean, log10_cv) space toward this Exp(1) prior per unit of scaled
+recombination rate.
 
-## Proposed fix: two-stage pipeline
+Under variable N(t), the coalescent prior is NOT Exp(1) — it is a mixture of
+truncated exponentials determined by the piecewise-constant N(t) history. The
+flow field vectors point toward the wrong attractor.
 
-### Stage 1 -- Cheap demographic estimation (subsample, seconds)
-- Run 10-50 pairs through the constant-Ne GPU pipeline
-- From the TMRCA posteriors, estimate piecewise-constant N(t):
-  bin posterior means into time windows, invert coalescent rate
-- Similar to what PSMC does, but leveraging existing GPU speed
+**Schweiger does NOT account for demography.** His generate_canonical_flow_field.cpp
+hardcodes Exp(1) as the coalescent prior. The default_flow_field.txt is the only
+flow field shipped with the tool, computed once under constant Ne. There is no
+option to pass a demographic model. Our proposed fix would be a new contribution
+to the Gamma-SMC framework.
 
-### Stage 2 -- Full run with corrected model (all pairs)
-- Use estimated N(t) to compute the correct coalescent prior q(t)
-- Run all pairs with this prior
+## Proposed fix: two-stage pipeline with recomputed flow field
 
-## Where the correction enters -- three options
+### Stage 1 — Estimate N(t) from a subsample (~1 second on GPU)
+- Run 50-100 pairs through the existing constant-Ne flow field pipeline
+- Bin the TMRCA posteriors into time epochs and invert coalescent rates
+- Output: piecewise-constant N(t) with ~20 epochs
 
-### Option 1: Prior correction only (easiest, ~80% of the fix)
-- Keep the constant-Ne flow field
-- Replace the exponential coalescent prior with N(t)-derived prior
-- The flow field handles recombination mechanics (don't change much with demography)
-- Main bias is in the prior mixed in during recombination transitions
-- Implementation: modify the initial (mean, CV) and the recombination "reset" target
-  in the cache builder and kernel initialization
-- Infrastructure exists: compute_coalescent_prior already takes piecewise-constant N(t)
-  in the HMM path; the flow field path needs a similar mechanism
+### Stage 2 — Recompute flow field under N(t) + run all pairs
+- For each of 2550 grid points (51 mean x 50 CV), compute the new flow
+  field vector using the demographic coalescent prior instead of Exp(1)
+- This requires solving Schweiger's exact integral (see below) with the
+  modified prior
+- Write the new flow field to a temp file, load it into FlowContext
+- Run all pairs with the corrected flow field — same GPU pipeline, no kernel changes
 
-### Option 2: Recompute flow field under N(t) (harder)
-- Schweiger's generate_canonical_flow_field.cpp solves SMC' transitions under constant Ne
-- Under variable N(t), coalescent rate in "recombine and recoalesce" depends on time
-- Need to solve a different ODE for each (mean, CV) grid point
-- Expensive precomputation but only done once per demography
+### The flow field integral (from Schweiger's generate_canonical_flow_field.cpp)
 
-### Option 3: Iterative EM (most principled)
-- Alternate between estimating TMRCAs and re-estimating N(t), like PSMC
-- adaptive_prior_infer EM loop already exists in the codebase
-- Extend it with a richer demographic model (piecewise-constant N(t))
-  instead of just a single prior vector
+For each grid point (mean, CV) → Gamma(alpha, beta):
 
-## Investigation notes
+1. Compute the "distribution difference PDF": the PDF of coalescence time
+   AFTER a recombination event minus the current Gamma PDF. This involves
+   confluent hypergeometric 1F1 functions with arbitrary precision.
 
-### Entropy clipping (tested, not included)
-Schweiger's gamma_smc applies entropy clipping after each flow field step:
-if differential entropy of the Gamma posterior > 1.0 nat, it increases alpha
-(concentrates the distribution) until H <= 1. Uses precomputed lookup table.
+2. Compute partial derivatives of the Gamma PDF w.r.t. alpha and beta.
 
-Tested in tmrca.cu:
-- Cache-only clipping: accuracy dropped (r=0.73-0.85), too aggressive
-- Runtime kernel clipping: closer to Schweiger but 3-10x slower (lgamma/digamma in hot path)
-- Decision: not included. Speed loss not justified; tmrca.cu already outperforms Schweiger
+3. Solve a least-squares fit: find (du, dv) in log10 coordinates that best
+   approximates the distribution change using Gamma parameter derivatives.
 
-### Schweiger output format
-The binary outputs two float32 planes per chunk: plane 0 = alpha, plane 1 = beta.
-Posterior mean TMRCA = (alpha / beta) * 2 * Ne to convert from coalescent units
-to generations. The reader.py in the gamma_smc repo confirms this format.
+Under constant Ne, step 1 uses Exp(1) as the recoalesced prior.
+Under variable N(t), step 1 would use the demographic coalescent prior:
+  f(t) = lambda(t) * exp(-Lambda(t))
+where lambda(t) = 1/(2*N(t)) and Lambda(t) = integral_0^t lambda(s) ds.
 
+For piecewise-constant N(t), this prior has closed-form expressions.
+
+### Implementation plan
+
+Port the core of generate_canonical_flow_field.cpp to Python/scipy:
+- Use scipy.special.hyp1f1 instead of arb (2550 grid points, not hot path)
+- Use scipy.integrate.quad instead of GSL integration
+- Use numpy.linalg.lstsq instead of Eigen SVD
+- The modified prior replaces exp(-t) with the piecewise-constant coalescent PDF
+
+This avoids C++ dependency bloat (arb, GSL, Eigen, Boost) and keeps the
+correction entirely in Python since it runs once per dataset (~seconds).
 
 ## Experimental results (2026-04-02)
 
-### What we tried
+### What we tried (and what did NOT work)
 
 1. **Moment-matching flow field from scratch**: Derived flow field vectors
    analytically via derivative of Gamma moments w.r.t. mixing weight.
    Result: values off by 5 orders of magnitude vs Schweiger's original.
-   Schweiger uses least-squares fit of full distribution change (1F1
-   hypergeometric functions), not simple moment derivatives.
+   The flow field is NOT a simple moment derivative — it is a least-squares
+   fit of the full distribution change to Gamma parameter partials.
 
 2. **Rescaling the default flow field**: Scaled u/v vectors by ratio of
    demographic-to-constant prior moments per grid point. Result: no effect.
    The multi-step cache compounds flow field + mutation emissions iteratively;
-   a simple linear scaling of the raw vectors washes out.
+   a simple linear scaling of the raw vectors washes out through the
+   nonlinear compounding.
 
 3. **Varying Ne parameter**: Tested Ne from 5000 to 20000. The r correlation
    barely changes (0.814 vs 0.815 for Gutenkunst). The bias is always positive
-   (estimates too high) regardless of Ne, because the constant-Ne flow field
-   pushes posteriors toward E[T]=2Ne which overshoots under recent population
-   growth.
+   (estimates too high) regardless of Ne, because the flow field transition
+   dynamics push posteriors toward the constant-Ne attractor at every
+   recombination event.
+
+4. **Entropy clipping** (from Schweiger's source): Caps differential entropy
+   at 1.0 nat by increasing alpha after each flow field step. Tested in cache
+   builder (too aggressive, r dropped to 0.73-0.85) and GPU runtime (closer
+   to Schweiger but 3-10x slower). Not included — speed loss not justified.
 
 ### Key finding
 
-The bias is NOT a simple calibration/scaling issue. It is structural:
-the flow field transition dynamics under constant Ne push the posterior
-toward the wrong attractor (the constant-Ne coalescent prior mean).
-Under demographies with recent growth, the true prior mean is lower,
-but the flow field doesn't know that.
+The bias is structural, not a calibration issue. The flow field vectors point
+toward the wrong attractor (constant-Ne coalescent prior). No amount of
+rescaling, Ne adjustment, or prior calibration fixes this. The only effective
+fix is recomputing the flow field under the correct demographic prior.
 
-### What would actually work
+## Current code
 
-Option 2 from the original design doc: recompute the flow field under N(t)
-using Schweiger's exact method (least-squares fit of the full distribution
-change via hypergeometric 1F1 functions). This requires porting the
-generate_canonical_flow_field.cpp logic to accept variable N(t).
+- python/tmrca_cu/demographic.py: DemographicFlowContext class (WIP),
+  demographic estimation, flow field I/O infrastructure
+- The FlowContext C++ class already supports loading arbitrary flow field
+  files — no C++ changes needed for the fix
 
-The computation is: for each of 2550 grid points, solve a 1D integral
-involving the mixture of Gamma(alpha, beta) with the demographic
-coalescent prior. The integral changes from Exp(1) to the piecewise-
-constant N(t) distribution. This is feasible but requires either:
-  a) Linking against arb/GSL (Schweiger's dependencies), or
-  b) Implementing the 1F1 + numerical integration in Python (scipy)
-     since it is only 2550 grid points and runs once per dataset.
+## Schweiger output format
 
-Option (b) is cleaner and avoids C++ dependency bloat.
+The binary outputs two float32 planes per chunk: plane 0 = alpha, plane 1 = beta.
+Posterior mean TMRCA = (alpha / beta) * 2 * Ne to convert from coalescent units
+to generations. The reader.py in the gamma_smc repo confirms this format.
