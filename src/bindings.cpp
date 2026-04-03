@@ -2501,6 +2501,19 @@ public:
     FlowContext(const FlowContext&) = delete;
     FlowContext& operator=(const FlowContext&) = delete;
 
+    int compute_max_fb_chunk() const {
+        size_t free_mem = 0, total_mem = 0;
+        cudaMemGetInfo(&free_mem, &total_mem);
+        if (free_mem < 512ULL * 1024 * 1024) return 1;
+        free_mem -= 512ULL * 1024 * 1024;  // reserve 512MB headroom
+        // Per pair: fwd_buf (2*S*4) + pair indices (2*4) + output scratch (S*4*3)
+        size_t per_pair = (size_t)S_ * 2 * sizeof(float)   // fwd_buf
+                        + sizeof(int) * 2                    // pi, pj
+                        + (size_t)S_ * sizeof(float);        // output scratch (mean only)
+        int max_chunk = (int)(free_mem / per_pair);
+        return std::max(max_chunk, 1);
+    }
+
     py::dict run_fb_summary(std::vector<std::pair<int, int>> pairs) {
         int n_pairs = (int)pairs.size();
         if (n_pairs == 0) {
@@ -2509,12 +2522,14 @@ public:
             return result;
         }
 
+        // Prepare pair indices (GIL held)
         std::vector<int> pi(n_pairs), pj(n_pairs);
         for (int p = 0; p < n_pairs; p++) {
             pi[p] = pairs[p].first;
             pj[p] = pairs[p].second;
         }
 
+        // Allocate host output accumulators
         auto mean_out = py::array_t<float>((ssize_t)S_);
         auto min_out = py::array_t<float>((ssize_t)S_);
         auto max_out = py::array_t<float>((ssize_t)S_);
@@ -2525,27 +2540,61 @@ public:
         {
             py::gil_scoped_release release;
             cudaSetDevice(device_id_);
-            alloc_fwd_buf(n_pairs);
-            alloc_output(n_pairs, false);
 
-            CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
-            CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+            // Determine chunk size from available VRAM
+            int max_chunk = compute_max_fb_chunk();
+            int chunk_size = std::min(max_chunk, n_pairs);
+
+            // Allocate buffers for one chunk
+            alloc_fwd_buf(chunk_size);
+            alloc_output(chunk_size, false);
 
             float *d_site_mean, *d_site_min, *d_site_max;
             CUDA_CHECK(cudaMalloc(&d_site_mean, S_ * sizeof(float)));
             CUDA_CHECK(cudaMalloc(&d_site_min, S_ * sizeof(float)));
             CUDA_CHECK(cudaMalloc(&d_site_max, S_ * sizeof(float)));
 
-            gamma_smc_flow_cached_fb_reduce_gpu(
-                d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
-                d_pi_, d_pj_, n_pairs,
-                ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
-                d_fwd_buf_,
-                d_site_mean, d_site_min, d_site_max);
+            // Host accumulators for weighted mean across chunks
+            std::vector<float> h_sum(S_, 0.0f);
+            std::vector<float> h_gmin(S_, std::numeric_limits<float>::max());
+            std::vector<float> h_gmax(S_, std::numeric_limits<float>::lowest());
+            std::vector<float> h_chunk_mean(S_);
+            std::vector<float> h_chunk_min(S_);
+            std::vector<float> h_chunk_max(S_);
 
-            CUDA_CHECK(cudaMemcpy(h_mean, d_site_mean, S_ * sizeof(float), cudaMemcpyDeviceToHost));
-            CUDA_CHECK(cudaMemcpy(h_min, d_site_min, S_ * sizeof(float), cudaMemcpyDeviceToHost));
-            CUDA_CHECK(cudaMemcpy(h_max, d_site_max, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+            for (int offset = 0; offset < n_pairs; offset += chunk_size) {
+                int chunk = std::min(chunk_size, n_pairs - offset);
+
+                // Resize fwd_buf if this chunk is smaller (reuse existing allocation)
+                CUDA_CHECK(cudaMemcpy(d_pi_, pi.data() + offset, chunk * sizeof(int), cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(d_pj_, pj.data() + offset, chunk * sizeof(int), cudaMemcpyHostToDevice));
+
+                gamma_smc_flow_cached_fb_reduce_gpu(
+                    d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
+                    d_pi_, d_pj_, chunk,
+                    ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
+                    d_fwd_buf_,
+                    d_site_mean, d_site_min, d_site_max);
+
+                CUDA_CHECK(cudaMemcpy(h_chunk_mean.data(), d_site_mean, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+                CUDA_CHECK(cudaMemcpy(h_chunk_min.data(), d_site_min, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+                CUDA_CHECK(cudaMemcpy(h_chunk_max.data(), d_site_max, S_ * sizeof(float), cudaMemcpyDeviceToHost));
+
+                // Accumulate: weighted sum for mean, global min/max
+                for (int s = 0; s < S_; s++) {
+                    h_sum[s] += h_chunk_mean[s] * chunk;
+                    h_gmin[s] = std::min(h_gmin[s], h_chunk_min[s]);
+                    h_gmax[s] = std::max(h_gmax[s], h_chunk_max[s]);
+                }
+            }
+
+            // Finalize weighted mean
+            float inv_n = 1.0f / (float)n_pairs;
+            for (int s = 0; s < S_; s++) {
+                h_mean[s] = h_sum[s] * inv_n;
+                h_min[s] = h_gmin[s];
+                h_max[s] = h_gmax[s];
+            }
 
             cudaFree(d_site_mean);
             cudaFree(d_site_min);
