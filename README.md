@@ -1,4 +1,4 @@
-# tmrca.cu
+# tmrca.cu — Coalescence by Exhaustion
 
 ![tests](https://img.shields.io/badge/tests-97%20passed-brightgreen) ![CUDA](https://img.shields.io/badge/CUDA-A100%20|%20H100-76b900)
 
