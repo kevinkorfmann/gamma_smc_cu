@@ -2,56 +2,32 @@
 
 ## Accuracy
 
-```{image} _static/accuracy_hexbin.png
-:alt: Accuracy hexbin
-:width: 500px
-```
+![Accuracy hexbin](_static/accuracy_hexbin.png)
 
 ## Speed vs accuracy
 
-```{image} _static/fig1_speed_accuracy.png
-:alt: Speed-accuracy tradeoff
-:width: 600px
-```
+![Speed-accuracy tradeoff](_static/fig1_speed_accuracy.png)
 
 ## Scaling
 
-```{image} _static/fig2_scaling.png
-:alt: Scaling behavior
-:width: 700px
-```
+![Scaling behavior](_static/fig2_scaling.png)
 
 ## Per-pair accuracy
 
-```{image} _static/fig3_accuracy.png
-:alt: Accuracy comparison
-:width: 700px
-```
+![Accuracy comparison](_static/fig3_accuracy.png)
 
 ## TMRCA landscape
 
-```{image} _static/fig4_traces.png
-:alt: Per-site TMRCA traces
-:width: 700px
-```
+![Per-site TMRCA traces](_static/fig4_traces.png)
 
 ## Wall-clock summary
 
-```{image} _static/fig5_summary.png
-:alt: Wall-clock summary
-:width: 500px
-```
+![Wall-clock summary](_static/fig5_summary.png)
 
 ## Demographic robustness
 
-```{image} _static/fig6_demographics.png
-:alt: Demographic robustness
-:width: 700px
-```
+![Demographic robustness](_static/fig6_demographics.png)
 
 ## Multi-GPU scaling
 
-```{image} _static/fig7_multigpu.png
-:alt: Multi-GPU scaling
-:width: 600px
-```
+![Multi-GPU scaling](_static/fig7_multigpu.png)
