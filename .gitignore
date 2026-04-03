@@ -31,3 +31,4 @@ manuscript/*.fls
 *.swp
 *.swo
 *~
+_scratch/
