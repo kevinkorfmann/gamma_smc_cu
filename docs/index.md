@@ -27,13 +27,15 @@ result = tmrca_cu.infer(G, positions, mu=1.25e-8)
 result = tmrca_cu.infer(G, positions, mu=1.25e-8, pairs=[(0,1), (2,3)])
 ```
 
-`G` is an `(n_haplotypes, n_sites)` uint8 matrix. To get it from a VCF:
+`G` is an `(n_haplotypes, n_sites)` uint8 matrix of phased haplotypes (0/1). To get it from a VCF:
 
 ```python
 import cyvcf2
 vcf = cyvcf2.VCF("input.vcf.gz")
 G = np.array([v.genotype_array()[:, 0] for v in vcf]).T.astype(np.uint8)
 ```
+
+*Input must be phased and biallelic. Polarization (ancestral vs derived) does not matter — the model uses heterozygosity (XOR between haplotypes), which is invariant to allele coding.*
 
 ```{image} _static/speed_comparison.png
 :alt: Speed comparison
