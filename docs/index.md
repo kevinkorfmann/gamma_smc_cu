@@ -7,6 +7,11 @@ GPU-accelerated pairwise coalescence time estimation.
 :width: 700px
 ```
 
+```{image} ../accuracy_hexbin.png
+:alt: Accuracy
+:width: 500px
+```
+
 ## Install
 
 ```bash
@@ -23,7 +28,6 @@ Requires NVIDIA GPU (A100/H100/RTX 3090+).
 import tmrca_cu
 
 # From a tree sequence
-ts = tskit.load("example.trees")
 result = tmrca_cu.infer(ts)
 
 # From a genotype matrix
