@@ -40,6 +40,7 @@ from tmrca_cu.estimator import (
 )
 
 from tmrca_cu.multigpu import MultiGPUFlowContext
+from tmrca_cu.infer import infer
 
 __all__ = [
     "bitpack",
@@ -63,6 +64,7 @@ __all__ = [
     "HMMContext",
     "FlowContext",
     "MultiGPUFlowContext",
+    "infer",
     "CoalescenceEstimator",
     "TMRCAResult",
     "Segment",
