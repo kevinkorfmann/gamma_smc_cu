@@ -80,3 +80,50 @@ Tested in tmrca.cu:
 The binary outputs two float32 planes per chunk: plane 0 = alpha, plane 1 = beta.
 Posterior mean TMRCA = (alpha / beta) * 2 * Ne to convert from coalescent units
 to generations. The reader.py in the gamma_smc repo confirms this format.
+
+
+## Experimental results (2026-04-02)
+
+### What we tried
+
+1. **Moment-matching flow field from scratch**: Derived flow field vectors
+   analytically via derivative of Gamma moments w.r.t. mixing weight.
+   Result: values off by 5 orders of magnitude vs Schweiger's original.
+   Schweiger uses least-squares fit of full distribution change (1F1
+   hypergeometric functions), not simple moment derivatives.
+
+2. **Rescaling the default flow field**: Scaled u/v vectors by ratio of
+   demographic-to-constant prior moments per grid point. Result: no effect.
+   The multi-step cache compounds flow field + mutation emissions iteratively;
+   a simple linear scaling of the raw vectors washes out.
+
+3. **Varying Ne parameter**: Tested Ne from 5000 to 20000. The r correlation
+   barely changes (0.814 vs 0.815 for Gutenkunst). The bias is always positive
+   (estimates too high) regardless of Ne, because the constant-Ne flow field
+   pushes posteriors toward E[T]=2Ne which overshoots under recent population
+   growth.
+
+### Key finding
+
+The bias is NOT a simple calibration/scaling issue. It is structural:
+the flow field transition dynamics under constant Ne push the posterior
+toward the wrong attractor (the constant-Ne coalescent prior mean).
+Under demographies with recent growth, the true prior mean is lower,
+but the flow field doesn't know that.
+
+### What would actually work
+
+Option 2 from the original design doc: recompute the flow field under N(t)
+using Schweiger's exact method (least-squares fit of the full distribution
+change via hypergeometric 1F1 functions). This requires porting the
+generate_canonical_flow_field.cpp logic to accept variable N(t).
+
+The computation is: for each of 2550 grid points, solve a 1D integral
+involving the mixture of Gamma(alpha, beta) with the demographic
+coalescent prior. The integral changes from Exp(1) to the piecewise-
+constant N(t) distribution. This is feasible but requires either:
+  a) Linking against arb/GSL (Schweiger's dependencies), or
+  b) Implementing the 1F1 + numerical integration in Python (scipy)
+     since it is only 2550 grid points and runs once per dataset.
+
+Option (b) is cleaner and avoids C++ dependency bloat.
