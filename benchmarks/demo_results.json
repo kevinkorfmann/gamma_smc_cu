@@ -3,18 +3,18 @@
     "model": "OutOfAfrica_3G09",
     "desc": "Three-pop OOA (Gutenkunst 2009)",
     "r_fb": 0.8141,
-    "r_sw": 0.7887
+    "r_sw": 0.7734
   },
   {
     "model": "OutOfAfrica_2T12",
     "desc": "Two-pop OOA (Tennessen 2012)",
     "r_fb": 0.8249,
-    "r_sw": 0.782
+    "r_sw": 0.749
   },
   {
     "model": "Africa_1T12",
     "desc": "African pop (Tennessen 2012)",
     "r_fb": 0.8821,
-    "r_sw": 0.821
+    "r_sw": 0.8627
   }
 ]

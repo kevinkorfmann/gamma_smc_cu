@@ -96,11 +96,16 @@ def run_schweiger(ts, nh, mu_d, rho_d, ne_d):
         sp = np.array(meta["output_positions"])
         arr = np.frombuffer(raw, dtype=np.float32).reshape(nc, 2, ns, cs)
         schw_pairs = schweiger_pair_order(nh)
-        # Find pair (0,1)
+        # Find pair (0,1) — output is (alpha, beta) planes
         for pidx, p in enumerate(schw_pairs):
             if tuple(sorted(p)) == (0, 1):
-                return arr[pidx // cs, 0, :, pidx % cs], sp
-        return arr[0, 0, :, 0], sp  # fallback to first pair
+                alpha = arr[pidx // cs, 0, :, pidx % cs]
+                beta  = arr[pidx // cs, 1, :, pidx % cs]
+                mean_gen = (alpha / np.maximum(beta, 1e-10)) * 2 * ne_d
+                return mean_gen, sp
+        alpha = arr[0, 0, :, 0]
+        beta  = arr[0, 1, :, 0]
+        return (alpha / np.maximum(beta, 1e-10)) * 2 * ne_d, sp
 
 def savefig(fig, name):
     for fmt in ["pdf", "png"]:
@@ -167,10 +172,8 @@ for row_idx, (model_id, pop_name, desc) in enumerate(demo_configs):
     print(f"  Running Schweiger...", end=" ", flush=True)
     schw_raw, sp_schw = run_schweiger(ts_demo, n, mu_d, rho_d, ne_d)
     if schw_raw is not None:
-        # Scale Schweiger output to generations (raw is in coalescent units)
-        truth_at_sp = true_t(ts_demo, 0, 1, sp_schw)
-        scale = np.median(truth_at_sp / (schw_raw + 1e-10))
-        schw_scaled = np.interp(pos, sp_schw, schw_raw * scale)
+        # Output is already in generations (alpha/beta * 2*Ne)
+        schw_scaled = np.interp(pos, sp_schw, schw_raw)
         r_sw = r_log(truth, schw_scaled)
         print(f"r={r_sw:.3f}")
     else:
