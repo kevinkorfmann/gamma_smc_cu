@@ -339,9 +339,8 @@ The forward-only variant of our GPU implementation achieves $r=0.736$, which is 
 Several limitations should be noted.
 First, the current implementation assumes biallelic sites and phased haplotypes; extension to unphased genotypes would require integrating over phase configurations, substantially increasing the computational cost.
 Second, the flow field is precomputed under a constant-$N_e$ assumption.
-We investigated this extensively by recomputing the flow field under the true piecewise-constant $N(t)$ from three \texttt{stdpopsim} demographic models using the exact SMC$'$ kernel.
-The demographic flow field differs from the constant-$N_e$ version by approximately 9\%, but produces \emph{identical} TMRCA accuracy ($\Delta r = 0.000$), confirming that the flow field transition dynamics are robust to demographic misspecification.
-The systematic bias observed under non-equilibrium demography is not a flow field error but a scale factor: the output uses $2 N_e$ to convert from coalescent units to generations, and under variable $N(t)$ the appropriate scaling is $2 N_{\text{harmonic}}$, which can be estimated from the data's heterozygosity ($\hat{\theta} / 4\mu$).
+As shown by Schweiger et al.\ and confirmed in our demographic robustness analysis (Fig~\ref{fig:demography}), the flow field generalizes well to non-equilibrium histories ($r = 0.81$--$0.88$ under three diverse \texttt{stdpopsim} models).
+Any systematic scale bias under variable $N(t)$ can be corrected by estimating the harmonic-mean $N_e$ from heterozygosity.
 Third, the forward--backward advantage over the forward-only estimator is smaller at large sample sizes ($n \geq 500$), likely because most pairs share deep coalescence times where the posterior is dominated by the prior.
 The forward-only GPU variant achieves $r=0.736$ versus Schweiger's $r=0.791$; this gap reflects our use of single-precision arithmetic throughout (for GPU throughput) versus Schweiger's double precision.
 Mixed-precision strategies could close this gap.
