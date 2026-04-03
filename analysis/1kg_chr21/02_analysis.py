@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import os, time
 
 OUT = os.path.join(os.path.dirname(__file__), 'results')
-H5AD = os.path.join(OUT, 'chr21_tmrca.h5ad')
+H5AD = os.path.join(OUT, 'chr21_tmrca_genes.h5ad')
 
 # ── Load + subsample ─────────────────────────────────────────
 print("Loading...", flush=True)
@@ -53,7 +53,7 @@ sc.tl.rank_genes_groups(adata, groupby='population', method='wilcoxon')
 print(f"  {time.perf_counter()-t0:.1f}s", flush=True)
 
 # ── Save ──────────────────────────────────────────────────────
-adata.write(os.path.join(OUT, 'chr21_tmrca_25k.h5ad'))
+adata.write(os.path.join(OUT, 'chr21_tmrca_genes_25k.h5ad'))
 
 # ── Plots ─────────────────────────────────────────────────────
 print("Plotting...", flush=True)
@@ -99,7 +99,7 @@ for pi, pop in enumerate(['YRI', 'CEU', 'CHB', 'PEL', 'GIH']):
     # Extract genomic position from window name (chr21:start-end)
     positions = []
     for n in names:
-        start = int(str(n).split(':')[1].split('-')[0])
+        start = int(adata.var.loc[str(n), 'start'])
         positions.append(start / 1e6)
     logp = -np.log10(np.maximum(pvals, 1e-300))
     ax.scatter(positions, logp, s=20, alpha=0.7, label=pop)
