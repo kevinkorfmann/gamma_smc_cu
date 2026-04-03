@@ -1,13 +1,13 @@
-# tmrca.cu
+# tmrca.cu — Coalescence by Exhaustion
 
 GPU-accelerated pairwise coalescence time estimation.
 
-```{image} ../speed_comparison.png
+```{image} _static/speed_comparison.png
 :alt: Speed comparison
 :width: 700px
 ```
 
-```{image} ../accuracy_hexbin.png
+```{image} _static/accuracy_hexbin.png
 :alt: Accuracy
 :width: 500px
 ```
@@ -50,7 +50,57 @@ G = np.array([v.genotype_array()[:, 0] for v in vcf]).T.astype(np.uint8)
 Implements the Gamma-SMC model of
 [Schweiger and Durbin (2023)](https://doi.org/10.1101/gr.277665.122)
 with a full forward-backward posterior on GPU.
-See the [paper](manuscript/main.pdf) for details.
+
+## Figures
+
+### Speed vs accuracy
+
+```{image} _static/fig1_speed_accuracy.png
+:alt: Speed-accuracy tradeoff
+:width: 600px
+```
+
+### Scaling
+
+```{image} _static/fig2_scaling.png
+:alt: Scaling behavior
+:width: 700px
+```
+
+### Accuracy
+
+```{image} _static/fig3_accuracy.png
+:alt: Accuracy comparison
+:width: 700px
+```
+
+### TMRCA landscape
+
+```{image} _static/fig4_traces.png
+:alt: Per-site TMRCA traces
+:width: 700px
+```
+
+### Wall-clock summary
+
+```{image} _static/fig5_summary.png
+:alt: Wall-clock summary
+:width: 500px
+```
+
+### Demographic robustness
+
+```{image} _static/fig6_demographics.png
+:alt: Demographic robustness
+:width: 700px
+```
+
+### Multi-GPU scaling
+
+```{image} _static/fig7_multigpu.png
+:alt: Multi-GPU scaling
+:width: 600px
+```
 
 ## Citation
 

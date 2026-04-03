@@ -5,6 +5,7 @@ templates_path = ["_templates"]
 exclude_patterns = ["_build"]
 html_theme = "furo"
 html_title = "tmrca.cu"
+html_static_path = ["_static"]
 html_theme_options = {
     "light_css_variables": {
         "color-brand-primary": "#3182bd",
