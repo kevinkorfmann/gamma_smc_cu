@@ -27,4 +27,7 @@ Requires NVIDIA GPU (A100/H100/RTX 3090+) and CUDA toolkit.
 
 ## Docs
 
+**[kevinkorfmann.github.io/tmrca.cu](https://kevinkorfmann.github.io/tmrca.cu/)**
+
+
 [USAGE.md](USAGE.md) | [DEMOGRAPHY.md](DEMOGRAPHY.md) | [demo.ipynb](demo.ipynb)
