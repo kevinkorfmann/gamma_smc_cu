@@ -32,3 +32,5 @@ manuscript/*.fls
 *.swo
 *~
 _scratch/
+analysis/1kg_chr21/data/
+analysis/1kg_chr21/results/*.h5ad
