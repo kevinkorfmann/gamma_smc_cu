@@ -2,16 +2,6 @@
 
 GPU-accelerated pairwise coalescence time estimation.
 
-```{image} _static/speed_comparison.png
-:alt: Speed comparison
-:width: 700px
-```
-
-```{image} _static/accuracy_hexbin.png
-:alt: Accuracy
-:width: 500px
-```
-
 ## Install
 
 ```bash
@@ -43,22 +33,6 @@ result = tmrca_cu.infer(G, positions, mu=1.25e-8, pairs=[(0,1), (2,3)])
 import cyvcf2
 vcf = cyvcf2.VCF("input.vcf.gz")
 G = np.array([v.genotype_array()[:, 0] for v in vcf]).T.astype(np.uint8)
-```
-
-## How it works
-
-Implements the Gamma-SMC model of
-[Schweiger and Durbin (2023)](https://doi.org/10.1101/gr.277665.122)
-with a full forward-backward posterior on GPU.
-
-## Citation
-
-```bibtex
-@article{korfmann2025tmrcacu,
-  title={tmrca.cu: GPU-accelerated pairwise coalescence time estimation},
-  author={Korfmann, Kevin and Mathieson, Sara},
-  year={2025}
-}
 ```
 
 ```{toctree}
