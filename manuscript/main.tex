@@ -329,6 +329,10 @@ For applications where the all-pairs TMRCA matrix is the target (e.g., TMRCA-bas
 Our accuracy comparison reveals a consistent advantage of the forward--backward posterior mean over the forward-only estimate used by Schweiger's original tool.
 This is unsurprising: the backward pass integrates information from downstream sites, producing estimates that are better calibrated at interior genomic positions.
 The aggregate improvement from $r=0.791$ to $r=0.820$ may appear modest, but it is achieved at no computational cost relative to the forward pass alone, since the backward pass reuses the same flow field lookups and adds only a single additional scan over the site array.
+The backward pass is not a GPU-specific algorithmic innovation---Schweiger's tool could in principle add one and achieve similar accuracy gains.
+However, doing so would approximately double the CPU runtime (the backward scan is symmetric to the forward), making it unattractive for the large pair counts where the improvement matters most.
+On GPU, the backward pass adds negligible wall-clock time because the pairs are already distributed across thousands of threads and the cached flow field data remains in L2 cache from the forward pass.
+The forward--backward posterior is thus an accuracy improvement that becomes practical specifically because GPU execution makes it costless.
 The forward-only variant of our GPU implementation achieves $r=0.736$, which is lower than Schweiger's $r=0.791$.  This gap arises because both the forward-only GPU variant and Schweiger's tool condition only on upstream sites, but Schweiger's implementation uses double-precision arithmetic whereas ours uses single-precision throughout for GPU throughput.
 
 \paragraph{Limitations.}
