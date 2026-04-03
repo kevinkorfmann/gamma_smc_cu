@@ -16,3 +16,5 @@ html_theme_options = {
         "color-brand-content": "#58a6ff",
     },
 }
+
+html_css_files = ["custom.css"]
