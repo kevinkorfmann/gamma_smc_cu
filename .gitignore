@@ -34,3 +34,9 @@ manuscript/*.fls
 _scratch/
 analysis/1kg_chr21/data/
 analysis/1kg_chr21/results/*.h5ad
+manuscript/
+ROADMAP.md
+FUNCTIONAL_ANNOTATION.md
+IDEAS.md
+DEMOGRAPHY.md
+USAGE.md
