@@ -131,3 +131,34 @@ fix is recomputing the flow field under the correct demographic prior.
 The binary outputs two float32 planes per chunk: plane 0 = alpha, plane 1 = beta.
 Posterior mean TMRCA = (alpha / beta) * 2 * Ne to convert from coalescent units
 to generations. The reader.py in the gamma_smc repo confirms this format.
+
+
+## Final finding (2026-04-02)
+
+### The bias is a scale factor, not a shape error
+
+Testing with the TRUE N(t) from stdpopsim confirms:
+- Time-varying recalibration (rescale each site by N(t_est)/Ne_ref):
+  reduces median bias from +13k to +5k but slightly hurts r
+- Optimal single-Ne recalibration (global scale factor):
+  removes all median bias, r unchanged (Pearson r is scale-invariant)
+- The optimal Ne is ~5500 (vs 10000), reflecting the harmonic mean of
+  N(t) weighted by the TMRCA distribution under recent growth
+
+### What this means
+
+The flow field pipeline produces TMRCA estimates that are:
+1. Well-correlated with truth (r = 0.81-0.88) -- this cannot be improved
+   by any post-processing or flow field change
+2. Systematically scaled by 2*Ne_ref instead of 2*N_harmonic -- this is
+   trivially correctable by estimating the harmonic-mean Ne from the data
+
+The demographic correction is NOT a flow field problem. It is a one-line
+output rescaling: multiply all TMRCAs by (Ne_harmonic / Ne_ref).
+
+### Implementation
+
+The harmonic-mean Ne can be estimated from the SFS or from the mean
+heterozygosity: theta = 4*N_harmonic*mu, so N_harmonic = theta/(4*mu)
+where theta is estimated from the data. This is what Schweiger does
+when the -m flag is not provided (auto-estimates theta from heterozygosity).
