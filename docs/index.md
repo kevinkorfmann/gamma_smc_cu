@@ -35,6 +35,11 @@ vcf = cyvcf2.VCF("input.vcf.gz")
 G = np.array([v.genotype_array()[:, 0] for v in vcf]).T.astype(np.uint8)
 ```
 
+```{image} _static/speed_comparison.png
+:alt: Speed comparison
+:width: 700px
+```
+
 ```{toctree}
 :hidden:
 :maxdepth: 1

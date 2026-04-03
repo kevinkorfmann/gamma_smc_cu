@@ -1,5 +1,12 @@
 # Figures
 
+## Accuracy
+
+```{image} _static/accuracy_hexbin.png
+:alt: Accuracy hexbin
+:width: 500px
+```
+
 ## Speed vs accuracy
 
 ```{image} _static/fig1_speed_accuracy.png
@@ -14,7 +21,7 @@
 :width: 700px
 ```
 
-## Accuracy
+## Per-pair accuracy
 
 ```{image} _static/fig3_accuracy.png
 :alt: Accuracy comparison
