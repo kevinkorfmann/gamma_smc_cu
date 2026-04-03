@@ -35,13 +35,12 @@
 % ============================================================================
 \begin{abstract}
 Pairwise coalescence times (TMRCAs) encode the shared genealogical history between haplotypes and are fundamental to population genetic inference, demographic reconstruction, and association mapping.
-Existing methods for estimating site-specific TMRCA from sequence data---including PSMC, MSMC2, and the Gamma-SMC hidden Markov model of Schweiger et al.---are constrained to CPU execution and scale poorly beyond a few hundred haplotypes.
-Here we present \texttt{tmrca.cu}, an open-source CUDA library that re-implements the Gamma-SMC forward--backward algorithm entirely on GPU.
-Three architectural innovations---linearized recombination transitions, pre-XOR'd genotype buffers, and a fused backward-reduction kernel---collectively eliminate memory-bandwidth and latency bottlenecks that would otherwise prevent GPU acceleration of this workload.
-On a single NVIDIA A100 GPU, \texttt{tmrca.cu} achieves 121--3{,}145$\times$ wall-clock speedups over the original Gamma-SMC binary across a range of sample sizes (10--1{,}000 haplotypes) and sequence lengths (1--10\,Mb), while simultaneously improving estimation accuracy from a Pearson correlation of $r=0.791$ to $r=0.820$ against \texttt{msprime} ground truth on a log-transformed scale.
-The accuracy gain arises from the full forward--backward posterior, which conditions on the entire sequence rather than only upstream sites as in the default forward-pass output of the original tool.
-These speedups bring all-pairs TMRCA estimation for a 1\,Mb region across 1{,}000 haplotypes---roughly 500{,}000 pairs---from 89 seconds on CPU down to 0.74 seconds on GPU.
-We demonstrate that this performance envelope is sufficient to make genome-wide, all-pairs TMRCA inference tractable for cohorts of tens of thousands of individuals, opening new avenues for genealogy-aware analyses at biobank scale.
+Existing methods for estimating site-specific TMRCA from sequence data---including PSMC, MSMC2, and the Gamma-SMC model of Schweiger and Durbin---are constrained to CPU execution and produce only forward-pass estimates that condition on upstream sites alone.
+Here we present \texttt{tmrca.cu}, a CUDA implementation that makes the full Gamma-SMC forward--backward posterior practical at population scale for the first time.
+By conditioning on the entire sequence rather than only upstream sites, the forward--backward estimator improves accuracy from $r=0.791$ (Gamma-SMC forward-only) to $r=0.820$ (Pearson correlation against \texttt{msprime} ground truth on a log scale).
+Three GPU-specific optimizations---linearized recombination transitions, pre-XOR'd genotype buffers, and a fused backward-reduction kernel---reduce computation time by two to three orders of magnitude, bringing 500{,}000 pairwise TMRCA estimates over 1\,Mb from 89 seconds on a single CPU core to under one second on a single GPU.
+At this speed, pairwise TMRCA analysis becomes interactive: a researcher can query arbitrary subsets of pairs across genomic regions with sub-second response times, enabling exploratory analyses---such as scanning for regions of unusual coalescence or comparing TMRCA distributions between cohorts---that were previously impractical as batch jobs.
+We further show that the Gamma-SMC flow field is robust to demographic misspecification, maintaining $r = 0.81$--$0.88$ under diverse non-equilibrium histories without recomputation.
 \end{abstract}
 
 % ============================================================================
@@ -50,11 +49,10 @@ We demonstrate that this performance envelope is sufficient to make genome-wide,
 \section*{Author Summary}
 Every pair of individuals shares a common ancestor at every position in the genome, and the time to that ancestor---the TMRCA---varies from site to site depending on local recombination and selection history.
 Knowing these coalescence times would help researchers detect natural selection, infer past population sizes, and find disease-associated loci, but estimating them from DNA sequences is computationally expensive.
-The fastest existing method, Gamma-SMC, runs on a single CPU core and takes about 90 seconds for 1{,}000 haplotypes over 1 megabase, making whole-genome analysis of large cohorts impractical.
-We developed \texttt{tmrca.cu}, a GPU implementation that performs the same statistical computation hundreds to thousands of times faster by exploiting the massive parallelism of modern graphics processors.
-On a single NVIDIA A100 GPU, \texttt{tmrca.cu} estimates coalescence times for all half-million pairs among 1{,}000 haplotypes in under 0.8 seconds---a 121-fold speedup.
-The GPU estimates are also slightly more accurate than the CPU version because they use the full forward--backward algorithm rather than a forward-only approximation.
-This level of performance makes it feasible, for the first time, to compute pairwise TMRCA landscapes across entire genomes for large biobank cohorts, potentially enabling new kinds of population genetic analyses that were previously out of reach.
+The fastest existing method, Gamma-SMC, runs on a single CPU core and takes about 90 seconds for 1{,}000 haplotypes over 1 megabase---and it only uses information from upstream sites, missing the accuracy gains of a full forward--backward analysis.
+We developed \texttt{tmrca.cu}, a GPU implementation that computes the complete forward--backward Gamma-SMC posterior, producing more accurate TMRCA estimates while reducing computation time by two orders of magnitude.
+Instead of reserving a compute cluster for hours, a researcher can query pairwise TMRCA landscapes interactively on a single GPU: half a million pairs over 1\,Mb complete in under one second, fast enough to explore different pair subsets, genomic windows, or parameter settings in real time.
+This changes TMRCA analysis from a batch job into an interactive tool, and makes genome-wide pairwise analyses feasible for the first time at population scale.
 
 % ============================================================================
 % INTRODUCTION
@@ -87,8 +85,8 @@ This workload---millions of independent, lightweight, memory-bound sequential sc
 
 Here we present \texttt{tmrca.cu}, a CUDA library that implements the Gamma-SMC forward--backward algorithm on GPU.
 We introduce three architectural optimizations---linearized recombination, pre-XOR'd genotype buffers, and fused backward-reduction---that collectively address the memory and compute bottlenecks specific to this workload.
-On a single NVIDIA A100, \texttt{tmrca.cu} achieves 121--3{,}145$\times$ speedups over the original Gamma-SMC binary while simultaneously improving estimation accuracy from $r=0.791$ to $r=0.820$ (Pearson correlation against ground truth on a log scale).
-We argue that these speedups bring genome-wide, all-pairs TMRCA estimation within practical reach for biobank-scale cohorts.
+On a single NVIDIA A100, \texttt{tmrca.cu} achieves two- to three-order-of-magnitude speedups over the original Gamma-SMC binary while simultaneously improving estimation accuracy from $r=0.791$ to $r=0.820$ (Pearson correlation against ground truth on a log scale) through the use of a full forward--backward posterior that the CPU tool does not provide.
+Crucially, the resulting sub-second query times transform TMRCA estimation from a batch computation into an interactive analysis: researchers can explore TMRCA landscapes across genomic regions, compare pair subsets in real time, and perform resampling-based statistical tests that would be prohibitive on CPU.
 
 % ============================================================================
 % RESULTS
@@ -118,7 +116,7 @@ Each point represents one benchmark configuration (sample size $\times$ sequence
 Circles denote 1\,Mb and diamonds 10\,Mb sequences.
 Blue: \texttt{tmrca.cu} forward--backward with GPU-side reduction; orange-red: Schweiger et al.\'s original Gamma-SMC binary.
 Faint lines connect matched configurations.
-\texttt{tmrca.cu} consistently occupies the fast-and-accurate region (upper left), achieving 250--3{,}000$\times$ lower wall-clock time at equal or higher accuracy.}
+\texttt{tmrca.cu} consistently occupies the fast-and-accurate region (upper left), achieving 121--3{,}145$\times$ lower wall-clock time at equal or higher accuracy.}
 \label{fig:speed_accuracy}
 \end{figure}
 
@@ -199,7 +197,7 @@ In no configuration does Gamma-SMC outperform the GPU forward--backward estimato
 Horizontal bars show wall-clock time (log-scaled) for 1\,Mb sequences at each sample size.
 Blue: \texttt{tmrca.cu}; orange: Schweiger et al.
 Speedup factors are annotated.
-At $n=50$ the GPU completes in 4\,ms what takes the CPU 6.4\,s (1{,}600$\times$); at $n=1{,}000$ with 499{,}500 pairs the speedup is 344$\times$.}
+At $n=50$ the GPU completes in 4\,ms what takes the CPU 6.4\,s (1{,}504$\times$); at $n=1{,}000$ with 499{,}500 pairs the speedup is 121$\times$.}
 \label{fig:accuracy}
 \end{figure}
 
@@ -298,15 +296,26 @@ At large pair counts ($n \geq 500$), three GPUs achieve $2.7\times$ speedup, app
 \section*{Discussion}
 
 We have presented \texttt{tmrca.cu}, a GPU-accelerated implementation of the Gamma-SMC model for pairwise coalescence time estimation.
-On a single NVIDIA A100, it achieves 121--3{,}145$\times$ speedups over the original CPU implementation while producing more accurate estimates through the use of a full forward--backward algorithm.
+On a single NVIDIA A100, it reduces computation time by two to three orders of magnitude relative to the original single-threaded CPU implementation, while producing more accurate estimates through the use of a full forward--backward algorithm.
 
-\paragraph{What this enables.}
-The practical implication of these speedups is a qualitative shift in the feasibility of all-pairs TMRCA analysis.
-Consider a cohort of 10{,}000 diploid individuals (20{,}000 haplotypes) genotyped across a 100\,Mb chromosome.
-This entails approximately $2 \times 10^8$ pairs, each requiring an HMM pass over roughly $10^5$ segregating sites.
-At the per-pair throughput demonstrated here (approximately $2 \times 10^6$ pairs per second for 1\,Mb sequences), this chromosome could be processed in roughly 100 seconds on a single A100.  Our multi-GPU implementation distributes pairs across all available devices via a thread-pool executor with GIL-released CUDA calls, yielding near-linear speedup: on three A100 GPUs, we observe $2.7\times$ speedup for 499{,}500 pairs over 1\,Mb (0.58\,s vs.\ 1.57\,s on a single GPU), reducing the projected chromosome processing time to approximately 37 seconds.
-A full genome scan across 22 autosomes would complete in under an hour.
-This brings all-pairs TMRCA inference into the same computational envelope as standard GWAS analyses, suggesting that coalescence-time-based association statistics could be computed routinely alongside conventional $p$-values.
+\paragraph{The forward--backward posterior as a new capability.}
+The primary contribution of \texttt{tmrca.cu} is not speed alone but the combination of speed and a better estimator.
+Schweiger's Gamma-SMC outputs only the forward-pass posterior mean, which conditions on upstream sites and is therefore less well-calibrated at interior genomic positions.
+The forward--backward posterior conditions on the entire sequence and consistently outperforms the forward-only estimate ($r = 0.820$ vs.\ $r = 0.791$).
+On CPU, the backward pass is affordable for a handful of pairs but prohibitive for the hundreds of thousands of pairs needed for population-level analyses.
+GPU acceleration makes the backward pass essentially free: the additional scan over the site array adds negligible time relative to the forward pass, yielding a strictly better estimator at no practical cost.
+
+\paragraph{Interactive TMRCA analysis.}
+Beyond batch throughput, the sub-second query times enabled by GPU execution open a qualitatively different mode of analysis.
+At 5\,ms per pair for a 1\,Mb region, a researcher can interactively explore TMRCA landscapes: select a genomic window, choose a subset of pairs (e.g., cases versus controls, or within-population versus between-population), and see the TMRCA distribution update in real time.
+This is analogous to the shift from batch sequence alignment to interactive genome browsers---the underlying computation is the same, but the reduced latency transforms the analytical workflow.
+Specific applications enabled by interactive speed include: (i) scanning for regions of unusual coalescence around candidate loci; (ii) comparing TMRCA distributions between cohorts without pre-specifying regions; and (iii) permutation testing, where 10{,}000 resampled pair sets can be processed in under a minute rather than the hours required on CPU.
+
+\paragraph{Comparison with CPU parallelism.}
+We note that the speedup over a single CPU core (121--3{,}145$\times$) overstates the advantage relative to a multi-core CPU server.
+Schweiger's Gamma-SMC processes pairs independently, so trivial external parallelism across $C$ cores yields a $C$-fold speedup.
+On our 64-core AMD EPYC 7742 test system, 64 parallel instances would reduce the $n=1{,}000$ wall-clock time from 89\,s to approximately 1.4\,s---comparable to the single-GPU time of 0.74\,s.
+The key advantage of GPU execution is therefore not batch throughput but \emph{latency}: a single GPU query completes in milliseconds, enabling the interactive workflow described above, whereas CPU parallelism distributes work across a batch scheduler without reducing per-query response time.
 
 \paragraph{Comparison with ARG methods.}
 An alternative route to pairwise TMRCAs is through full ARG inference.
@@ -325,16 +334,21 @@ The forward-only variant of our GPU implementation achieves $r=0.736$, which is 
 \paragraph{Limitations.}
 Several limitations should be noted.
 First, the current implementation assumes biallelic sites and phased haplotypes; extension to unphased genotypes would require integrating over phase configurations, substantially increasing the computational cost.
-Second, the flow field is precomputed under a constant-$N_e$ assumption; while our demographic robustness analysis shows reasonable performance under misspecification, severely non-equilibrium histories may require scenario-specific flow fields.
-Third, the accuracy advantage of the forward--backward estimator over Schweiger's tool is smaller at large sample sizes ($n \geq 500$), likely because the forward--backward improvement is diluted when most pairs share deep coalescence times and the posterior is dominated by the prior.
-Selective use of FP64 for critical accumulations, or mixed-precision strategies, could address this.
+Second, the flow field is precomputed under a constant-$N_e$ assumption.
+We investigated this extensively by recomputing the flow field under the true piecewise-constant $N(t)$ from three \texttt{stdpopsim} demographic models using the exact SMC$'$ kernel.
+The demographic flow field differs from the constant-$N_e$ version by approximately 9\%, but produces \emph{identical} TMRCA accuracy ($\Delta r = 0.000$), confirming that the flow field transition dynamics are robust to demographic misspecification.
+The systematic bias observed under non-equilibrium demography is not a flow field error but a scale factor: the output uses $2 N_e$ to convert from coalescent units to generations, and under variable $N(t)$ the appropriate scaling is $2 N_{\text{harmonic}}$, which can be estimated from the data's heterozygosity ($\hat{\theta} / 4\mu$).
+Third, the forward--backward advantage over the forward-only estimator is smaller at large sample sizes ($n \geq 500$), likely because most pairs share deep coalescence times where the posterior is dominated by the prior.
+The forward-only GPU variant achieves $r=0.736$ versus Schweiger's $r=0.791$; this gap reflects our use of single-precision arithmetic throughout (for GPU throughput) versus Schweiger's double precision.
+Mixed-precision strategies could close this gap.
 Fourth, our benchmarks use simulated data with known truth; performance on real sequencing data with genotyping error, missing data, and complex linkage disequilibrium patterns remains to be evaluated.
 
 \paragraph{Future directions.}
 Several extensions are natural.
-We have implemented multi-GPU parallelism that distributes pairs across devices via concurrent threads, each backed by its own \texttt{FlowContext} with device-local memory allocations and GIL-released CUDA operations.  Since pairs are independent, this yields near-linear scaling: three A100 GPUs provide $2.7\times$ throughput over a single device for large workloads (Table~\ref{tab:multigpu}), with no change to the underlying CUDA kernels.
 Integration with existing workflows---for example, reading \texttt{VCF}/\texttt{BCF} input directly and outputting \texttt{tskit}-compatible tree sequences---would lower adoption barriers.
-Adaptation to the pairwise composite likelihood framework of MSMC2 \cite{Schiffels2014} could enable GPU-accelerated demographic inference.
+The sub-second latency demonstrated here makes it feasible to build an interactive TMRCA genome browser, where researchers could pan across chromosomes and compare pair subsets in real time.
+Adaptation to the pairwise composite likelihood framework of MSMC2 \cite{Schiffels2014} could enable GPU-accelerated joint TMRCA and demographic inference, iterating between estimating coalescence times and updating the demographic model in an EM loop.
+Mixed-precision strategies---using FP64 for critical accumulations while retaining FP32 for the bulk of the computation---could close the remaining accuracy gap between our forward-only variant and Schweiger's double-precision implementation.
 Finally, the flow-field representation is not specific to the Gamma family; exploring richer posterior parameterizations (e.g., Gaussian mixtures on the log scale) could improve accuracy while retaining the GPU-friendly lookup-table structure.
 
 % ============================================================================
