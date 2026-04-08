@@ -17,6 +17,11 @@ __pycache__/
 benchmarks/*.png
 benchmarks/*.npz
 
+# Local analysis outputs
+analysis/genome_wide/clues/results/
+analysis/genome_wide/clues_v2/results/
+analysis/genome_wide/cxt/results/
+
 # Manuscript build artifacts
 manuscript/*.aux
 manuscript/*.log
@@ -28,6 +33,9 @@ manuscript/*.fdb_latexmk
 manuscript/*.fls
 
 # Editor
+.DS_Store
+.claude/
+texput.log
 *.swp
 *.swo
 *~
