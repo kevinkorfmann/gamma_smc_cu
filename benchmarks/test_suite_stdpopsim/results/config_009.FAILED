@@ -1,0 +1,6 @@
+{
+  "config_idx": 9,
+  "species": "DroMel",
+  "model_id": "OutOfAfrica_2L06",
+  "error": "msprime simulation exceeded 10-minute budget at 5 Mb x 20 haplotypes (high recombination rate + large Ne inflates the ARG); canceled. Other DroMel model (African3Epoch_1S16) succeeded."
+}

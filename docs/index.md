@@ -89,6 +89,9 @@ the auto-sizer chooses block dimensions from `cudaMemGetInfo`.
   interpolation, multi-stream overlap.
 - [Blockwise FB](blockwise.md) — how `infer_blockwise()` decomposes the site
   axis, why flanks are needed, the auto-sizer math, when to use it.
+- [stdpopsim test suite](test_suite.md) — cross-species benchmark of
+  `tmrca.cu` vs the reference `gamma_smc` binary, how to rerun it on a SLURM
+  cluster, and the latest per-config results.
 - [API reference](api.md) — Python entry points and their parameters.
 
 ```{toctree}
@@ -100,5 +103,6 @@ examples
 algorithm
 cuda
 blockwise
+test_suite
 api
 ```
