@@ -3375,6 +3375,14 @@ PYBIND11_MODULE(_core, m) {
         return dev;
     }, "Get the current CUDA device");
 
+    m.def("cuda_mem_info", []() -> py::tuple {
+        size_t free_mem = 0, total_mem = 0;
+        CUDA_CHECK(cudaMemGetInfo(&free_mem, &total_mem));
+        return py::make_tuple(
+            py::int_((uint64_t)free_mem),
+            py::int_((uint64_t)total_mem));
+    }, "Returns (free_bytes, total_bytes) for the current CUDA device.");
+
     m.def("gamma_smc_site_summary", &py_gamma_smc_site_summary,
           py::arg("G"), py::arg("positions"), py::arg("pairs"),
           py::arg("Ne"), py::arg("mu"), py::arg("rho"),

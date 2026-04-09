@@ -251,6 +251,157 @@ class TestInferBlockwise:
             np.array([[0, G.shape[1], 0, G.shape[1]]], dtype=np.int32),
         )
 
+    def test_rejects_zero_flank_with_multi_block(self, genotype_data):
+        G, pos = genotype_data
+        with pytest.raises(ValueError, match="flank_sites=0"):
+            tmrca_cu.infer_blockwise(
+                G,
+                pos,
+                pairs=[(0, 1)],
+                flow_field_path="dummy-flow-field.txt",
+                core_block_sites=10,  # < n_sites -> multi-block
+                flank_sites=0,
+            )
+
+    def test_rejects_non_int_core_block_sites(self, genotype_data):
+        G, pos = genotype_data
+        with pytest.raises(TypeError, match="core_block_sites"):
+            tmrca_cu.infer_blockwise(
+                G,
+                pos,
+                pairs=[(0, 1)],
+                flow_field_path="dummy-flow-field.txt",
+                core_block_sites="not-a-number",
+            )
+
+    def test_auto_core_block_sites_uses_recommendation(self, monkeypatch, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1), (2, 3)]
+        captured = {}
+
+        # Pretend there's plenty of GPU memory.
+        monkeypatch.setattr(
+            tmrca_cu._core, "cuda_mem_info", lambda: (32 * 10**9, 40 * 10**9)
+        )
+
+        class FakeFlowContext:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_fb_blockwise(self, pairs, **kwargs):
+                captured.update(kwargs)
+                return {
+                    "mean": np.ones((len(pos), len(pairs)), dtype=np.float32),
+                    "blocks": np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32),
+                }
+
+        monkeypatch.setattr(tmrca_cu._core, "FlowContext", FakeFlowContext)
+
+        tmrca_cu.infer_blockwise(
+            G,
+            pos,
+            pairs=pairs,
+            flow_field_path="dummy-flow-field.txt",
+            core_block_sites="auto",
+            flank_sites=64,
+        )
+
+        # 217 sites + 32GB free GPU -> auto collapses to a single full block.
+        assert captured["core_block_sites"] == G.shape[1]
+        assert captured["flank_sites"] == 64
+
+    def test_warns_when_block_exceeds_memory(self, monkeypatch, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1)]
+
+        # Pretend almost no GPU memory.
+        monkeypatch.setattr(
+            tmrca_cu._core, "cuda_mem_info", lambda: (1024, 1024)
+        )
+
+        class FakeFlowContext:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_fb_blockwise(self, pairs, **kwargs):
+                return {
+                    "mean": np.ones((len(pos), len(pairs)), dtype=np.float32),
+                    "blocks": np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32),
+                }
+
+        monkeypatch.setattr(tmrca_cu._core, "FlowContext", FakeFlowContext)
+
+        with pytest.warns(UserWarning, match="GPU memory"):
+            tmrca_cu.infer_blockwise(
+                G,
+                pos,
+                pairs=pairs,
+                flow_field_path="dummy-flow-field.txt",
+                core_block_sites=8192,
+                flank_sites=2048,
+            )
+
+    def test_auto_pair_batch_size_capped_by_n_pairs(self, monkeypatch, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1), (2, 3), (4, 5)]
+        captured = {}
+
+        monkeypatch.setattr(
+            tmrca_cu._core, "cuda_mem_info", lambda: (32 * 10**9, 40 * 10**9)
+        )
+
+        class FakeFlowContext:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_fb_blockwise(self, pairs, **kwargs):
+                captured.update(kwargs)
+                return {
+                    "mean": np.ones((len(pos), len(pairs)), dtype=np.float32),
+                    "blocks": np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32),
+                }
+
+        monkeypatch.setattr(tmrca_cu._core, "FlowContext", FakeFlowContext)
+
+        tmrca_cu.infer_blockwise(
+            G,
+            pos,
+            pairs=pairs,
+            flow_field_path="dummy-flow-field.txt",
+            pair_batch_size=-1,  # auto -> should be capped by n_pairs in Python
+        )
+        assert captured["pair_batch_size"] == len(pairs)
+
+    def test_auto_falls_back_when_query_fails(self, monkeypatch, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1)]
+
+        def boom():
+            raise RuntimeError("no cuda")
+
+        monkeypatch.setattr(tmrca_cu._core, "cuda_mem_info", boom)
+
+        class FakeFlowContext:
+            def __init__(self, *_args, **_kwargs):
+                pass
+
+            def run_fb_blockwise(self, pairs, **kwargs):
+                return {
+                    "mean": np.ones((len(pos), len(pairs)), dtype=np.float32),
+                    "blocks": np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32),
+                }
+
+        monkeypatch.setattr(tmrca_cu._core, "FlowContext", FakeFlowContext)
+
+        with pytest.warns(UserWarning, match="could not query GPU"):
+            tmrca_cu.infer_blockwise(
+                G,
+                pos,
+                pairs=pairs,
+                flow_field_path="dummy-flow-field.txt",
+                core_block_sites="auto",
+            )
+
     def test_streamed_blockwise_matches_single_stream(self, genotype_data):
         G, pos = genotype_data
         pairs = [(0, 1), (2, 3), (4, 5)]
