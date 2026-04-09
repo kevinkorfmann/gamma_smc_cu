@@ -23,10 +23,14 @@ from scipy.stats import gamma
 import msprime
 import tmrca_cu
 
-# Reproducibility / cosmetic constants
+# Reproducibility / cosmetic constants. The 2 Mb / 8 samples panel gives
+# each pair ~3-4k segregating sites, which is enough for the per-site Gamma
+# posteriors to actually concentrate. With less data the picked "tight"
+# sites land on confidently-wrong estimates and the figure misrepresents
+# how the method behaves on realistic inputs.
 SEED = 42
 N_SAMPLES = 8
-SEQ_LEN = 500_000
+SEQ_LEN = 2_000_000
 RECOMB_RATE = 1e-8
 MUT_RATE = 1.25e-8
 NE = 10_000.0
@@ -147,6 +151,9 @@ def plot_posterior(out_dir, pos_mb, truth, mean, alpha, beta):
     ax_top.legend(frameon=False, loc="upper right", fontsize=8, ncol=2)
 
     # ----- bottom panels: actual Gamma PDF at the three picked sites -----
+    # These panels are about the *shape* of the posterior that
+    # return_posterior=True exposes, not about accuracy. The top panel
+    # already carries the mean-vs-truth comparison.
     for ax, idx, color, label in zip(ax_bot, pick_idx, pick_colors, pick_labels):
         a_i = float(alpha[idx])
         b_i = float(beta[idx])
@@ -154,7 +161,6 @@ def plot_posterior(out_dir, pos_mb, truth, mean, alpha, beta):
         t_i = float(truth[idx])
         scale_i = 2.0 * NE / b_i
         post = gamma(a_i, scale=scale_i)
-        # Plot range: ±4 sigma around the mean, clipped at 0
         sd = post.std()
         t_min = max(0.0, m_i - 4 * sd)
         t_max = m_i + 4 * sd
@@ -163,10 +169,19 @@ def plot_posterior(out_dir, pos_mb, truth, mean, alpha, beta):
 
         ax.fill_between(t_lin, 0, density, color=color, alpha=0.25, lw=0)
         ax.plot(t_lin, density, color=color, lw=1.4)
-        ax.axvline(m_i, color=color, lw=1.0, ls="-",
+        ax.axvline(m_i, color=color, lw=1.1, ls="-",
                    label=f"mean = {m_i:.0f}")
-        ax.axvline(t_i, color="#444", lw=0.9, ls=":",
-                   label=f"truth = {t_i:.0f}")
+        # Truth as a small unobtrusive grey tick at the top of the axes,
+        # only when it falls inside the plotted range. The top panel is
+        # the primary place to compare mean vs truth.
+        if t_min <= t_i <= t_max:
+            y_top = density.max() * 1.04
+            ax.scatter(
+                [t_i], [y_top], marker="v", s=18, color="#444", zorder=5,
+                clip_on=False, label=f"truth = {t_i:.0f}",
+            )
+        ax.set_xlim(t_min, t_max)
+        ax.set_ylim(bottom=0.0)
         ax.set_xlabel("TMRCA (generations)", fontsize=8)
         ax.set_ylabel("density", fontsize=8)
         ax.set_title(
@@ -178,7 +193,6 @@ def plot_posterior(out_dir, pos_mb, truth, mean, alpha, beta):
         ax.spines["right"].set_visible(False)
         ax.set_yticks([])
         ax.legend(frameon=False, fontsize=7, loc="upper right")
-        # Format x ticks compactly
         ax.ticklabel_format(axis="x", style="sci", scilimits=(0, 4))
         ax.xaxis.get_offset_text().set_fontsize(7)
 
