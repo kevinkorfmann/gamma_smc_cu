@@ -25,6 +25,9 @@ htslib = ">=1.23,<2"
 mpmath = ">=1.4.1,<2"
 jupyter = ">=1.1.1,<2"
 imageio = ">=2.37.0,<3"
+sphinx = ">=8"
+furo = "*"
+myst-parser = "*"
 
 [activation.env]
 PYTHONPATH = "${PIXI_PROJECT_ROOT}/python:${PIXI_PROJECT_ROOT}"
@@ -39,6 +42,8 @@ build = { depends-on = ["_install"] }
 test = { cmd = "python -m pytest tests/ -v --ignore=tests/performance", depends-on = ["build"] }
 test-unit = { cmd = "python -m pytest tests/unit/ -v", depends-on = ["build"] }
 test-ref = "python -m pytest tests/reference/ -v"
+docs = "sphinx-build -b html docs docs/_build/html"
+docs-clean = "rm -rf docs/_build"
 
 [pypi-dependencies]
 stdpopsim = "*"

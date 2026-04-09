@@ -8,6 +8,9 @@ build/
 *.o
 *.a
 
+# Sphinx build output
+docs/_build/
+
 # Python
 __pycache__/
 *.pyc
