@@ -94,16 +94,15 @@ def plot_ci(out_dir, pos_mb, truth, mean, lower, upper):
 
 
 def plot_posterior(out_dir, pos_mb, truth, mean, alpha, beta):
-    """Heatmap of the per-site Gamma posterior P(T | site).
-
-    Top: mean + multiple credible bands derived from (alpha, beta).
-    Bottom: log-density heatmap over a TMRCA grid.
+    """Mean + custom credible bands across position, plus the actual
+    Gamma PDF at three representative sites picked at low / median / high
+    posterior uncertainty.
     """
-    # Custom credible intervals straight from (alpha, beta) — the whole point
+    # Custom credible bands straight from (alpha, beta) — the whole point
     # of return_posterior=True.
     quantile_pairs = [(0.025, 0.975), (0.10, 0.90), (0.25, 0.75)]
     band_labels = ["95%", "80%", "50%"]
-    band_alphas = [0.15, 0.20, 0.30]
+    band_alphas = [0.15, 0.22, 0.32]
 
     bands = []
     for q_lo, q_hi in quantile_pairs:
@@ -111,58 +110,77 @@ def plot_posterior(out_dir, pos_mb, truth, mean, alpha, beta):
         hi = gamma(alpha, scale=2.0 * NE / beta).ppf(q_hi)
         bands.append((lo, hi))
 
-    # Build a (T, site) heatmap of log P(T | site).
-    t_grid = np.geomspace(
-        max(1.0, np.percentile(mean, 1) / 5.0),
-        np.percentile(mean, 99) * 5.0,
-        300,
-    )
-    # PDF in real generations: T ~ Gamma(alpha, scale=2*Ne/beta)
-    scale = 2.0 * NE / beta  # (n_sites,)
-    # Log-density grid: shape (n_T, n_sites)
-    log_pdf = np.empty((t_grid.size, alpha.size))
-    for i in range(alpha.size):
-        log_pdf[:, i] = gamma(alpha[i], scale=scale[i]).logpdf(t_grid)
-    pdf = np.exp(log_pdf - log_pdf.max(axis=0, keepdims=True))  # column-normalized
+    # Pick three representative sites by 95% CI *relative width*
+    # (= width / mean), which is the most intuitive uncertainty measure.
+    ci_lo, ci_hi = bands[0]
+    rel_width = (ci_hi - ci_lo) / np.maximum(mean, 1.0)
+    rank = np.argsort(rel_width)
+    pick_idx = [
+        int(rank[int(0.10 * len(rank))]),  # most certain (10th percentile)
+        int(rank[int(0.50 * len(rank))]),  # median
+        int(rank[int(0.90 * len(rank))]),  # least certain (90th percentile)
+    ]
+    pick_labels = ["tight", "typical", "broad"]
+    pick_colors = ["#2ca25f", "#3182bd", "#e34a33"]
 
-    fig, axes = plt.subplots(
-        2, 1, figsize=(7.0, 5.6), dpi=150, sharex=True,
-        gridspec_kw={"height_ratios": [1.0, 1.4]},
+    fig = plt.figure(figsize=(7.0, 5.6), dpi=150)
+    gs = fig.add_gridspec(
+        2, 3, height_ratios=[1.0, 0.9], hspace=0.55, wspace=0.35,
     )
-    ax0, ax1 = axes
+    ax_top = fig.add_subplot(gs[0, :])
+    ax_bot = [fig.add_subplot(gs[1, k]) for k in range(3)]
 
-    # Top panel: mean + custom credible bands
-    setup_axes(ax0, pos_mb, truth, "infer(..., return_posterior=True)")
-    ax0.set_xlabel("")
+    # ----- top panel: mean + credible bands -----
+    setup_axes(ax_top, pos_mb, truth, "infer(..., return_posterior=True)")
     for (lo, hi), label, a in zip(bands, band_labels, band_alphas):
-        ax0.fill_between(
-            pos_mb, lo, hi, color="#3182bd", alpha=a, lw=0, label=f"{label} CI",
+        ax_top.fill_between(
+            pos_mb, lo, hi, color="#3182bd", alpha=a, lw=0,
+            label=f"{label} CI",
         )
-    ax0.plot(pos_mb, mean, color="#3182bd", lw=1.2, label="posterior mean")
-    ax0.legend(frameon=False, loc="upper right", fontsize=8, ncol=2)
+    ax_top.plot(pos_mb, mean, color="#3182bd", lw=1.2, label="posterior mean")
+    # Mark the three picked sites
+    for idx, color, label in zip(pick_idx, pick_colors, pick_labels):
+        ax_top.axvline(
+            pos_mb[idx], color=color, lw=0.9, ls="--", alpha=0.85,
+            label=f"site '{label}'",
+        )
+    ax_top.legend(frameon=False, loc="upper right", fontsize=8, ncol=2)
 
-    # Bottom panel: per-site posterior density heatmap
-    extent = [pos_mb.min(), pos_mb.max(), t_grid.min(), t_grid.max()]
-    im = ax1.imshow(
-        pdf, origin="lower", aspect="auto", extent=extent,
-        cmap="Blues", interpolation="nearest", vmin=0.0, vmax=1.0,
-    )
-    ax1.plot(pos_mb, truth, color="#444", lw=0.7, label="ground truth")
-    ax1.plot(pos_mb, mean, color="#e34a33", lw=0.9, label="posterior mean")
-    ax1.set_yscale("log")
-    ax1.set_xlabel("position (Mb)")
-    ax1.set_ylabel("TMRCA (generations)")
-    ax1.set_title(
-        "per-site posterior density P(T | site)  (column-normalized)",
-        loc="left",
-    )
-    ax1.spines["top"].set_visible(False)
-    ax1.spines["right"].set_visible(False)
-    ax1.legend(frameon=False, loc="upper right", fontsize=8)
+    # ----- bottom panels: actual Gamma PDF at the three picked sites -----
+    for ax, idx, color, label in zip(ax_bot, pick_idx, pick_colors, pick_labels):
+        a_i = float(alpha[idx])
+        b_i = float(beta[idx])
+        m_i = float(mean[idx])
+        t_i = float(truth[idx])
+        scale_i = 2.0 * NE / b_i
+        post = gamma(a_i, scale=scale_i)
+        # Plot range: ±4 sigma around the mean, clipped at 0
+        sd = post.std()
+        t_min = max(0.0, m_i - 4 * sd)
+        t_max = m_i + 4 * sd
+        t_lin = np.linspace(t_min, t_max, 400)
+        density = post.pdf(t_lin)
 
-    cbar = fig.colorbar(im, ax=ax1, fraction=0.025, pad=0.02)
-    cbar.set_label("normalized density", fontsize=8)
-    cbar.ax.tick_params(labelsize=7)
+        ax.fill_between(t_lin, 0, density, color=color, alpha=0.25, lw=0)
+        ax.plot(t_lin, density, color=color, lw=1.4)
+        ax.axvline(m_i, color=color, lw=1.0, ls="-",
+                   label=f"mean = {m_i:.0f}")
+        ax.axvline(t_i, color="#444", lw=0.9, ls=":",
+                   label=f"truth = {t_i:.0f}")
+        ax.set_xlabel("TMRCA (generations)", fontsize=8)
+        ax.set_ylabel("density", fontsize=8)
+        ax.set_title(
+            f"site '{label}'  (α={a_i:.1f}, β={b_i:.2f})",
+            fontsize=9, loc="left",
+        )
+        ax.tick_params(labelsize=7)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.set_yticks([])
+        ax.legend(frameon=False, fontsize=7, loc="upper right")
+        # Format x ticks compactly
+        ax.ticklabel_format(axis="x", style="sci", scilimits=(0, 4))
+        ax.xaxis.get_offset_text().set_fontsize(7)
 
     fig.tight_layout()
     fig.savefig(out_dir / "examples_posterior.png")

@@ -121,12 +121,25 @@ with three custom credible bands (95% / 80% / 50%) constructed
 `scipy.stats.gamma.ppf` — the wrapper does not bake any particular
 quantile choice in.
 
-The bottom panel shows the column-normalized per-site density
-$P(T \mid \mathrm{site})$ as a heatmap. Wide blue stripes mark sites
-where the model is uncertain (the Gamma is broad); narrow concentrated
-columns mark sites where forward and backward agreed on a sharp coalescent
-time. The msprime ground truth (grey) lands inside the high-density region
-almost everywhere — that's the algorithm working as advertised.
+The three bottom panels show the actual Gamma PDF at three sites picked
+from the low / middle / high end of the per-site relative-width
+distribution (95% CI width / mean):
+
+- **`tight`** — large $\alpha$, small CV: a tall, narrow density that
+  pins the TMRCA to a precise value. Forward and backward agree
+  strongly here.
+- **`typical`** — median uncertainty: a recognisably skewed Gamma
+  spanning a moderate TMRCA range.
+- **`broad`** — small $\alpha$, large CV: a wide, heavy-tailed density
+  reflecting genuine uncertainty. The mean is not a great summary;
+  custom quantiles (or downstream sampling) carry much more
+  information.
+
+Each subplot reports the underlying $(\alpha, \beta)$ in scaled
+coalescent time, the posterior mean (vertical solid line), and the
+msprime ground truth (vertical dotted line). The dashed colored lines
+in the top panel mark where each of the three sites lives along the
+chromosome.
 
 ## When to pick which mode
 
