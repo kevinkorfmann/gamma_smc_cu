@@ -1929,6 +1929,33 @@ extern void gamma_smc_flow_h2_fwd_gpu(
     float* tmrca_lower_out,
     float* tmrca_upper_out);
 
+extern void gamma_smc_flow_cached_fb_block_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions,
+    int site_start, int block_S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    const float* d_cache_mean, const float* d_cache_cv,
+    int n_max_steps,
+    float* fwd_buf,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,
+    float* tmrca_upper_out);
+
+extern void gamma_smc_flow_cached_fb_block_gpu_async(
+    const uint64_t* packed, int n_words,
+    const double* positions,
+    int site_start, int block_S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    const float* d_cache_mean, const float* d_cache_cv,
+    int n_max_steps,
+    float* fwd_buf,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,
+    float* tmrca_upper_out,
+    void* stream_handle);
+
 static void ensure_flow_field(const std::string& path) {
     if (g_flow_field_loaded) return;
     if (!load_flow_field(path.c_str(), g_flow_field)) {
@@ -2342,6 +2369,13 @@ py::dict py_gamma_smc_flow_cached_fb(
 // FlowContext: persistent GPU context for max throughput
 // ============================================================
 class FlowContext {
+    struct BlockWindow {
+        int core_start;
+        int core_stop;
+        int padded_start;
+        int padded_stop;
+    };
+
     uint64_t* d_packed_ = nullptr;
     double* d_pos_ = nullptr;
     int* d_pi_ = nullptr;
@@ -2393,6 +2427,38 @@ class FlowContext {
         if (d_pi_) { cudaFree(d_pi_); d_pi_ = nullptr; }
         if (d_pj_) { cudaFree(d_pj_); d_pj_ = nullptr; }
         max_pairs_ = 0;
+    }
+
+    std::vector<BlockWindow> make_block_windows(
+        int core_block_sites,
+        int flank_sites) const
+    {
+        std::vector<BlockWindow> blocks;
+        for (int core_start = 0; core_start < S_; core_start += core_block_sites) {
+            int core_stop = std::min(S_, core_start + core_block_sites);
+            int padded_start = std::max(0, core_start - flank_sites);
+            int padded_stop = std::min(S_, core_stop + flank_sites);
+            blocks.push_back(BlockWindow{
+                core_start,
+                core_stop,
+                padded_start,
+                padded_stop,
+            });
+        }
+        return blocks;
+    }
+
+    int compute_max_fb_block_chunk(int padded_sites, bool ci) const {
+        size_t free_mem = 0, total_mem = 0;
+        cudaMemGetInfo(&free_mem, &total_mem);
+        if (free_mem < 512ULL * 1024 * 1024) return 1;
+        free_mem -= 512ULL * 1024 * 1024;  // reserve 512MB headroom
+
+        int n_arrays = ci ? 3 : 1;
+        size_t per_pair = (size_t)padded_sites * (2 + n_arrays) * sizeof(float)
+                        + sizeof(int) * 2;
+        int max_chunk = (int)(free_mem / std::max<size_t>(per_pair, 1));
+        return std::max(max_chunk, 1);
     }
 
 public:
@@ -2726,6 +2792,275 @@ public:
         }
 
         py::dict result;
+        result["mean"] = mean_out;
+        if (ci) {
+            result["lower"] = lower_out;
+            result["upper"] = upper_out;
+        }
+        return result;
+    }
+
+    py::dict run_fb_blockwise(
+        std::vector<std::pair<int, int>> pairs,
+        int core_block_sites,
+        int flank_sites,
+        int pair_batch_size,
+        int max_streams,
+        bool mean_only)
+    {
+        if (core_block_sites <= 0) {
+            throw std::invalid_argument("core_block_sites must be positive.");
+        }
+        if (flank_sites < 0) {
+            throw std::invalid_argument("flank_sites must be non-negative.");
+        }
+        if (pair_batch_size == 0 || pair_batch_size < -1) {
+            throw std::invalid_argument("pair_batch_size must be positive or -1 for auto.");
+        }
+        if (max_streams <= 0) {
+            throw std::invalid_argument("max_streams must be positive.");
+        }
+
+        int n_pairs = (int)pairs.size();
+        auto blocks = make_block_windows(core_block_sites, flank_sites);
+
+        auto blocks_out = py::array_t<int>(std::vector<ssize_t>{
+            (ssize_t)blocks.size(), 4
+        });
+        int* h_blocks = blocks_out.mutable_data();
+        for (size_t b = 0; b < blocks.size(); b++) {
+            h_blocks[4 * b + 0] = blocks[b].core_start;
+            h_blocks[4 * b + 1] = blocks[b].core_stop;
+            h_blocks[4 * b + 2] = blocks[b].padded_start;
+            h_blocks[4 * b + 3] = blocks[b].padded_stop;
+        }
+
+        py::dict result;
+        result["blocks"] = blocks_out;
+
+        if (n_pairs == 0) {
+            result["mean"] = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, 0});
+            return result;
+        }
+        if (blocks.empty()) {
+            result["mean"] = py::array_t<float>(std::vector<ssize_t>{0, (ssize_t)n_pairs});
+            return result;
+        }
+
+        bool ci = !mean_only;
+        std::vector<int> pi(n_pairs), pj(n_pairs);
+        for (int p = 0; p < n_pairs; p++) {
+            pi[p] = pairs[p].first;
+            pj[p] = pairs[p].second;
+        }
+
+        auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        py::array_t<float> lower_out, upper_out;
+        if (ci) {
+            lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        }
+        float* h_mean = mean_out.mutable_data();
+        float* h_lower = ci ? lower_out.mutable_data() : nullptr;
+        float* h_upper = ci ? upper_out.mutable_data() : nullptr;
+
+        int max_padded_sites = 0;
+        for (const auto& block : blocks) {
+            max_padded_sites = std::max(max_padded_sites, block.padded_stop - block.padded_start);
+        }
+        int chunk_cap = pair_batch_size;
+
+        {
+            py::gil_scoped_release release;
+            cudaSetDevice(device_id_);
+            if (max_streams == 1) {
+                int auto_chunk_cap = compute_max_fb_block_chunk(max_padded_sites, ci);
+                chunk_cap = pair_batch_size > 0 ? pair_batch_size : auto_chunk_cap;
+                chunk_cap = std::max(1, std::min(chunk_cap, auto_chunk_cap));
+
+                int* d_pi_block = nullptr;
+                int* d_pj_block = nullptr;
+                float* d_fwd_block = nullptr;
+                float* d_mean_block = nullptr;
+                float* d_lower_block = nullptr;
+                float* d_upper_block = nullptr;
+
+                CUDA_CHECK(cudaMalloc(&d_pi_block, chunk_cap * sizeof(int)));
+                CUDA_CHECK(cudaMalloc(&d_pj_block, chunk_cap * sizeof(int)));
+                CUDA_CHECK(cudaMalloc(&d_fwd_block, 2ULL * max_padded_sites * chunk_cap * sizeof(float)));
+                CUDA_CHECK(cudaMalloc(&d_mean_block, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
+                if (ci) {
+                    CUDA_CHECK(cudaMalloc(&d_lower_block, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
+                    CUDA_CHECK(cudaMalloc(&d_upper_block, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
+                }
+
+                for (const auto& block : blocks) {
+                    int padded_sites = block.padded_stop - block.padded_start;
+                    int core_sites = block.core_stop - block.core_start;
+                    int core_offset = block.core_start - block.padded_start;
+                    int block_chunk_cap = std::max(
+                        1, std::min(chunk_cap, compute_max_fb_block_chunk(padded_sites, ci)));
+
+                    for (int offset = 0; offset < n_pairs; offset += block_chunk_cap) {
+                        int chunk = std::min(block_chunk_cap, n_pairs - offset);
+
+                        CUDA_CHECK(cudaMemcpy(
+                            d_pi_block, pi.data() + offset, chunk * sizeof(int), cudaMemcpyHostToDevice));
+                        CUDA_CHECK(cudaMemcpy(
+                            d_pj_block, pj.data() + offset, chunk * sizeof(int), cudaMemcpyHostToDevice));
+
+                        gamma_smc_flow_cached_fb_block_gpu(
+                            d_packed_, n_words_, d_pos_,
+                            block.padded_start, padded_sites,
+                            ctx_cache_Ne_,
+                            d_pi_block, d_pj_block, chunk,
+                            ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
+                            d_fwd_block,
+                            d_mean_block,
+                            ci ? d_lower_block : nullptr,
+                            ci ? d_upper_block : nullptr);
+
+                        auto copy_core = [&](float* d_src, float* h_dst) {
+                            CUDA_CHECK(cudaMemcpy2D(
+                                h_dst + (size_t)block.core_start * n_pairs + offset,
+                                (size_t)n_pairs * sizeof(float),
+                                d_src + (size_t)core_offset * chunk,
+                                (size_t)chunk * sizeof(float),
+                                (size_t)chunk * sizeof(float),
+                                core_sites,
+                                cudaMemcpyDeviceToHost));
+                        };
+
+                        copy_core(d_mean_block, h_mean);
+                        if (ci) {
+                            copy_core(d_lower_block, h_lower);
+                            copy_core(d_upper_block, h_upper);
+                        }
+                    }
+                }
+
+                cudaFree(d_pi_block);
+                cudaFree(d_pj_block);
+                cudaFree(d_fwd_block);
+                cudaFree(d_mean_block);
+                if (d_lower_block) cudaFree(d_lower_block);
+                if (d_upper_block) cudaFree(d_upper_block);
+            } else {
+                struct StreamScratch {
+                    cudaStream_t stream = nullptr;
+                    int* d_pi = nullptr;
+                    int* d_pj = nullptr;
+                    float* d_fwd = nullptr;
+                    float* d_mean = nullptr;
+                    float* d_lower = nullptr;
+                    float* d_upper = nullptr;
+                };
+
+                alloc_output(n_pairs, ci);
+                int auto_chunk_cap = compute_max_fb_block_chunk(max_padded_sites, ci);
+                chunk_cap = pair_batch_size > 0 ? pair_batch_size : auto_chunk_cap;
+                chunk_cap = std::max(1, std::min(chunk_cap, auto_chunk_cap));
+
+                int n_streams = std::min(max_streams, (int)blocks.size());
+                std::vector<StreamScratch> stream_ctxs((size_t)n_streams);
+                for (auto& scratch : stream_ctxs) {
+                    CUDA_CHECK(cudaStreamCreate(&scratch.stream));
+                    CUDA_CHECK(cudaMalloc(&scratch.d_pi, chunk_cap * sizeof(int)));
+                    CUDA_CHECK(cudaMalloc(&scratch.d_pj, chunk_cap * sizeof(int)));
+                    CUDA_CHECK(cudaMalloc(&scratch.d_fwd, 2ULL * max_padded_sites * chunk_cap * sizeof(float)));
+                    CUDA_CHECK(cudaMalloc(&scratch.d_mean, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
+                    if (ci) {
+                        CUDA_CHECK(cudaMalloc(&scratch.d_lower, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
+                        CUDA_CHECK(cudaMalloc(&scratch.d_upper, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
+                    }
+                }
+
+                auto queue_block_chunk = [&](StreamScratch& scratch,
+                                             const BlockWindow& block,
+                                             int offset,
+                                             int chunk) {
+                    int padded_sites = block.padded_stop - block.padded_start;
+                    int core_sites = block.core_stop - block.core_start;
+                    int core_offset = block.core_start - block.padded_start;
+
+                    CUDA_CHECK(cudaMemcpyAsync(
+                        scratch.d_pi, pi.data() + offset, chunk * sizeof(int),
+                        cudaMemcpyHostToDevice, scratch.stream));
+                    CUDA_CHECK(cudaMemcpyAsync(
+                        scratch.d_pj, pj.data() + offset, chunk * sizeof(int),
+                        cudaMemcpyHostToDevice, scratch.stream));
+
+                    gamma_smc_flow_cached_fb_block_gpu_async(
+                        d_packed_, n_words_, d_pos_,
+                        block.padded_start, padded_sites,
+                        ctx_cache_Ne_,
+                        scratch.d_pi, scratch.d_pj, chunk,
+                        ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
+                        scratch.d_fwd,
+                        scratch.d_mean,
+                        ci ? scratch.d_lower : nullptr,
+                        ci ? scratch.d_upper : nullptr,
+                        scratch.stream);
+
+                    auto copy_core = [&](float* d_src, float* d_dst) {
+                        CUDA_CHECK(cudaMemcpy2DAsync(
+                            d_dst + (size_t)block.core_start * n_pairs + offset,
+                            (size_t)n_pairs * sizeof(float),
+                            d_src + (size_t)core_offset * chunk,
+                            (size_t)chunk * sizeof(float),
+                            (size_t)chunk * sizeof(float),
+                            core_sites,
+                            cudaMemcpyDeviceToDevice,
+                            scratch.stream));
+                    };
+
+                    copy_core(scratch.d_mean, d_mean_);
+                    if (ci) {
+                        copy_core(scratch.d_lower, d_lower_);
+                        copy_core(scratch.d_upper, d_upper_);
+                    }
+                };
+
+                size_t task_index = 0;
+                for (const auto& block : blocks) {
+                    int padded_sites = block.padded_stop - block.padded_start;
+                    int block_chunk_cap = std::max(
+                        1, std::min(chunk_cap, compute_max_fb_block_chunk(padded_sites, ci)));
+
+                    for (int offset = 0; offset < n_pairs; offset += block_chunk_cap) {
+                        int chunk = std::min(block_chunk_cap, n_pairs - offset);
+                        StreamScratch& scratch = stream_ctxs[task_index % stream_ctxs.size()];
+                        if (task_index >= stream_ctxs.size()) {
+                            CUDA_CHECK(cudaStreamSynchronize(scratch.stream));
+                        }
+                        queue_block_chunk(scratch, block, offset, chunk);
+                        task_index++;
+                    }
+                }
+
+                for (auto& scratch : stream_ctxs) {
+                    CUDA_CHECK(cudaStreamSynchronize(scratch.stream));
+                }
+
+                size_t bytes = (size_t)S_ * n_pairs * sizeof(float);
+                CUDA_CHECK(cudaMemcpy(h_mean, d_mean_, bytes, cudaMemcpyDeviceToHost));
+                if (ci) {
+                    CUDA_CHECK(cudaMemcpy(h_lower, d_lower_, bytes, cudaMemcpyDeviceToHost));
+                    CUDA_CHECK(cudaMemcpy(h_upper, d_upper_, bytes, cudaMemcpyDeviceToHost));
+                }
+
+                for (auto& scratch : stream_ctxs) {
+                    if (scratch.d_pi) cudaFree(scratch.d_pi);
+                    if (scratch.d_pj) cudaFree(scratch.d_pj);
+                    if (scratch.d_fwd) cudaFree(scratch.d_fwd);
+                    if (scratch.d_mean) cudaFree(scratch.d_mean);
+                    if (scratch.d_lower) cudaFree(scratch.d_lower);
+                    if (scratch.d_upper) cudaFree(scratch.d_upper);
+                    if (scratch.stream) cudaStreamDestroy(scratch.stream);
+                }
+            }
+        }
+
         result["mean"] = mean_out;
         if (ci) {
             result["lower"] = lower_out;
@@ -3093,6 +3428,16 @@ PYBIND11_MODULE(_core, m) {
         .def("run_fb", &FlowContext::run_fb,
              "Forward-backward smoothing. Returns dict with 'mean'.",
              py::arg("pairs"), py::arg("mean_only") = true)
+        .def("run_fb_blockwise", &FlowContext::run_fb_blockwise,
+             "Experimental blockwise forward-backward smoothing.\n"
+             "Decodes padded site blocks, keeps only the core sites, and stitches\n"
+             "results into the usual site-major output shape.",
+             py::arg("pairs"),
+             py::arg("core_block_sites") = 8192,
+             py::arg("flank_sites") = 2048,
+             py::arg("pair_batch_size") = 256,
+             py::arg("max_streams") = 1,
+             py::arg("mean_only") = true)
         .def("run_fb_summary", &FlowContext::run_fb_summary, py::arg("pairs"))
         .def_property_readonly("device_id", &FlowContext::device_id)
         .def_property_readonly("n_haps", &FlowContext::n_haps)

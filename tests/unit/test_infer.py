@@ -88,6 +88,11 @@ class TestInferGenotypeMatrix:
         assert result["mean"].shape[1] == 1
         assert np.all(result["mean"] > 0)
 
+    def test_rejects_mismatched_positions(self, genotype_data):
+        G, pos = genotype_data
+        with pytest.raises(ValueError, match="positions length"):
+            tmrca_cu.infer(G, pos[:-1], pairs=[(0, 1)])
+
 
 class TestInferConsistency:
     def test_ts_and_matrix_agree(self, ts, genotype_data):
@@ -125,3 +130,148 @@ class TestInferEdgeCases:
     def test_empty_pairs(self, ts):
         result = tmrca_cu.infer(ts, pairs=[])
         assert result["mean"].shape[1] == 0
+
+
+class TestInferBlockwise:
+    def test_requires_explicit_pairs(self, genotype_data):
+        G, pos = genotype_data
+        with pytest.raises(ValueError, match="explicit pairs"):
+            tmrca_cu.infer_blockwise(
+                G,
+                pos,
+                flow_field_path="dummy-flow-field.txt",
+            )
+
+    def test_rejects_invalid_pair_batch_size(self, genotype_data):
+        G, pos = genotype_data
+        with pytest.raises(ValueError, match="pair_batch_size"):
+            tmrca_cu.infer_blockwise(
+                G,
+                pos,
+                pairs=[(0, 1)],
+                flow_field_path="dummy-flow-field.txt",
+                pair_batch_size=0,
+            )
+
+    def test_rejects_invalid_max_streams(self, genotype_data):
+        G, pos = genotype_data
+        with pytest.raises(ValueError, match="max_streams"):
+            tmrca_cu.infer_blockwise(
+                G,
+                pos,
+                pairs=[(0, 1)],
+                flow_field_path="dummy-flow-field.txt",
+                max_streams=0,
+            )
+
+    def test_passes_blockwise_args(self, monkeypatch, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1), (2, 3)]
+        calls = {}
+
+        class FakeFlowContext:
+            def __init__(self, G, positions, Ne, mu, rho, flow_field_path, cache_steps):
+                calls["init"] = {
+                    "shape": G.shape,
+                    "positions": len(positions),
+                    "Ne": Ne,
+                    "mu": mu,
+                    "rho": rho,
+                    "flow_field_path": flow_field_path,
+                    "cache_steps": cache_steps,
+                }
+
+            def run_fb_blockwise(
+                self,
+                pairs,
+                core_block_sites,
+                flank_sites,
+                pair_batch_size,
+                max_streams,
+                mean_only,
+            ):
+                calls["run"] = {
+                    "pairs": list(pairs),
+                    "core_block_sites": core_block_sites,
+                    "flank_sites": flank_sites,
+                    "pair_batch_size": pair_batch_size,
+                    "max_streams": max_streams,
+                    "mean_only": mean_only,
+                }
+                return {
+                    "mean": np.ones((len(pos), len(pairs)), dtype=np.float32),
+                    "blocks": np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32),
+                }
+
+        monkeypatch.setattr(tmrca_cu._core, "FlowContext", FakeFlowContext)
+
+        result = tmrca_cu.infer_blockwise(
+            G,
+            pos,
+            pairs=pairs,
+            flow_field_path="dummy-flow-field.txt",
+            core_block_sites=256,
+            flank_sites=64,
+            pair_batch_size=32,
+            max_streams=3,
+            mean_only=False,
+        )
+
+        assert result["mean"].shape == (len(pos), len(pairs))
+        assert result["pairs"] == pairs
+        np.testing.assert_array_equal(result["positions"], pos)
+        np.testing.assert_array_equal(result["blocks"], np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32))
+        assert calls["init"]["shape"] == G.shape
+        assert calls["run"] == {
+            "pairs": pairs,
+            "core_block_sites": 256,
+            "flank_sites": 64,
+            "pair_batch_size": 32,
+            "max_streams": 3,
+            "mean_only": False,
+        }
+
+    def test_single_block_matches_full_sequence(self, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1), (2, 3)]
+
+        full = tmrca_cu.infer(G, pos, pairs=pairs)
+        blockwise = tmrca_cu.infer_blockwise(
+            G,
+            pos,
+            pairs=pairs,
+            core_block_sites=G.shape[1],
+            flank_sites=0,
+            pair_batch_size=1,
+        )
+
+        np.testing.assert_allclose(blockwise["mean"], full["mean"], rtol=1e-5, atol=1e-6)
+        np.testing.assert_array_equal(
+            blockwise["blocks"],
+            np.array([[0, G.shape[1], 0, G.shape[1]]], dtype=np.int32),
+        )
+
+    def test_streamed_blockwise_matches_single_stream(self, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1), (2, 3), (4, 5)]
+
+        single_stream = tmrca_cu.infer_blockwise(
+            G,
+            pos,
+            pairs=pairs,
+            core_block_sites=max(1, G.shape[1] // 2),
+            flank_sites=min(64, max(0, G.shape[1] // 4)),
+            pair_batch_size=2,
+            max_streams=1,
+        )
+        streamed = tmrca_cu.infer_blockwise(
+            G,
+            pos,
+            pairs=pairs,
+            core_block_sites=max(1, G.shape[1] // 2),
+            flank_sites=min(64, max(0, G.shape[1] // 4)),
+            pair_batch_size=2,
+            max_streams=2,
+        )
+
+        np.testing.assert_allclose(streamed["mean"], single_stream["mean"], rtol=1e-5, atol=1e-6)

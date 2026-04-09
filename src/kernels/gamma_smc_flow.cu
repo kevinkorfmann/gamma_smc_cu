@@ -507,6 +507,66 @@ __global__ void gamma_smc_cached_forward_kernel(
 }
 
 // ============================================================
+// Forward pass with cache on a local site block
+// ============================================================
+__global__ void gamma_smc_cached_forward_block_kernel(
+    const uint64_t* __restrict__ packed,
+    int n_words,
+    const double* __restrict__ positions,
+    int site_start,
+    int block_S,
+    const int* __restrict__ pair_i,
+    const int* __restrict__ pair_j,
+    int n_pairs,
+    const float* __restrict__ cache_mean,
+    const float* __restrict__ cache_cv,
+    int n_max_steps,
+    float* __restrict__ fwd_mean,
+    float* __restrict__ fwd_cv_out)
+{
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= n_pairs) return;
+
+    int hi = pair_i[pid];
+    int hj = pair_j[pid];
+
+    float m = 0.0f, c = 0.0f;
+    int cur_word = -1;
+    uint64_t xor_w = 0;
+
+    for (int s = 0; s < block_S; s++) {
+        int global_s = site_start + s;
+
+        if (s > 0) {
+            int gap_steps = (int)(positions[global_s] - positions[global_s - 1] + 0.5);
+            if (gap_steps > 0) {
+                cache_advance(m, c, cache_mean, cache_cv, gap_steps, n_max_steps);
+            }
+        }
+
+        // Site emission: het -> alpha += 1
+        int w = global_s >> 6;
+        int bit = global_s & 63;
+        if (w != cur_word) {
+            xor_w = packed[(long long)hi * n_words + w]
+                  ^ packed[(long long)hj * n_words + w];
+            cur_word = w;
+        }
+        if ((xor_w >> bit) & 1ULL) {
+            float alpha = __exp10f(-2.0f * c) + 1.0f;
+            float a_log = __log10f(alpha);
+            float b_log = -2.0f * c - m;
+            m = a_log - b_log;
+            c = -0.5f * a_log;
+        }
+
+        long long idx = (long long)s * n_pairs + pid;
+        fwd_mean[idx] = m;
+        fwd_cv_out[idx] = c;
+    }
+}
+
+// ============================================================
 // Backward pass + combine with cache
 // ============================================================
 template<bool WRITE_CI>
@@ -592,6 +652,95 @@ __global__ void gamma_smc_cached_backward_kernel(
 }
 
 // ============================================================
+// Backward pass + combine with cache on a local site block
+// ============================================================
+template<bool WRITE_CI>
+__global__ void gamma_smc_cached_backward_block_kernel(
+    const uint64_t* __restrict__ packed,
+    int n_words,
+    const double* __restrict__ positions,
+    int site_start,
+    int block_S,
+    float Ne,
+    const int* __restrict__ pair_i,
+    const int* __restrict__ pair_j,
+    int n_pairs,
+    const float* __restrict__ cache_mean,
+    const float* __restrict__ cache_cv,
+    int n_max_steps,
+    const float* __restrict__ fwd_mean_in,
+    const float* __restrict__ fwd_cv_in,
+    float* __restrict__ mean_out,
+    float* __restrict__ lower_out,
+    float* __restrict__ upper_out)
+{
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= n_pairs) return;
+
+    int hi = pair_i[pid];
+    int hj = pair_j[pid];
+
+    float m = 0.0f, c = 0.0f;
+    float unscale = 2.0f * Ne;
+    int cur_word = -1;
+    uint64_t xor_w = 0;
+
+    for (int s = block_S - 1; s >= 0; s--) {
+        int global_s = site_start + s;
+
+        // Backward state BEFORE emission
+        float bwd_a = __exp10f(-2.0f * c);
+        float bwd_b = __exp10f(-2.0f * c - m);
+
+        // Forward state
+        long long idx = (long long)s * n_pairs + pid;
+        float fm = fwd_mean_in[idx], fc = fwd_cv_in[idx];
+        float fwd_a = __exp10f(-2.0f * fc);
+        float fwd_b = __exp10f(-2.0f * fc - fm);
+
+        // Combine
+        float a_s = fmaxf(fwd_a + bwd_a - 1.0f, 1.0f);
+        float b_s = fmaxf(fwd_b + bwd_b - 1.0f, 1e-10f);
+        float mean_gen = (a_s / b_s) * unscale;
+        mean_out[idx] = mean_gen;
+
+        if constexpr (WRITE_CI) {
+            float inv9a = __frcp_rn(9.0f * a_s);
+            float sq = __fsqrt_rn(inv9a);
+            float base = 1.0f - inv9a;
+            float lo_f = fmaxf(base - 1.96f * sq, 0.0f);
+            float hi_f = base + 1.96f * sq;
+            lower_out[idx] = fmaxf(mean_gen * lo_f * lo_f * lo_f, 0.0f);
+            upper_out[idx] = mean_gen * hi_f * hi_f * hi_f;
+        }
+
+        // Absorb emission
+        int w = global_s >> 6;
+        int bit = global_s & 63;
+        if (w != cur_word) {
+            xor_w = packed[(long long)hi * n_words + w]
+                  ^ packed[(long long)hj * n_words + w];
+            cur_word = w;
+        }
+        if ((xor_w >> bit) & 1ULL) {
+            float alpha = __exp10f(-2.0f * c) + 1.0f;
+            float a_log = __log10f(alpha);
+            float b_log = -2.0f * c - m;
+            m = a_log - b_log;
+            c = -0.5f * a_log;
+        }
+
+        // Transition to s-1 within the local block
+        if (s > 0) {
+            int gap_steps = (int)(positions[global_s] - positions[global_s - 1] + 0.5);
+            if (gap_steps > 0) {
+                cache_advance(m, c, cache_mean, cache_cv, gap_steps, n_max_steps);
+            }
+        }
+    }
+}
+
+// ============================================================
 // Host launcher — cached version
 // ============================================================
 void gamma_smc_flow_cached_fb_gpu(
@@ -650,6 +799,92 @@ void gamma_smc_flow_cached_fb_gpu(
         return;
     }
     cudaDeviceSynchronize();
+}
+
+// ============================================================
+// Host launcher — cached version on a local site block
+// ============================================================
+void gamma_smc_flow_cached_fb_block_gpu_async(
+    const uint64_t* packed, int n_words,
+    const double* positions,
+    int site_start, int block_S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    const float* d_cache_mean, const float* d_cache_cv,
+    int n_max_steps,
+    float* fwd_buf,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,
+    float* tmrca_upper_out,
+    void* stream_handle)
+{
+    const int block = 256;
+    int grid = (n_pairs + block - 1) / block;
+    cudaStream_t stream = static_cast<cudaStream_t>(stream_handle);
+
+    float* fwd_mean = fwd_buf;
+    float* fwd_cv   = fwd_buf + (long long)block_S * n_pairs;
+
+    gamma_smc_cached_forward_block_kernel<<<grid, block, 0, stream>>>(
+        packed, n_words, positions, site_start, block_S,
+        pair_i, pair_j, n_pairs,
+        d_cache_mean, d_cache_cv, n_max_steps,
+        fwd_mean, fwd_cv);
+
+    cudaError_t err = cudaPeekAtLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "gamma_smc_cached forward block: %s\n", cudaGetErrorString(err));
+        return;
+    }
+
+    bool ci = (tmrca_lower_out != nullptr && tmrca_upper_out != nullptr);
+    if (ci) {
+        gamma_smc_cached_backward_block_kernel<true><<<grid, block, 0, stream>>>(
+            packed, n_words, positions, site_start, block_S, Ne,
+            pair_i, pair_j, n_pairs,
+            d_cache_mean, d_cache_cv, n_max_steps,
+            fwd_mean, fwd_cv,
+            tmrca_mean_out, tmrca_lower_out, tmrca_upper_out);
+    } else {
+        gamma_smc_cached_backward_block_kernel<false><<<grid, block, 0, stream>>>(
+            packed, n_words, positions, site_start, block_S, Ne,
+            pair_i, pair_j, n_pairs,
+            d_cache_mean, d_cache_cv, n_max_steps,
+            fwd_mean, fwd_cv,
+            tmrca_mean_out, nullptr, nullptr);
+    }
+
+    err = cudaPeekAtLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "gamma_smc_cached backward block: %s\n", cudaGetErrorString(err));
+        return;
+    }
+}
+
+void gamma_smc_flow_cached_fb_block_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions,
+    int site_start, int block_S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    const float* d_cache_mean, const float* d_cache_cv,
+    int n_max_steps,
+    float* fwd_buf,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,
+    float* tmrca_upper_out)
+{
+    gamma_smc_flow_cached_fb_block_gpu_async(
+        packed, n_words, positions,
+        site_start, block_S, Ne,
+        pair_i, pair_j, n_pairs,
+        d_cache_mean, d_cache_cv, n_max_steps,
+        fwd_buf,
+        tmrca_mean_out,
+        tmrca_lower_out,
+        tmrca_upper_out,
+        nullptr);
+    cudaStreamSynchronize(nullptr);
 }
 
 // ============================================================

@@ -69,6 +69,21 @@ void gamma_smc_flow_cached_fb_gpu(
     float* tmrca_lower_out,
     float* tmrca_upper_out);
 
+// GPU forward-backward on a padded site block [site_start, site_start + block_S).
+// Output arrays are site-major over the local block shape [block_S × n_pairs].
+void gamma_smc_flow_cached_fb_block_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions,
+    int site_start, int block_S,
+    float Ne,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    const float* d_cache_mean, const float* d_cache_cv,
+    int n_max_steps,
+    float* fwd_buf,
+    float* tmrca_mean_out,
+    float* tmrca_lower_out,
+    float* tmrca_upper_out);
+
 // GPU forward-only with interleaved float2 cache. No forward buffer needed.
 // Single pass: outputs mean (and optionally CI) directly.
 // d_cache: [n_max_steps × FF_GRID] interleaved (mean, cv) float pairs on GPU.
