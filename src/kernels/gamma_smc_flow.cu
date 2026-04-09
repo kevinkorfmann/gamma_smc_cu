@@ -569,6 +569,10 @@ __global__ void gamma_smc_cached_forward_block_kernel(
 // ============================================================
 // Backward pass + combine with cache
 // ============================================================
+// alpha_out / beta_out are optional (nullptr to skip). When non-null, the
+// per-site combined Gamma posterior parameters in scaled coalescent time
+// (T_scaled = T / (2*Ne)) are written there. The branch on the pointer is
+// uniform across the warp so it has negligible cost when unused.
 template<bool WRITE_CI>
 __global__ void gamma_smc_cached_backward_kernel(
     const uint64_t* __restrict__ packed,
@@ -586,7 +590,9 @@ __global__ void gamma_smc_cached_backward_kernel(
     const float* __restrict__ fwd_cv_in,
     float* __restrict__ mean_out,
     float* __restrict__ lower_out,
-    float* __restrict__ upper_out)
+    float* __restrict__ upper_out,
+    float* __restrict__ alpha_out,
+    float* __restrict__ beta_out)
 {
     int pid = blockIdx.x * blockDim.x + threadIdx.x;
     if (pid >= n_pairs) return;
@@ -626,6 +632,9 @@ __global__ void gamma_smc_cached_backward_kernel(
             upper_out[idx] = mean_gen * hi_f * hi_f * hi_f;
         }
 
+        if (alpha_out != nullptr) alpha_out[idx] = a_s;
+        if (beta_out  != nullptr) beta_out[idx]  = b_s;
+
         // Absorb emission
         int w = s >> 6;
         int bit = s & 63;
@@ -654,6 +663,9 @@ __global__ void gamma_smc_cached_backward_kernel(
 // ============================================================
 // Backward pass + combine with cache on a local site block
 // ============================================================
+// alpha_out / beta_out are optional posterior outputs over the LOCAL block
+// shape (block_S × n_pairs); the bindings layer is responsible for stitching
+// the core slice back into the global (n_sites × n_pairs) array.
 template<bool WRITE_CI>
 __global__ void gamma_smc_cached_backward_block_kernel(
     const uint64_t* __restrict__ packed,
@@ -672,7 +684,9 @@ __global__ void gamma_smc_cached_backward_block_kernel(
     const float* __restrict__ fwd_cv_in,
     float* __restrict__ mean_out,
     float* __restrict__ lower_out,
-    float* __restrict__ upper_out)
+    float* __restrict__ upper_out,
+    float* __restrict__ alpha_out,
+    float* __restrict__ beta_out)
 {
     int pid = blockIdx.x * blockDim.x + threadIdx.x;
     if (pid >= n_pairs) return;
@@ -714,6 +728,9 @@ __global__ void gamma_smc_cached_backward_block_kernel(
             upper_out[idx] = mean_gen * hi_f * hi_f * hi_f;
         }
 
+        if (alpha_out != nullptr) alpha_out[idx] = a_s;
+        if (beta_out  != nullptr) beta_out[idx]  = b_s;
+
         // Absorb emission
         int w = global_s >> 6;
         int bit = global_s & 63;
@@ -753,7 +770,9 @@ void gamma_smc_flow_cached_fb_gpu(
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
-    float* tmrca_upper_out)
+    float* tmrca_upper_out,
+    float* posterior_alpha_out,
+    float* posterior_beta_out)
 {
     const int block = 256;
     int grid = (n_pairs + block - 1) / block;
@@ -783,14 +802,16 @@ void gamma_smc_flow_cached_fb_gpu(
             pair_i, pair_j, n_pairs,
             d_cache_mean, d_cache_cv, n_max_steps,
             fwd_mean, fwd_cv,
-            tmrca_mean_out, tmrca_lower_out, tmrca_upper_out);
+            tmrca_mean_out, tmrca_lower_out, tmrca_upper_out,
+            posterior_alpha_out, posterior_beta_out);
     } else {
         gamma_smc_cached_backward_kernel<false><<<grid, block>>>(
             packed, n_words, positions, S, Ne,
             pair_i, pair_j, n_pairs,
             d_cache_mean, d_cache_cv, n_max_steps,
             fwd_mean, fwd_cv,
-            tmrca_mean_out, nullptr, nullptr);
+            tmrca_mean_out, nullptr, nullptr,
+            posterior_alpha_out, posterior_beta_out);
     }
 
     err = cudaGetLastError();
@@ -816,6 +837,8 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
     float* tmrca_mean_out,
     float* tmrca_lower_out,
     float* tmrca_upper_out,
+    float* posterior_alpha_out,
+    float* posterior_beta_out,
     void* stream_handle)
 {
     const int block = 256;
@@ -844,14 +867,16 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
             pair_i, pair_j, n_pairs,
             d_cache_mean, d_cache_cv, n_max_steps,
             fwd_mean, fwd_cv,
-            tmrca_mean_out, tmrca_lower_out, tmrca_upper_out);
+            tmrca_mean_out, tmrca_lower_out, tmrca_upper_out,
+            posterior_alpha_out, posterior_beta_out);
     } else {
         gamma_smc_cached_backward_block_kernel<false><<<grid, block, 0, stream>>>(
             packed, n_words, positions, site_start, block_S, Ne,
             pair_i, pair_j, n_pairs,
             d_cache_mean, d_cache_cv, n_max_steps,
             fwd_mean, fwd_cv,
-            tmrca_mean_out, nullptr, nullptr);
+            tmrca_mean_out, nullptr, nullptr,
+            posterior_alpha_out, posterior_beta_out);
     }
 
     err = cudaPeekAtLastError();
@@ -872,7 +897,9 @@ void gamma_smc_flow_cached_fb_block_gpu(
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
-    float* tmrca_upper_out)
+    float* tmrca_upper_out,
+    float* posterior_alpha_out,
+    float* posterior_beta_out)
 {
     gamma_smc_flow_cached_fb_block_gpu_async(
         packed, n_words, positions,
@@ -883,6 +910,8 @@ void gamma_smc_flow_cached_fb_block_gpu(
         tmrca_mean_out,
         tmrca_lower_out,
         tmrca_upper_out,
+        posterior_alpha_out,
+        posterior_beta_out,
         nullptr);
     cudaStreamSynchronize(nullptr);
 }

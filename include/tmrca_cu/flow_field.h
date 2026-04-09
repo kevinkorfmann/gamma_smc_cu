@@ -57,6 +57,12 @@ void gamma_smc_flow_fb_gpu(
 // GPU forward-backward with precomputed multi-step cache (fast path).
 // d_cache_mean, d_cache_cv: [n_max_steps × FF_GRID] on GPU.
 // At each site, gap→single bilinear lookup. No transcendentals in the hot path.
+//
+// posterior_alpha_out / posterior_beta_out are optional; pass nullptr to skip.
+// When non-null, they receive the per-site combined Gamma posterior parameters
+// (a_s, b_s) in scaled coalescent time (T_scaled = T / (2*Ne)). The kernel
+// branches on the pointer uniformly across the warp, so the cost when unused
+// is negligible.
 void gamma_smc_flow_cached_fb_gpu(
     const uint64_t* packed, int n_words,
     const double* positions, int S,
@@ -67,10 +73,13 @@ void gamma_smc_flow_cached_fb_gpu(
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
-    float* tmrca_upper_out);
+    float* tmrca_upper_out,
+    float* posterior_alpha_out = nullptr,
+    float* posterior_beta_out = nullptr);
 
 // GPU forward-backward on a padded site block [site_start, site_start + block_S).
 // Output arrays are site-major over the local block shape [block_S × n_pairs].
+// posterior_alpha_out / posterior_beta_out follow the same convention as above.
 void gamma_smc_flow_cached_fb_block_gpu(
     const uint64_t* packed, int n_words,
     const double* positions,
@@ -82,7 +91,9 @@ void gamma_smc_flow_cached_fb_block_gpu(
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
-    float* tmrca_upper_out);
+    float* tmrca_upper_out,
+    float* posterior_alpha_out = nullptr,
+    float* posterior_beta_out = nullptr);
 
 // GPU forward-only with interleaved float2 cache. No forward buffer needed.
 // Single pass: outputs mean (and optionally CI) directly.

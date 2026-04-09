@@ -1940,7 +1940,9 @@ extern void gamma_smc_flow_cached_fb_block_gpu(
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
-    float* tmrca_upper_out);
+    float* tmrca_upper_out,
+    float* posterior_alpha_out,
+    float* posterior_beta_out);
 
 extern void gamma_smc_flow_cached_fb_block_gpu_async(
     const uint64_t* packed, int n_words,
@@ -1954,6 +1956,8 @@ extern void gamma_smc_flow_cached_fb_block_gpu_async(
     float* tmrca_mean_out,
     float* tmrca_lower_out,
     float* tmrca_upper_out,
+    float* posterior_alpha_out,
+    float* posterior_beta_out,
     void* stream_handle);
 
 static void ensure_flow_field(const std::string& path) {
@@ -2325,7 +2329,8 @@ py::dict py_gamma_smc_flow_cached_fb(
             d_pi + offset, d_pj + offset, chunk,
             g_d_cache_mean, g_d_cache_cv, g_cache_n_steps,
             d_fwd_buf,
-            d_mean, d_lower, d_upper);
+            d_mean, d_lower, d_upper,
+            nullptr, nullptr);
 
         if (chunk == n_pairs) {
             size_t bytes = (size_t)S * chunk * sizeof(float);
@@ -2736,11 +2741,16 @@ public:
         return result;
     }
 
-    py::dict run_fb(std::vector<std::pair<int, int>> pairs, bool mean_only) {
+    py::dict run_fb(std::vector<std::pair<int, int>> pairs, bool mean_only,
+                    bool return_posterior) {
         int n_pairs = (int)pairs.size();
         if (n_pairs == 0) {
             py::dict result;
             result["mean"] = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, 0});
+            if (return_posterior) {
+                result["posterior_alpha"] = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, 0});
+                result["posterior_beta"]  = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, 0});
+            }
             return result;
         }
 
@@ -2755,13 +2765,20 @@ public:
 
         auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
         py::array_t<float> lower_out, upper_out;
+        py::array_t<float> alpha_out, beta_out;
         if (ci) {
             lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
             upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
         }
+        if (return_posterior) {
+            alpha_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            beta_out  = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        }
         float* h_mean = mean_out.mutable_data();
         float* h_lower = ci ? lower_out.mutable_data() : nullptr;
         float* h_upper = ci ? upper_out.mutable_data() : nullptr;
+        float* h_alpha = return_posterior ? alpha_out.mutable_data() : nullptr;
+        float* h_beta  = return_posterior ? beta_out.mutable_data()  : nullptr;
 
         {
             py::gil_scoped_release release;
@@ -2772,6 +2789,13 @@ public:
             CUDA_CHECK(cudaMalloc(&d_fwd_buf, fwd_buf_bytes));
             alloc_output(n_pairs, ci);
 
+            float* d_alpha = nullptr;
+            float* d_beta  = nullptr;
+            if (return_posterior) {
+                CUDA_CHECK(cudaMalloc(&d_alpha, bytes));
+                CUDA_CHECK(cudaMalloc(&d_beta,  bytes));
+            }
+
             CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
             CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
 
@@ -2780,7 +2804,8 @@ public:
                 d_pi_, d_pj_, n_pairs,
                 ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
                 d_fwd_buf,
-                d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr);
+                d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr,
+                d_alpha, d_beta);
 
             cudaFree(d_fwd_buf);
 
@@ -2789,6 +2814,12 @@ public:
                 CUDA_CHECK(cudaMemcpy(h_lower, d_lower_, bytes, cudaMemcpyDeviceToHost));
                 CUDA_CHECK(cudaMemcpy(h_upper, d_upper_, bytes, cudaMemcpyDeviceToHost));
             }
+            if (return_posterior) {
+                CUDA_CHECK(cudaMemcpy(h_alpha, d_alpha, bytes, cudaMemcpyDeviceToHost));
+                CUDA_CHECK(cudaMemcpy(h_beta,  d_beta,  bytes, cudaMemcpyDeviceToHost));
+                cudaFree(d_alpha);
+                cudaFree(d_beta);
+            }
         }
 
         py::dict result;
@@ -2796,6 +2827,10 @@ public:
         if (ci) {
             result["lower"] = lower_out;
             result["upper"] = upper_out;
+        }
+        if (return_posterior) {
+            result["posterior_alpha"] = alpha_out;
+            result["posterior_beta"]  = beta_out;
         }
         return result;
     }
@@ -2806,7 +2841,8 @@ public:
         int flank_sites,
         int pair_batch_size,
         int max_streams,
-        bool mean_only)
+        bool mean_only,
+        bool return_posterior)
     {
         if (core_block_sites <= 0) {
             throw std::invalid_argument("core_block_sites must be positive.");
@@ -2819,6 +2855,11 @@ public:
         }
         if (max_streams <= 0) {
             throw std::invalid_argument("max_streams must be positive.");
+        }
+        if (return_posterior && max_streams > 1) {
+            throw std::invalid_argument(
+                "return_posterior=True is currently only supported with max_streams=1. "
+                "Run blockwise posterior decoding in single-stream mode.");
         }
 
         int n_pairs = (int)pairs.size();
@@ -2840,10 +2881,18 @@ public:
 
         if (n_pairs == 0) {
             result["mean"] = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, 0});
+            if (return_posterior) {
+                result["posterior_alpha"] = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, 0});
+                result["posterior_beta"]  = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, 0});
+            }
             return result;
         }
         if (blocks.empty()) {
             result["mean"] = py::array_t<float>(std::vector<ssize_t>{0, (ssize_t)n_pairs});
+            if (return_posterior) {
+                result["posterior_alpha"] = py::array_t<float>(std::vector<ssize_t>{0, (ssize_t)n_pairs});
+                result["posterior_beta"]  = py::array_t<float>(std::vector<ssize_t>{0, (ssize_t)n_pairs});
+            }
             return result;
         }
 
@@ -2856,13 +2905,20 @@ public:
 
         auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
         py::array_t<float> lower_out, upper_out;
+        py::array_t<float> alpha_out, beta_out;
         if (ci) {
             lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
             upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
         }
+        if (return_posterior) {
+            alpha_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            beta_out  = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        }
         float* h_mean = mean_out.mutable_data();
         float* h_lower = ci ? lower_out.mutable_data() : nullptr;
         float* h_upper = ci ? upper_out.mutable_data() : nullptr;
+        float* h_alpha = return_posterior ? alpha_out.mutable_data() : nullptr;
+        float* h_beta  = return_posterior ? beta_out.mutable_data()  : nullptr;
 
         int max_padded_sites = 0;
         for (const auto& block : blocks) {
@@ -2884,6 +2940,8 @@ public:
                 float* d_mean_block = nullptr;
                 float* d_lower_block = nullptr;
                 float* d_upper_block = nullptr;
+                float* d_alpha_block = nullptr;
+                float* d_beta_block  = nullptr;
 
                 CUDA_CHECK(cudaMalloc(&d_pi_block, chunk_cap * sizeof(int)));
                 CUDA_CHECK(cudaMalloc(&d_pj_block, chunk_cap * sizeof(int)));
@@ -2892,6 +2950,10 @@ public:
                 if (ci) {
                     CUDA_CHECK(cudaMalloc(&d_lower_block, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
                     CUDA_CHECK(cudaMalloc(&d_upper_block, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
+                }
+                if (return_posterior) {
+                    CUDA_CHECK(cudaMalloc(&d_alpha_block, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
+                    CUDA_CHECK(cudaMalloc(&d_beta_block,  (size_t)max_padded_sites * chunk_cap * sizeof(float)));
                 }
 
                 for (const auto& block : blocks) {
@@ -2918,7 +2980,9 @@ public:
                             d_fwd_block,
                             d_mean_block,
                             ci ? d_lower_block : nullptr,
-                            ci ? d_upper_block : nullptr);
+                            ci ? d_upper_block : nullptr,
+                            return_posterior ? d_alpha_block : nullptr,
+                            return_posterior ? d_beta_block  : nullptr);
 
                         auto copy_core = [&](float* d_src, float* h_dst) {
                             CUDA_CHECK(cudaMemcpy2D(
@@ -2936,6 +3000,10 @@ public:
                             copy_core(d_lower_block, h_lower);
                             copy_core(d_upper_block, h_upper);
                         }
+                        if (return_posterior) {
+                            copy_core(d_alpha_block, h_alpha);
+                            copy_core(d_beta_block,  h_beta);
+                        }
                     }
                 }
 
@@ -2945,6 +3013,8 @@ public:
                 cudaFree(d_mean_block);
                 if (d_lower_block) cudaFree(d_lower_block);
                 if (d_upper_block) cudaFree(d_upper_block);
+                if (d_alpha_block) cudaFree(d_alpha_block);
+                if (d_beta_block)  cudaFree(d_beta_block);
             } else {
                 struct StreamScratch {
                     cudaStream_t stream = nullptr;
@@ -3000,6 +3070,7 @@ public:
                         scratch.d_mean,
                         ci ? scratch.d_lower : nullptr,
                         ci ? scratch.d_upper : nullptr,
+                        nullptr, nullptr,  // return_posterior gated to single-stream only
                         scratch.stream);
 
                     auto copy_core = [&](float* d_src, float* d_dst) {
@@ -3065,6 +3136,10 @@ public:
         if (ci) {
             result["lower"] = lower_out;
             result["upper"] = upper_out;
+        }
+        if (return_posterior) {
+            result["posterior_alpha"] = alpha_out;
+            result["posterior_beta"]  = beta_out;
         }
         return result;
     }
@@ -3434,18 +3509,25 @@ PYBIND11_MODULE(_core, m) {
              "No forward buffer needed — single pass, pinned D2H.",
              py::arg("pairs"), py::arg("mean_only") = true)
         .def("run_fb", &FlowContext::run_fb,
-             "Forward-backward smoothing. Returns dict with 'mean'.",
-             py::arg("pairs"), py::arg("mean_only") = true)
+             "Forward-backward smoothing. Returns dict with 'mean'.\n"
+             "If return_posterior=True, also returns 'posterior_alpha' and\n"
+             "'posterior_beta' (the per-site combined Gamma posterior\n"
+             "parameters in scaled coalescent time T_scaled = T / (2*Ne)).",
+             py::arg("pairs"),
+             py::arg("mean_only") = true,
+             py::arg("return_posterior") = false)
         .def("run_fb_blockwise", &FlowContext::run_fb_blockwise,
              "Experimental blockwise forward-backward smoothing.\n"
              "Decodes padded site blocks, keeps only the core sites, and stitches\n"
-             "results into the usual site-major output shape.",
+             "results into the usual site-major output shape.\n"
+             "return_posterior=True is supported only with max_streams=1.",
              py::arg("pairs"),
              py::arg("core_block_sites") = 8192,
              py::arg("flank_sites") = 2048,
              py::arg("pair_batch_size") = 256,
              py::arg("max_streams") = 1,
-             py::arg("mean_only") = true)
+             py::arg("mean_only") = true,
+             py::arg("return_posterior") = false)
         .def("run_fb_summary", &FlowContext::run_fb_summary, py::arg("pairs"))
         .def_property_readonly("device_id", &FlowContext::device_id)
         .def_property_readonly("n_haps", &FlowContext::n_haps)

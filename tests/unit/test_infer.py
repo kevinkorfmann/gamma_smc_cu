@@ -132,6 +132,74 @@ class TestInferEdgeCases:
         assert result["mean"].shape[1] == 0
 
 
+class TestInferModes:
+    """All three output modes for tmrca_cu.infer()."""
+
+    def test_mean_only(self, ts):
+        pairs = [(0, 1), (2, 3)]
+        result = tmrca_cu.infer(ts, pairs=pairs, mean_only=True)
+        assert set(result.keys()) >= {"mean", "pairs", "positions"}
+        assert "lower" not in result
+        assert "upper" not in result
+        assert "posterior_alpha" not in result
+        assert "posterior_beta" not in result
+        assert result["mean"].shape == (ts.num_sites, 2)
+        assert result["mean"].dtype == np.float32
+        assert np.all(result["mean"] > 0)
+
+    def test_with_ci(self, ts):
+        pairs = [(0, 1), (2, 3)]
+        result = tmrca_cu.infer(ts, pairs=pairs, mean_only=False)
+        assert {"mean", "lower", "upper"} <= set(result.keys())
+        assert "posterior_alpha" not in result
+        for key in ("lower", "mean", "upper"):
+            assert result[key].shape == (ts.num_sites, 2)
+            assert result[key].dtype == np.float32
+        assert np.all(result["lower"] <= result["mean"] + 1e-3)
+        assert np.all(result["mean"] <= result["upper"] + 1e-3)
+
+    def test_with_posterior_mean_only(self, ts):
+        pairs = [(0, 1), (2, 3)]
+        result = tmrca_cu.infer(
+            ts, pairs=pairs, mean_only=True, return_posterior=True
+        )
+        assert {"mean", "posterior_alpha", "posterior_beta"} <= set(result.keys())
+        assert "lower" not in result
+        assert "upper" not in result
+        for key in ("posterior_alpha", "posterior_beta"):
+            assert result[key].shape == (ts.num_sites, 2)
+            assert result[key].dtype == np.float32
+            assert np.all(result[key] > 0)
+        # Posterior mean reconstructed from (alpha, beta) in scaled time
+        # should match the returned `mean` array within float precision.
+        Ne = 10000.0
+        recon = (result["posterior_alpha"] / result["posterior_beta"]) * 2.0 * Ne
+        np.testing.assert_allclose(recon, result["mean"], rtol=1e-4, atol=1e-2)
+
+    def test_with_posterior_and_ci(self, ts):
+        pairs = [(0, 1), (2, 3)]
+        result = tmrca_cu.infer(
+            ts, pairs=pairs, mean_only=False, return_posterior=True
+        )
+        expected = {"mean", "lower", "upper", "posterior_alpha", "posterior_beta"}
+        assert expected <= set(result.keys())
+        # All five tmrca arrays have the same shape
+        for key in expected:
+            assert result[key].shape == (ts.num_sites, 2)
+        # Reconstructed posterior mean still matches
+        Ne = 10000.0
+        recon = (result["posterior_alpha"] / result["posterior_beta"]) * 2.0 * Ne
+        np.testing.assert_allclose(recon, result["mean"], rtol=1e-4, atol=1e-2)
+
+    def test_posterior_does_not_change_mean(self, ts):
+        pairs = [(0, 1), (2, 3)]
+        baseline = tmrca_cu.infer(ts, pairs=pairs, mean_only=True)
+        with_post = tmrca_cu.infer(
+            ts, pairs=pairs, mean_only=True, return_posterior=True
+        )
+        np.testing.assert_array_equal(baseline["mean"], with_post["mean"])
+
+
 class TestInferBlockwise:
     def test_requires_explicit_pairs(self, genotype_data):
         G, pos = genotype_data
@@ -189,6 +257,7 @@ class TestInferBlockwise:
                 pair_batch_size,
                 max_streams,
                 mean_only,
+                return_posterior=False,
             ):
                 calls["run"] = {
                     "pairs": list(pairs),
@@ -197,6 +266,7 @@ class TestInferBlockwise:
                     "pair_batch_size": pair_batch_size,
                     "max_streams": max_streams,
                     "mean_only": mean_only,
+                    "return_posterior": return_posterior,
                 }
                 return {
                     "mean": np.ones((len(pos), len(pairs)), dtype=np.float32),
@@ -229,6 +299,7 @@ class TestInferBlockwise:
             "pair_batch_size": 32,
             "max_streams": 3,
             "mean_only": False,
+            "return_posterior": False,
         }
 
     def test_single_block_matches_full_sequence(self, genotype_data):
@@ -400,6 +471,88 @@ class TestInferBlockwise:
                 pairs=pairs,
                 flow_field_path="dummy-flow-field.txt",
                 core_block_sites="auto",
+            )
+
+    def test_blockwise_mean_only(self, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1), (2, 3)]
+        result = tmrca_cu.infer_blockwise(
+            G, pos, pairs=pairs,
+            core_block_sites=G.shape[1], flank_sites=0,
+        )
+        assert "mean" in result
+        assert "lower" not in result
+        assert "posterior_alpha" not in result
+        assert result["mean"].shape == (G.shape[1], 2)
+
+    def test_blockwise_with_ci(self, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1), (2, 3)]
+        result = tmrca_cu.infer_blockwise(
+            G, pos, pairs=pairs,
+            core_block_sites=G.shape[1], flank_sites=0,
+            mean_only=False,
+        )
+        for key in ("mean", "lower", "upper"):
+            assert key in result
+        assert "posterior_alpha" not in result
+        assert np.all(result["lower"] <= result["mean"] + 1e-3)
+        assert np.all(result["mean"] <= result["upper"] + 1e-3)
+
+    def test_blockwise_with_posterior_mean_only(self, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1), (2, 3)]
+        result = tmrca_cu.infer_blockwise(
+            G, pos, pairs=pairs,
+            core_block_sites=G.shape[1], flank_sites=0,
+            return_posterior=True,
+        )
+        for key in ("mean", "posterior_alpha", "posterior_beta"):
+            assert key in result
+        assert "lower" not in result
+        Ne = 10000.0
+        recon = (result["posterior_alpha"] / result["posterior_beta"]) * 2.0 * Ne
+        np.testing.assert_allclose(recon, result["mean"], rtol=1e-4, atol=1e-2)
+
+    def test_blockwise_with_posterior_and_ci(self, genotype_data):
+        G, pos = genotype_data
+        pairs = [(0, 1), (2, 3)]
+        result = tmrca_cu.infer_blockwise(
+            G, pos, pairs=pairs,
+            core_block_sites=G.shape[1], flank_sites=0,
+            mean_only=False,
+            return_posterior=True,
+        )
+        for key in ("mean", "lower", "upper", "posterior_alpha", "posterior_beta"):
+            assert key in result
+        Ne = 10000.0
+        recon = (result["posterior_alpha"] / result["posterior_beta"]) * 2.0 * Ne
+        np.testing.assert_allclose(recon, result["mean"], rtol=1e-4, atol=1e-2)
+
+    def test_blockwise_posterior_matches_full_infer(self, genotype_data):
+        """Reconstructing posterior_mean from (alpha, beta) must match infer()'s mean."""
+        G, pos = genotype_data
+        pairs = [(0, 1), (2, 3)]
+        full = tmrca_cu.infer(G, pos, pairs=pairs)
+        blk = tmrca_cu.infer_blockwise(
+            G, pos, pairs=pairs,
+            core_block_sites=G.shape[1], flank_sites=0,
+            return_posterior=True,
+        )
+        np.testing.assert_allclose(blk["mean"], full["mean"], rtol=1e-5, atol=1e-6)
+        Ne = 10000.0
+        recon = (blk["posterior_alpha"] / blk["posterior_beta"]) * 2.0 * Ne
+        np.testing.assert_allclose(recon, full["mean"], rtol=1e-4, atol=1e-2)
+
+    def test_blockwise_posterior_rejects_multi_stream(self, genotype_data):
+        G, pos = genotype_data
+        with pytest.raises(ValueError, match="return_posterior"):
+            tmrca_cu.infer_blockwise(
+                G, pos, pairs=[(0, 1)],
+                flow_field_path="dummy-flow-field.txt",
+                core_block_sites=G.shape[1], flank_sites=0,
+                return_posterior=True,
+                max_streams=2,
             )
 
     def test_streamed_blockwise_matches_single_stream(self, genotype_data):

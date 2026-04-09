@@ -138,8 +138,23 @@ def infer(
     pairs=None,
     flow_field_path=None,
     mean_only=True,
+    return_posterior=False,
 ):
-    """Estimate pairwise TMRCA at every segregating site."""
+    """Estimate pairwise TMRCA at every segregating site.
+
+    Parameters
+    ----------
+    mean_only : bool, default True
+        If False, also return Wilson-Hilferty 95% CI bounds as ``lower``
+        and ``upper`` arrays.
+    return_posterior : bool, default False
+        If True, also return the per-site combined Gamma posterior
+        parameters as ``posterior_alpha`` and ``posterior_beta`` arrays
+        in scaled coalescent time (T_scaled = T / (2*Ne)). Mean in
+        generations is then ``(alpha / beta) * 2 * Ne``; arbitrary
+        quantiles can be computed via ``scipy.stats.gamma(alpha,
+        scale=2*Ne/beta).ppf(q)``.
+    """
     from tmrca_cu import _core
 
     G, positions = _coerce_inputs(G_or_ts, positions)
@@ -155,7 +170,11 @@ def infer(
     ctx = _core.FlowContext(
         G, positions, float(Ne), mu, rho, flow_field_path, 0
     )
-    result = ctx.run_fb(pairs, mean_only=mean_only)
+    result = ctx.run_fb(
+        pairs,
+        mean_only=mean_only,
+        return_posterior=return_posterior,
+    )
     result["pairs"] = pairs
     result["positions"] = positions
     return result
@@ -175,6 +194,7 @@ def infer_blockwise(
     pair_batch_size=-1,
     max_streams=1,
     verbose=False,
+    return_posterior=False,
 ):
     """Blockwise Gamma-SMC forward-backward decoding for explicit pairs.
 
@@ -219,12 +239,22 @@ def infer_blockwise(
         for large inputs at the cost of ~2x peak GPU memory.
     verbose : bool, default False
         If True, print the chosen block sizing and memory estimate.
+    return_posterior : bool, default False
+        If True, also return the per-site combined Gamma posterior
+        parameters as ``posterior_alpha`` and ``posterior_beta`` arrays.
+        Currently supported only with ``max_streams=1``.
     """
     from tmrca_cu import _core
 
     # ----- argument validation that doesn't require knowing n_sites -----
     if pairs is None:
         raise ValueError("infer_blockwise requires explicit pairs in v1.")
+    if return_posterior and max_streams > 1:
+        raise ValueError(
+            "infer_blockwise: return_posterior=True is currently only supported "
+            "with max_streams=1. Run blockwise posterior decoding in single-stream "
+            "mode."
+        )
     if flank_sites < 0:
         raise ValueError("flank_sites must be non-negative.")
     if pair_batch_size == 0 or pair_batch_size < -1:
@@ -317,6 +347,7 @@ def infer_blockwise(
         pair_batch_size=effective_pair_batch_size,
         max_streams=max_streams,
         mean_only=mean_only,
+        return_posterior=return_posterior,
     )
     result["pairs"] = pairs
     result["positions"] = positions
