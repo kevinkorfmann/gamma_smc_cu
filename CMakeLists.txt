@@ -42,7 +42,7 @@ target_link_libraries(tmrcacu_kernels PRIVATE cudart)
 # Python module
 pybind11_add_module(_core src/bindings.cpp)
 target_link_libraries(_core PRIVATE tmrcacu_kernels)
-target_include_directories(_core PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_include_directories(_core PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
 # Install the Python module into python/tmrca_cu/
 install(TARGETS _core DESTINATION ${CMAKE_SOURCE_DIR}/python/tmrca_cu)

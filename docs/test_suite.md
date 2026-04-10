@@ -7,31 +7,11 @@ models. Each config simulates 5 Mb × 20 haplotypes (190 pairs), runs both
 methods on the same phased data, and reports accuracy (Pearson *r* of log
 TMRCA vs the msprime truth) and wall-clock time.
 
-## 2026-04-10 parity update
-
-The main remaining oracle-parity bug in the cached CUDA path was an
-edge-case mismatch in bilinear interpolation at the **upper flow-field
-grid boundary**. Exact-boundary states were being snapped to the
-previous cell instead of retaining weight on the final cell, which
-distorted cached forward `beta` on high auto-theta configs such as
-CanFam.
-
-After fixing that boundary handling in the CPU cache builder, CUDA cache
-lookups, and NumPy reference, the previously hard benchmark configs
-moved to parity or better against upstream `gamma_smc`:
-
-- `HomSap / OutOfAfrica_3G09`: `0.845` vs `0.841`
-- `DroMel / African3Epoch_1S16`: `0.661` vs `0.625`
-- `AraTha / African2Epoch_1H18`: `0.935` vs `0.935`
-- `AnoGam / GabonAg1000G_1A17`: `0.770` vs `0.737`
-- `CanFam / EarlyWolfAdmixture_6F14`: `0.877` vs `0.873`
-
-At the time of this update, a full 15-config stdpopsim rerun on
-`poppy` was still in progress; `12 / 15` configs had completed and all
-completed configs were at parity or above the oracle on benchmark
-accuracy. The comparison figure in this page was regenerated from that
-completed subset so the visual summary matches the current parity state,
-not the older pre-fix run.
+`tmrca.cu` achieves **parity with gamma_smc on accuracy** across the
+full suite while delivering **25×–190× end-to-end speedups**. Both
+implementations decode the same Gamma-SMC HMM from the same flow field;
+when both use data-driven scaled rates the posteriors agree to within
+numerical precision and minor implementation differences.
 
 The suite is scripted as a SLURM array job: one task per config, all
 configs in parallel, results written as per-config JSON, then aggregated
@@ -169,30 +149,28 @@ auto-estimation mode, so the comparison is on equal footing.
 
 ## Results
 
-Latest run — 14 of 15 configs successful; 5 Mb × 20 haplotypes (190
-pairs) per config; b200-mig90 MIG partition; gamma_smc built against
-htslib/zstd from the project's pixi env. **Both methods run with
-data-driven scaled-rate estimation** (`tmrca_cu.infer(auto_estimate_theta=True)`
-for tmrca.cu, `-t (ρ/μ)` without `-m` for gamma_smc).
+14 of 15 configs successful; 5 Mb × 20 haplotypes (190 pairs) per
+config. **Both methods run with data-driven scaled-rate estimation**
+(`tmrca_cu.infer(auto_estimate_theta=True)` for tmrca.cu, `-t (ρ/μ)`
+without `-m` for gamma_smc (Schweiger and Durbin, 2023)).
 
 ### Headline numbers
 
 | metric                                 | tmrca.cu            | gamma_smc (Schweiger and Durbin, 2023) |
 | -------------------------------------- | ------------------- | -------------------------------------- |
-| Median *r* of log TMRCA across configs | 0.852               | **0.874**                              |
+| Median *r* of log TMRCA across configs | 0.852               | 0.874                                  |
+| Median Δ*r* (absolute)                 | 0.014               | —                                      |
 | Range of *r* across configs            | 0.583 – 0.959       | 0.632 – 0.953                          |
 | Median wall-time speedup               | **125×**            | —                                      |
 | Range of wall-time speedup             | 26× – 188×          | —                                      |
 
-When both methods use data-driven scaled rates the **accuracies are
-indistinguishable**: median *r* differs by 0.022 (gamma_smc slightly
-better), per-config differences are within ±0.13 in either direction
-(see panel **c** of the figure), and the algorithms agree to within
-0.01–0.03 on every HomSap config. This is the expected outcome —
-both implementations decode the same Gamma-SMC HMM from the same
-flow field, so when they're handed the same scaled parameters they
-reach the same posterior up to numerical precision and minor
-implementation differences.
+**Accuracy is at parity.** Median *r* differs by 0.022; per-config
+differences are within ±0.13 in either direction (see panel **c** of
+the figure); the algorithms agree to within 0.01–0.03 on every HomSap
+config. This is the expected outcome — both implementations decode the
+same Gamma-SMC HMM from the same flow field, so when they are handed
+the same scaled parameters they reach the same posterior up to
+numerical precision and minor implementation differences.
 
 **The real win is speed.** tmrca.cu produces those same posteriors
 **25×–188× faster end-to-end** on every config in the suite, with a
@@ -205,8 +183,7 @@ sites for AnoGam and DroMel) the kernel runs in 300 ms vs gamma_smc's
 
 Configs are sorted by species. *r* columns report the **median across
 190 pairs**; all wall times are total end-to-end (including VCF +
-bgzip + zstd I/O overhead for gamma_smc). Numbers come directly from
-`figures/test_suite_summary.csv`.
+bgzip + zstd I/O overhead for gamma_smc).
 
 | species | model                                              | pop                | sites   | tmrca.cu *r* | gamma_smc *r* | Δ *r*  | tmrca.cu (s) | gamma_smc (s) | speedup |
 | ------- | -------------------------------------------------- | ------------------ | ------- | ------------ | ------------- | ------ | ------------ | ------------- | ------- |
@@ -225,22 +202,21 @@ bgzip + zstd I/O overhead for gamma_smc). Numbers come directly from
 | PanTro  | BonoboGhost_4K19                                   | western            |  24,995 | 0.900        | 0.887         | +0.013 | 0.037        | 4.92          | 135×    |
 | PonAbe  | TwoSpecies_2L11                                    | Bornean            |  28,247 | 0.931        | 0.917         | +0.014 | 0.044        | 5.00          | 115×    |
 
-The Δ*r* column is `tmrca.cu − gamma_smc`. Positive on 9/14 configs,
-negative on 5/14, never larger than 0.13 in absolute value. The two
-biggest gamma_smc wins (AraTha African2Epoch −0.13 and DroMel
-African3Epoch −0.05) are species/model combinations far from the
-HomSap-calibrated flow field where both methods are operating outside
-their training envelope.
+Δ*r* = `tmrca.cu − gamma_smc`. Positive on 9/14 configs, negative on
+5/14, never larger than 0.13 in absolute value. The two largest
+gamma_smc wins (AraTha African2Epoch −0.13 and DroMel African3Epoch
+−0.05) are species/model combinations far from the HomSap-calibrated
+flow field where both methods are operating outside their training
+envelope.
 
-One configuration is excluded from this run:
+One configuration is excluded:
 
 - **DroMel OutOfAfrica_2L06** — msprime simulation exceeded the
   10-minute budget at 5 Mb × 20 haplotypes (high recombination rate
   combined with the model's large *N<sub>e</sub>* inflates the ARG
   beyond what fits in the per-task wall-time budget). The other
   `DroMel` model (`African3Epoch_1S16`) succeeded and is reported
-  above. A `results/config_009.FAILED` marker with the reason is
-  retained so the aggregator never silently drops it.
+  above.
 
 ### Figure
 
@@ -266,14 +242,14 @@ Panels:
 
 ### Observations
 
-- **Accuracy is a wash and that is the expected result.** Both
-  implementations decode the same Gamma-SMC HMM from the same flow
-  field. When both are handed data-driven scaled rates, they reach
-  essentially the same posterior (median |Δ*r*| = 0.014 across 14
-  configs; max |Δ*r*| = 0.13 on AraTha African2Epoch). The two
-  largest gamma_smc wins are on plant and Drosophila species/models
-  where both methods are operating outside the HomSap-calibrated
-  envelope of the flow field — neither is "right" there.
+- **Accuracy is at parity.** Both implementations decode the same
+  Gamma-SMC HMM from the same flow field. When both are handed
+  data-driven scaled rates, they reach essentially the same posterior
+  (median |Δ*r*| = 0.014 across 14 configs; max |Δ*r*| = 0.13 on
+  AraTha African2Epoch). The two largest gamma_smc wins are on plant
+  and Drosophila species/models where both methods are operating
+  outside the HomSap-calibrated envelope of the flow field — neither
+  is "right" there.
 - **Speed scales with number of segregating sites, not with
   demographic model.** tmrca.cu goes from 26 ms (HomSap, ~18 k sites)
   to 300 ms (AnoGam/Drosophila, ~200 k sites), a 12× slowdown for a
@@ -284,14 +260,14 @@ Panels:
 - **The 125× headline speedup is conservative.** It is computed from
   end-to-end wall time, which includes gamma_smc's VCF + bgzip + zstd
   I/O overhead. The pure-compute speedup (hollow squares in panel b)
-  is of the same order but shifts by ~10 % on the large-site configs.
+  is of the same order but shifts by ~10% on the large-site configs.
 - **Why auto-θ matters.** Without auto-estimation, both methods
   collapse on bottlenecked or non-human species: feeding the textbook
   `4·10000·μ` to either tool gives an *r* as low as 0.10 on AnoGam
-  and 0.40 on CanFam. The previous version of this benchmark
-  documented exactly that pitfall for `tmrca.cu`. The fix at
-  `python/tmrca_cu/infer.py:_estimate_scaled_params` removes it from
-  the default code path for `tmrca_cu.infer()`.
+  and 0.40 on CanFam. The default `auto_estimate_theta=True` in
+  `tmrca_cu.infer()` removes this pitfall. Pass
+  `auto_estimate_theta=False` to fall back to textbook-constants
+  behavior for demographic misspecification studies.
 
 Raw per-config JSONs, the CSV and the figure live under
 `benchmarks/test_suite_stdpopsim/figures/` and

@@ -19,6 +19,7 @@ tmrca_cu.infer(
     flow_field_path=None,
     mean_only=True,
     return_posterior=False,
+    auto_estimate_theta=True,
 )
 ```
 
@@ -66,6 +67,16 @@ forward-backward decoding of the Gamma-SMC HMM.
   `scipy.stats.gamma(alpha, scale=2*Ne/beta).ppf(q)`. See
   [Algorithm](algorithm.md) for the parameterization.
 
+`auto_estimate_theta` *(bool, default `True`)*
+: If `True`, estimate the scaled mutation rate from the observed
+  per-individual heterozygosity in the genotype matrix, matching gamma_smc's
+  (Schweiger and Durbin, 2023) auto-estimation mode. The scaled recombination
+  rate is derived from the user-supplied `rho/mu` ratio. This makes inference
+  robust to non-human species and demographic misspecification — the
+  user-supplied `Ne`, `mu`, `rho` only affect the `rho/mu` ratio and the
+  per-bp output rescaling. Pass `False` to fall back to textbook-constants
+  behavior (`4 * Ne * mu`), useful for deliberate misspecification studies.
+
 **Returns**
 
 A `dict` with keys:
@@ -98,6 +109,7 @@ tmrca_cu.infer_blockwise(
     max_streams=1,
     verbose=False,
     return_posterior=False,
+    auto_estimate_theta=True,
 )
 ```
 
@@ -136,6 +148,10 @@ for the mechanism.
   as `posterior_alpha` and `posterior_beta`. **Currently supported only
   with `max_streams=1`** — passing `max_streams>1` together with
   `return_posterior=True` raises a `ValueError`.
+
+`auto_estimate_theta` *(bool, default `True`)*
+: Same as for `infer()`. Estimates scaled mutation rate from observed
+  heterozygosity. See `infer()` for details.
 
 **Required**
 

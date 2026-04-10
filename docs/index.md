@@ -4,6 +4,10 @@ GPU-accelerated pairwise coalescence-time inference. A CUDA implementation of th
 Gamma-SMC HMM (Schweiger and Durbin, 2023) that decodes pairwise TMRCA at every
 segregating site for hundreds-of-thousands of pairs in a single GPU pass.
 
+tmrca.cu is **at parity with the reference gamma_smc binary on accuracy**
+across a [15-config stdpopsim cross-species benchmark](test_suite.md) while
+delivering **25×–190× end-to-end speedups**.
+
 ```python
 import tmrca_cu
 

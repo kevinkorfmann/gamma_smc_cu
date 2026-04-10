@@ -46,3 +46,12 @@ _scratch/
 
 # Archives of old results (kept locally, not pushed)
 archive_*/
+
+# Local analysis data (downloaded VCFs, caches, results)
+analysis/
+
+# Vendored third-party tools (built locally)
+vendor/
+
+# Temporary benchmark downloads
+benchmarks/poppy_results/
