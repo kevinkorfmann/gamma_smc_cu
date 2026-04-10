@@ -43,3 +43,6 @@ texput.log
 *.swo
 *~
 _scratch/
+
+# Archives of old results (kept locally, not pushed)
+archive_*/

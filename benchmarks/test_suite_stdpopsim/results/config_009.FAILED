@@ -1,6 +1,0 @@
-{
-  "config_idx": 9,
-  "species": "DroMel",
-  "model_id": "OutOfAfrica_2L06",
-  "error": "msprime simulation exceeds 10-min budget at 5 Mb x 20 hap due to ARG blowup; canceled. African3Epoch_1S16 covers DroMel."
-}
