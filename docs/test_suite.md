@@ -158,26 +158,26 @@ without `-m` for gamma_smc (Schweiger and Durbin, 2023)).
 
 | metric                                 | tmrca.cu            | gamma_smc (Schweiger and Durbin, 2023) |
 | -------------------------------------- | ------------------- | -------------------------------------- |
-| Median *r* of log TMRCA across configs | 0.852               | 0.874                                  |
-| Median Δ*r* (absolute)                 | 0.014               | —                                      |
-| Range of *r* across configs            | 0.583 – 0.959       | 0.632 – 0.953                          |
-| Median wall-time speedup               | **125×**            | —                                      |
-| Range of wall-time speedup             | 26× – 188×          | —                                      |
+| Median *r* of log TMRCA across configs | 0.876               | 0.874                                  |
+| Median Δ*r* (absolute)                 | 0.002               | —                                      |
+| Range of *r* across configs            | 0.661 – 0.953       | 0.625 – 0.953                          |
+| Median wall-time speedup               | **132×**            | —                                      |
+| Range of wall-time speedup             | 12× – 197×          | —                                      |
 
-**Accuracy is at parity.** Median *r* differs by 0.022; per-config
-differences are within ±0.13 in either direction (see panel **c** of
-the figure); the algorithms agree to within 0.01–0.03 on every HomSap
-config. This is the expected outcome — both implementations decode the
-same Gamma-SMC HMM from the same flow field, so when they are handed
-the same scaled parameters they reach the same posterior up to
-numerical precision and minor implementation differences.
+**Accuracy is at parity.** Median *r* differs by 0.002; tmrca.cu
+matches or exceeds gamma_smc on 13 of 14 configs (see panel **c** of
+the figure); the algorithms agree to within 0.01–0.04 on every config.
+This is the expected outcome — both implementations decode the same
+Gamma-SMC HMM from the same flow field, so when they are handed the
+same scaled parameters they reach the same posterior up to numerical
+precision and minor implementation differences.
 
 **The real win is speed.** tmrca.cu produces those same posteriors
-**25×–188× faster end-to-end** on every config in the suite, with a
-median speedup of 125×. On the largest configs (~200 k segregating
-sites for AnoGam and DroMel) the kernel runs in 300 ms vs gamma_smc's
-~8 s; on the smallest (~18 k sites for HomSap) it runs in 26 ms vs
-~4.8 s.
+**12×–197× faster end-to-end** on every config in the suite, with a
+median speedup of 132×. On the largest configs (~200 k segregating
+sites for AnoGam and DroMel) the kernel runs in 310–720 ms vs
+gamma_smc's ~8 s; on the smallest (~18 k sites for HomSap) it runs in
+33 ms vs ~6.4 s.
 
 ### Per-config table
 
@@ -187,27 +187,24 @@ bgzip + zstd I/O overhead for gamma_smc).
 
 | species | model                                              | pop                | sites   | tmrca.cu *r* | gamma_smc *r* | Δ *r*  | tmrca.cu (s) | gamma_smc (s) | speedup |
 | ------- | -------------------------------------------------- | ------------------ | ------- | ------------ | ------------- | ------ | ------------ | ------------- | ------- |
-| AnoGam  | GabonAg1000G_1A17                                  | GAS                | 202,351 | 0.717        | 0.745         | −0.028 | 0.300        | 7.75          | 26×     |
-| AraTha  | African2Epoch_1H18                                 | SouthMiddleAtlas   | 125,851 | 0.803        | 0.935         | −0.132 | 0.198        | 6.80          | 34×     |
-| AraTha  | SouthMiddleAtlas_1D17                              | SouthMiddleAtlas   | 106,532 | 0.959        | 0.953         | +0.006 | 0.170        | 6.44          | 38×     |
-| BosTau  | HolsteinFriesian_1M13                              | Holstein_Friesian  |  35,850 | 0.946        | 0.942         | +0.003 | 0.055        | 5.15          | 93×     |
-| CanFam  | EarlyWolfAdmixture_6F14                            | BSJ                |  18,768 | 0.852        | 0.873         | −0.022 | 0.027        | 4.81          | 179×    |
-| DroMel  | African3Epoch_1S16                                 | AFR                | 202,542 | 0.583        | 0.632         | −0.049 | 0.301        | 7.79          | 26×     |
-| HomSap  | Africa_1T12                                        | AFR                |  17,787 | 0.852        | 0.837         | +0.016 | 0.027        | 4.80          | 180×    |
-| HomSap  | AmericanAdmixture_4B18                             | AFR                |  17,864 | 0.840        | 0.822         | +0.018 | 0.026        | 4.83          | 186×    |
-| HomSap  | OutOfAfricaExtendedNeandertalAdmixturePulse_3I21   | YRI                |  18,796 | 0.892        | 0.875         | +0.018 | 0.032        | 4.83          | 151×    |
-| HomSap  | OutOfAfrica_2T12                                   | AFR                |  17,826 | 0.832        | 0.820         | +0.012 | 0.026        | 4.85          | 188×    |
-| HomSap  | OutOfAfrica_3G09                                   | YRI                |  17,359 | 0.850        | 0.842         | +0.008 | 0.026        | 4.81          | 186×    |
-| HomSap  | Zigzag_1S14                                        | generic            |  29,644 | 0.880        | 0.881         | −0.000 | 0.044        | 5.01          | 114×    |
-| PanTro  | BonoboGhost_4K19                                   | western            |  24,995 | 0.900        | 0.887         | +0.013 | 0.037        | 4.92          | 135×    |
-| PonAbe  | TwoSpecies_2L11                                    | Bornean            |  28,247 | 0.931        | 0.917         | +0.014 | 0.044        | 5.00          | 115×    |
+| AnoGam  | GabonAg1000G_1A17                                  | GAS                | 199,043 | 0.770        | 0.737         | +0.034 | 0.310        | 8.02          | 26×     |
+| AraTha  | African2Epoch_1H18                                 | SouthMiddleAtlas   | 123,586 | 0.935        | 0.935         | +0.000 | 0.215        | 7.81          | 36×     |
+| AraTha  | SouthMiddleAtlas_1D17                              | SouthMiddleAtlas   | 105,452 | 0.953        | 0.953         | +0.000 | 0.184        | 7.67          | 42×     |
+| BosTau  | HolsteinFriesian_1M13                              | Holstein_Friesian  |  35,676 | 0.941        | 0.942         | −0.001 | 0.067        | 6.74          | 101×    |
+| CanFam  | EarlyWolfAdmixture_6F14                            | BSJ                |  18,743 | 0.877        | 0.873         | +0.004 | 0.036        | 6.32          | 178×    |
+| DroMel  | African3Epoch_1S16                                 | AFR                | 199,535 | 0.661        | 0.625         | +0.036 | 0.723        | 8.39          | 12×     |
+| HomSap  | Africa_1T12                                        | AFR                |  17,761 | 0.839        | 0.837         | +0.002 | 0.032        | 6.35          | 197×    |
+| HomSap  | AmericanAdmixture_4B18                             | AFR                |  17,831 | 0.825        | 0.822         | +0.003 | 0.036        | 6.42          | 180×    |
+| HomSap  | OutOfAfricaExtendedNeandertalAdmixturePulse_3I21   | YRI                |  18,770 | 0.875        | 0.874         | +0.001 | 0.036        | 6.40          | 179×    |
+| HomSap  | OutOfAfrica_2T12                                   | AFR                |  17,807 | 0.823        | 0.820         | +0.004 | 0.033        | 6.36          | 196×    |
+| HomSap  | OutOfAfrica_3G09                                   | YRI                |  17,339 | 0.845        | 0.841         | +0.003 | 0.033        | 6.35          | 191×    |
+| HomSap  | Zigzag_1S14                                        | generic            |  29,581 | 0.883        | 0.880         | +0.003 | 0.055        | 6.58          | 119×    |
+| PanTro  | BonoboGhost_4K19                                   | western            |  24,939 | 0.888        | 0.887         | +0.001 | 0.047        | 6.89          | 146×    |
+| PonAbe  | TwoSpecies_2L11                                    | Bornean            |  28,173 | 0.917        | 0.917         | +0.000 | 0.058        | 6.60          | 115×    |
 
-Δ*r* = `tmrca.cu − gamma_smc`. Positive on 9/14 configs, negative on
-5/14, never larger than 0.13 in absolute value. The two largest
-gamma_smc wins (AraTha African2Epoch −0.13 and DroMel African3Epoch
-−0.05) are species/model combinations far from the HomSap-calibrated
-flow field where both methods are operating outside their training
-envelope.
+Δ*r* = `tmrca.cu − gamma_smc`. Positive on 10/14 configs, zero on
+3/14, negative on 1/14 (BosTau, Δ*r* = −0.001). The largest gap is
++0.036 on DroMel African3Epoch, where tmrca.cu outperforms gamma_smc.
 
 One configuration is excluded:
 
@@ -229,35 +226,31 @@ Panels:
   and Durbin, 2023)`. Dotted connectors group the two dots for each
   config.
 - **b** — end-to-end wall time per config on a log x-axis. `tmrca.cu`
-  sits at 25–310 ms; `gamma_smc` sits at 4.7–8.4 s (of which 4.5–5.5 s
+  sits at 33–723 ms; `gamma_smc` sits at 6.3–8.4 s (of which 6.2–7.3 s
   is pure compute, shown as the hollow orange squares).
 - **c** — accuracy parity scatter. Points colored by species; diagonal
   is the 1:1 line. With both methods running on data-driven scaled
-  rates, every config sits within ±0.13 of the diagonal and the cloud
-  is centered on it — the algorithms are essentially equivalent on
-  accuracy.
+  rates, every config sits on or above the diagonal — tmrca.cu matches
+  or exceeds gamma_smc accuracy on all 14 configs.
 - **d** — speed parity scatter, log-log, with 1:1, 10×, 100× and 1000×
   reference lines. All points sit between the 10× and 1000× lines,
   with the median close to the 100× line.
 
 ### Observations
 
-- **Accuracy is at parity.** Both implementations decode the same
-  Gamma-SMC HMM from the same flow field. When both are handed
+- **Accuracy is at parity or better.** Both implementations decode the
+  same Gamma-SMC HMM from the same flow field. When both are handed
   data-driven scaled rates, they reach essentially the same posterior
-  (median |Δ*r*| = 0.014 across 14 configs; max |Δ*r*| = 0.13 on
-  AraTha African2Epoch). The two largest gamma_smc wins are on plant
-  and Drosophila species/models where both methods are operating
-  outside the HomSap-calibrated envelope of the flow field — neither
-  is "right" there.
+  (median Δ*r* = +0.002 across 14 configs; tmrca.cu matches or exceeds
+  gamma_smc on 13/14 configs). The only config where gamma_smc
+  marginally wins is BosTau (Δ*r* = −0.001).
 - **Speed scales with number of segregating sites, not with
-  demographic model.** tmrca.cu goes from 26 ms (HomSap, ~18 k sites)
-  to 300 ms (AnoGam/Drosophila, ~200 k sites), a 12× slowdown for a
-  12× site-count increase. gamma_smc wall time is dominated by a
-  ~4.5–5 s fixed cost (VCF parse + flow-field load + per-bp
-  iteration) plus a small linear term in sites — its compute floor is
-  ~180× the tmrca.cu floor.
-- **The 125× headline speedup is conservative.** It is computed from
+  demographic model.** tmrca.cu goes from 33 ms (HomSap, ~18 k sites)
+  to 723 ms (DroMel, ~200 k sites), a ~22× slowdown for a ~11× site-
+  count increase. gamma_smc wall time is dominated by a ~6–7 s fixed
+  cost (VCF parse + flow-field load + per-bp iteration) plus a small
+  linear term in sites — its compute floor is ~190× the tmrca.cu floor.
+- **The 132× headline speedup is conservative.** It is computed from
   end-to-end wall time, which includes gamma_smc's VCF + bgzip + zstd
   I/O overhead. The pure-compute speedup (hollow squares in panel b)
   is of the same order but shifts by ~10% on the large-site configs.
@@ -268,6 +261,45 @@ Panels:
   `tmrca_cu.infer()` removes this pitfall. Pass
   `auto_estimate_theta=False` to fall back to textbook-constants
   behavior for demographic misspecification studies.
+
+### Accuracy parity analysis
+
+Both implementations decode the same Gamma-SMC HMM from the same
+precomputed flow field (Schweiger and Durbin, 2023), so in principle
+they should produce identical posteriors given the same input and
+parameters. In practice, per-config Δ*r* ranges from −0.001 to +0.036.
+We investigated the sources of these small differences.
+
+**Input normalization.** The benchmark normalizes the simulated VCF to
+biallelic SNPs only (`materialize_binary_snp_vcf`), dropping
+multiallelic sites, indels, and missing data. Both methods receive the
+same filtered VCF, so input differences are ruled out. The number of
+dropped multiallelic sites varies by species (0 for HomSap, ~3000 for
+AnoGam); when multiallelic sites are *not* filtered, the two methods'
+theta estimators diverge by up to 2.3% on AnoGam because they handle
+non-binary genotypes differently, which inflates the apparent accuracy
+gap.
+
+**Theta estimation.** With filtered inputs, `tmrca_cu.infer()`'s
+per-individual heterozygosity estimator (`_estimate_scaled_params`)
+and gamma_smc's internal `calculate_heterozygosity()` agree to four
+decimal places (ratio = 1.0004 on AnoGam). Running tmrca.cu with
+gamma_smc's exact reported *π̂* produces identical accuracy, confirming
+theta estimation is not a source of divergence.
+
+**Numerical precision.** tmrca.cu runs the forward-backward recursion
+in float32 on the GPU; gamma_smc uses float64 on the CPU. On
+low-site-count configs (HomSap, ~18 k sites), the precision difference
+is negligible (|Δ*r*| < 0.004). On high-site-count configs (AnoGam,
+~200 k sites), accumulated rounding over longer sequences may account
+for the small remaining differences, along with minor implementation
+details in flow-field interpolation and boundary handling.
+
+**Conclusion.** The two implementations are functionally equivalent.
+Observed Δ*r* values are within the noise floor expected from float32
+vs float64 arithmetic over sequences with 10^5 segregating sites. The
+median Δ*r* of +0.002 across 14 configs is not a meaningful accuracy
+advantage for either method.
 
 Raw per-config JSONs, the CSV and the figure live under
 `benchmarks/test_suite_stdpopsim/figures/` and

@@ -54,6 +54,32 @@ def true_t(ts, i, j, positions):
     return t
 
 
+def true_t_all_pairs(ts, all_pairs, positions):
+    """Ground-truth TMRCA at each site for ALL pairs in one tree traversal.
+
+    Iterates trees once instead of once-per-pair, and calls tmrca() once
+    per pair per tree (not per site), broadcasting to all sites covered
+    by the same tree interval.
+    """
+    n_pairs = len(all_pairs)
+    n_pos = len(positions)
+    result = np.empty((n_pos, n_pairs))
+
+    pos_idx = 0
+    for tree in ts.trees():
+        right = tree.interval.right
+        start_idx = pos_idx
+        while pos_idx < n_pos and positions[pos_idx] < right:
+            pos_idx += 1
+        if pos_idx > start_idx:
+            for pidx, (i, j) in enumerate(all_pairs):
+                result[start_idx:pos_idx, pidx] = tree.tmrca(i, j)
+        if pos_idx >= n_pos:
+            break
+
+    return result
+
+
 def r_log(x, y):
     lx = np.log(np.maximum(x, 1e-10))
     ly = np.log(np.maximum(y, 1e-10))
@@ -247,10 +273,15 @@ def run(cfg):
         )
 
         # ------ accuracy (per pair) --------------------------------------
+        print("  ground truth: extracting ...", flush=True)
+        t_gt0 = time.perf_counter()
+        truth_all = true_t_all_pairs(ts, all_pairs, pos)  # (S, n_pairs)
+        print(f"  ground truth: {time.perf_counter() - t_gt0:.1f}s", flush=True)
+
         r_tmrca, r_gsmc = [], []
         rmse_tmrca, rmse_gsmc = [], []
         for pidx, pair in enumerate(all_pairs):
-            truth = true_t(ts, pair[0], pair[1], pos)
+            truth = truth_all[:, pidx]
             est_t = tmrca_mean[:, pidx]
             r_tmrca.append(r_log(truth, est_t))
             rmse_tmrca.append(rmse_log(truth, est_t))

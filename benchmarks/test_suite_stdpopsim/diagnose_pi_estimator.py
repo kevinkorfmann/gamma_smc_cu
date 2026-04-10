@@ -27,6 +27,7 @@ import msprime
 import stdpopsim
 from scipy.stats import pearsonr
 from bench_paths import resolve_flow_field_path, resolve_gamma_smc_bin
+from bench_inputs import materialize_binary_snp_vcf
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -39,11 +40,7 @@ FF = resolve_flow_field_path(HERE)
 GSMC = resolve_gamma_smc_bin(HERE)
 
 CONFIGS = [
-    ("HomSap", "OutOfAfrica_3G09", "YRI"),
-    ("CanFam", "EarlyWolfAdmixture_6F14", "BSJ"),
     ("AnoGam", "GabonAg1000G_1A17", "GAS"),
-    ("DroMel", "African3Epoch_1S16", "AFR"),
-    ("AraTha", "African2Epoch_1H18", "SouthMiddleAtlas"),
 ]
 SEQ_LEN = 5_000_000
 N_HAP = 20
@@ -59,6 +56,25 @@ def true_t(ts, i, j, positions):
             tree = next(tit)
         t[idx] = tree.tmrca(i, j)
     return t
+
+
+def true_t_all_pairs(ts, all_pairs, positions):
+    """Ground-truth TMRCA for ALL pairs in one tree traversal."""
+    n_pairs = len(all_pairs)
+    n_pos = len(positions)
+    result = np.empty((n_pos, n_pairs))
+    pos_idx = 0
+    for tree in ts.trees():
+        right = tree.interval.right
+        start_idx = pos_idx
+        while pos_idx < n_pos and positions[pos_idx] < right:
+            pos_idx += 1
+        if pos_idx > start_idx:
+            for pidx, (i, j) in enumerate(all_pairs):
+                result[start_idx:pos_idx, pidx] = tree.tmrca(i, j)
+        if pos_idx >= n_pos:
+            break
+    return result
 
 
 def r_log_safe(x, y):
@@ -112,11 +128,12 @@ def pi_individual_het(G, positions):
     return float(np.mean(rates))
 
 
-def run_gsmc_auto(ts, nh, mu, rho, ne):
+def run_gsmc_auto(vcf_path, nh, mu, rho, ne):
     with tempfile.TemporaryDirectory() as td:
+        # Copy the filtered VCF into a temp dir for bgzip/tabix
+        import shutil
         vp = os.path.join(td, "s.vcf")
-        with open(vp, "w") as f:
-            ts.write_vcf(f, contig_id="chr1", allow_position_zero=True)
+        shutil.copy(vcf_path, vp)
         subprocess.run(f"bgzip -f {vp} && tabix -p vcf {vp}.gz",
                        shell=True, check=True, capture_output=True)
         out = os.path.join(td, "out")
@@ -153,11 +170,12 @@ def run_tmrca(G, pos, pairs, kernel_mu, kernel_rho):
     )["mean"]
 
 
-def median_r(estimates_array, pairs, ts, pos):
+def median_r(estimates_array, pairs, ts, pos, truth_all=None):
+    if truth_all is None:
+        truth_all = true_t_all_pairs(ts, pairs, pos)
     rs = []
-    for pidx, pair in enumerate(pairs):
-        truth = true_t(ts, pair[0], pair[1], pos)
-        rs.append(r_log_safe(truth, estimates_array[:, pidx]))
+    for pidx in range(len(pairs)):
+        rs.append(r_log_safe(truth_all[:, pidx], estimates_array[:, pidx]))
     a = np.asarray(rs, dtype=float)
     a = a[np.isfinite(a)]
     return float(np.median(a))
@@ -183,11 +201,17 @@ def benchmark(species_id, model_id, pop):
     )
     ts = msprime.sim_mutations(ts_raw, rate=mu, random_seed=SEED + 1)
 
-    G = ts.genotype_matrix().T.astype(np.uint8)
-    pos = np.array([v.position for v in ts.variants()], dtype=np.float64)
+    # Use the same VCF normalization as the benchmark (run_one.py)
+    _tmpdir = tempfile.mkdtemp()
+    vcf_path = os.path.join(_tmpdir, "s.vcf")
+    prepared = materialize_binary_snp_vcf(ts, vcf_path)
+    G = prepared.G
+    pos = prepared.pos
     n, S = G.shape
     pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
-    print(f"  n={n}, S={S}, mu={mu:.2e}, rho={rho:.2e}, rho/mu={rho/mu:.4f}")
+    print(f"  n={n}, S={S} (kept={prepared.n_kept_records}/{prepared.n_total_records} "
+          f"drop_non_binary={prepared.n_dropped_non_binary})")
+    print(f"  mu={mu:.2e}, rho={rho:.2e}, rho/mu={rho/mu:.4f}")
 
     pi_pair = pi_pairwise(G, pos)
     pi_ind = pi_individual_het(G, pos)
@@ -196,15 +220,20 @@ def benchmark(species_id, model_id, pop):
     print(f"  ratio (ind / pair) = {pi_ind / pi_pair:.4f}")
 
     # gsmc auto_mt to get the actual pi_hat it reports
-    gsmc_results, gsmc_pos, gsmc_pi = run_gsmc_auto(ts, n, mu, rho, NE)
+    gsmc_results, gsmc_pos, gsmc_pi = run_gsmc_auto(vcf_path, n, mu, rho, NE)
     print(f"  pi (gamma_smc reported)         = {gsmc_pi:.4e}")
     print(f"  ratio (gsmc / pair)             = {gsmc_pi / pi_pair:.4f}")
     print(f"  ratio (gsmc / ind)              = {gsmc_pi / pi_ind:.4f}")
 
+    # Precompute ground truth once for all pairs
+    print("  ground truth: extracting ...", flush=True)
+    truth_all = true_t_all_pairs(ts, pairs, pos)
+    print(f"  ground truth: done", flush=True)
+
     # gamma_smc r_log
     rs_g = []
-    for pair in pairs:
-        truth = true_t(ts, pair[0], pair[1], pos)
+    for pidx, pair in enumerate(pairs):
+        truth = truth_all[:, pidx]
         key = tuple(sorted(pair))
         if key in gsmc_results:
             est = np.interp(pos, gsmc_pos, gsmc_results[key])
@@ -225,7 +254,7 @@ def benchmark(species_id, model_id, pop):
         kernel_mu = pi_target / (4.0 * NE)
         kernel_rho = pi_target * ratio / (2.0 * NE)
         out = run_tmrca(G, pos, pairs, kernel_mu, kernel_rho)
-        med = median_r(out, pairs, ts, pos)
+        med = median_r(out, pairs, ts, pos, truth_all=truth_all)
         rows.append((label, pi_target, med))
         print(f"  tmrca.cu [{label:<28s}] r_log = {med:.4f}  (pi={pi_target:.3e})")
 
