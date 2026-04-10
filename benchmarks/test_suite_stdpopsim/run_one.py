@@ -36,6 +36,7 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 # Imported after sys.path edit so the local tmrca.cu build is found.
 from tmrca_cu import _core  # noqa: E402
+from tmrca_cu.infer import _estimate_scaled_params  # noqa: E402
 
 
 # --- helpers (copied from benchmarks/bench_demographics.py) --------------
@@ -79,8 +80,16 @@ def schweiger_pair_order(nh):
 
 
 def run_schweiger(ts, nh, mu_d, rho_d, ne_d):
-    """Run gamma_smc binary; return (dict[pair -> mean_array], positions,
-    wall_total, wall_compute).
+    """Run gamma_smc binary in auto-estimation mode; return
+    ``(dict[pair -> mean_array], positions, wall_total, wall_compute)``.
+
+    Invoked WITHOUT ``-m`` so gamma_smc reads the scaled mutation rate
+    from observed heterozygosity (``calculate_heterozygosity()``,
+    Schweiger and Durbin 2023), and with ``-t (rho/mu)`` so the scaled
+    recombination rate is derived from the same data-driven base via
+    the user-supplied ratio. This is the same parameterization that
+    ``tmrca_cu.infer(auto_estimate_theta=True)`` uses, so the two
+    methods compete on equal footing.
 
     wall_compute = just the gamma_smc subprocess itself (no VCF/bgzip/zstd).
     wall_total   = everything including I/O wrapping.
@@ -101,7 +110,7 @@ def run_schweiger(ts, nh, mu_d, rho_d, ne_d):
         t_c0 = time.perf_counter()
         result = subprocess.run(
             [GSMC, "-i", vp + ".gz", "-o", out,
-             "-m", str(4 * ne_d * mu_d), "-r", str(4 * ne_d * rho_d),
+             "-t", str(rho_d / max(mu_d, 1e-30)),
              "-f", FF, "-h"],
             capture_output=True, text=True, timeout=600,
         )
@@ -190,8 +199,18 @@ def run(cfg):
     mu, rho = cfg["mu"], cfg["rho"]
 
     # ------ tmrca.cu timing (warmup + 3 reps, take min) ------------------
+    # Replace (mu, rho) with the data-driven auto-estimate that matches
+    # gamma_smc's auto_mt mode -- the scaled mutation rate becomes the
+    # observed pairwise heterozygosity and the scaled recombination rate
+    # becomes pi_hat * (rho/mu). See tmrca_cu.infer._estimate_scaled_params.
+    # Ne is still used to invert the kernel's internal per-bp scaling.
+    kernel_mu, kernel_rho = _estimate_scaled_params(G, pos, mu, rho, ne)
+    print(
+        f"  auto-theta: pi_hat={4*ne*kernel_mu:.3e} "
+        f"(vs passed 4*Ne*mu={4*ne*mu:.3e})", flush=True,
+    )
     print("  tmrca.cu: warmup ...", flush=True)
-    ctx = _core.FlowContext(G, pos, float(ne), mu, rho, FF, 0)
+    ctx = _core.FlowContext(G, pos, float(ne), kernel_mu, kernel_rho, FF, 0)
     _ = ctx.run_fb_summary([(0, 1)])  # small warmup to page in kernels
     del ctx
 
@@ -200,7 +219,7 @@ def run(cfg):
     for rep in range(3):
         t0 = time.perf_counter()
         out = _core.gamma_smc_flow_cached_fb(
-            G, pos, all_pairs, float(ne), mu, rho, FF, True, 0
+            G, pos, all_pairs, float(ne), kernel_mu, kernel_rho, FF, True, 0
         )["mean"]  # shape (S, n_pairs)
         dt = time.perf_counter() - t0
         tmrca_times.append(dt)
