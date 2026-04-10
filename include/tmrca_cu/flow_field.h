@@ -26,12 +26,38 @@ bool load_flow_field(const char* path, FlowFieldData& out);
 // Layout: mean[n * FF_GRID + row * FF_CV_N + col], same for cv.
 struct FlowFieldCache {
     int n_max_steps;
+    float* missing_mean;  // [n_max_steps × FF_MEAN_N × FF_CV_N]
+    float* missing_cv;    // [n_max_steps × FF_MEAN_N × FF_CV_N]
     float* mean;  // [n_max_steps × FF_MEAN_N × FF_CV_N]
     float* cv;    // [n_max_steps × FF_MEAN_N × FF_CV_N]
+    float* fwd_hom_site_mean;
+    float* fwd_hom_site_cv;
+    float* fwd_het_site_mean;
+    float* fwd_het_site_cv;
+    float* bwd_hom_site_mean;
+    float* bwd_hom_site_cv;
+    float* bwd_het_site_mean;
+    float* bwd_het_site_cv;
+};
+
+struct FlowFieldDeviceCacheView {
+    const float* missing_mean;
+    const float* missing_cv;
+    const float* mean;
+    const float* cv;
+    const float* fwd_hom_site_mean;
+    const float* fwd_hom_site_cv;
+    const float* fwd_het_site_mean;
+    const float* fwd_het_site_cv;
+    const float* bwd_hom_site_mean;
+    const float* bwd_hom_site_cv;
+    const float* bwd_het_site_mean;
+    const float* bwd_het_site_cv;
+    int n_max_steps;
 };
 
 // Build multi-step "hom" cache on CPU.
-// scaled_rho = 2*Ne*rho (displacement per bp per flow field step)
+// scaled_rho = 4*Ne*rho (displacement per bp per flow field step)
 // scaled_mu  = 4*Ne*mu  (mutation emission per bp in scaled coordinates)
 // Caller owns the returned arrays (allocated with new[]).
 FlowFieldCache build_flow_field_cache(
@@ -68,8 +94,7 @@ void gamma_smc_flow_cached_fb_gpu(
     const double* positions, int S,
     float Ne,
     const int* pair_i, const int* pair_j, int n_pairs,
-    const float* d_cache_mean, const float* d_cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
@@ -86,8 +111,7 @@ void gamma_smc_flow_cached_fb_block_gpu(
     int site_start, int block_S,
     float Ne,
     const int* pair_i, const int* pair_j, int n_pairs,
-    const float* d_cache_mean, const float* d_cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
@@ -115,9 +139,17 @@ void gamma_smc_flow_cached_fb_reduce_gpu(
     const double* positions, int S,
     float Ne,
     const int* pair_i, const int* pair_j, int n_pairs,
-    const float* d_cache_mean, const float* d_cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* site_mean_out,
     float* site_min_out,
     float* site_max_out);
+
+// Debug helper: run the same cached forward kernel used by cached FB and
+// return the raw forward state buffer [mean_log10, cv_log10].
+void gamma_smc_flow_cached_forward_states_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    FlowFieldDeviceCacheView cache,
+    float* fwd_buf);

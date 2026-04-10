@@ -1888,8 +1888,18 @@ static float* g_d_flow_u = nullptr;
 static float* g_d_flow_v = nullptr;
 
 // Global: multi-step cache (rebuilt when params change)
+static float* g_d_cache_missing_mean = nullptr;
+static float* g_d_cache_missing_cv = nullptr;
 static float* g_d_cache_mean = nullptr;
 static float* g_d_cache_cv = nullptr;
+static float* g_d_cache_fwd_hom_site_mean = nullptr;
+static float* g_d_cache_fwd_hom_site_cv = nullptr;
+static float* g_d_cache_fwd_het_site_mean = nullptr;
+static float* g_d_cache_fwd_het_site_cv = nullptr;
+static float* g_d_cache_bwd_hom_site_mean = nullptr;
+static float* g_d_cache_bwd_hom_site_cv = nullptr;
+static float* g_d_cache_bwd_het_site_mean = nullptr;
+static float* g_d_cache_bwd_het_site_cv = nullptr;
 static float2* g_d_cache_f2 = nullptr;   // interleaved (mean, cv) for fwd-only kernel
 static void* g_d_cache_h2 = nullptr;    // half2 cache for fp16 kernel
 static cudaArray_t g_cache_array = nullptr;   // layered CUDA array for texture
@@ -1897,6 +1907,24 @@ static cudaTextureObject_t g_cache_tex = 0;   // hardware bilinear texture
 static int g_cache_tex_layers = 0;            // number of layers in texture
 static int g_cache_n_steps = 0;
 static float g_cache_rho = 0, g_cache_mu = 0, g_cache_Ne = 0;
+
+static FlowFieldDeviceCacheView current_cache_view() {
+    return FlowFieldDeviceCacheView{
+        g_d_cache_missing_mean,
+        g_d_cache_missing_cv,
+        g_d_cache_mean,
+        g_d_cache_cv,
+        g_d_cache_fwd_hom_site_mean,
+        g_d_cache_fwd_hom_site_cv,
+        g_d_cache_fwd_het_site_mean,
+        g_d_cache_fwd_het_site_cv,
+        g_d_cache_bwd_hom_site_mean,
+        g_d_cache_bwd_hom_site_cv,
+        g_d_cache_bwd_het_site_mean,
+        g_d_cache_bwd_het_site_cv,
+        g_cache_n_steps,
+    };
+}
 
 // Forward-declare kernel launchers (defined in gamma_smc_flow.cu)
 extern void gamma_smc_flow_tex_fwd_gpu(
@@ -1935,8 +1963,7 @@ extern void gamma_smc_flow_cached_fb_block_gpu(
     int site_start, int block_S,
     float Ne,
     const int* pair_i, const int* pair_j, int n_pairs,
-    const float* d_cache_mean, const float* d_cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
@@ -1950,8 +1977,7 @@ extern void gamma_smc_flow_cached_fb_block_gpu_async(
     int site_start, int block_S,
     float Ne,
     const int* pair_i, const int* pair_j, int n_pairs,
-    const float* d_cache_mean, const float* d_cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
@@ -1959,6 +1985,13 @@ extern void gamma_smc_flow_cached_fb_block_gpu_async(
     float* posterior_alpha_out,
     float* posterior_beta_out,
     void* stream_handle);
+
+extern void gamma_smc_flow_cached_forward_states_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    FlowFieldDeviceCacheView cache,
+    float* fwd_buf);
 
 static void ensure_flow_field(const std::string& path) {
     if (g_flow_field_loaded) return;
@@ -1984,26 +2017,66 @@ static void ensure_cache(float Ne, float mu, float rho, int n_steps,
         return;
 
     // Free old
+    if (g_d_cache_missing_mean) { cudaFree(g_d_cache_missing_mean); g_d_cache_missing_mean = nullptr; }
+    if (g_d_cache_missing_cv)   { cudaFree(g_d_cache_missing_cv); g_d_cache_missing_cv = nullptr; }
     if (g_d_cache_mean) { cudaFree(g_d_cache_mean); g_d_cache_mean = nullptr; }
     if (g_d_cache_cv)   { cudaFree(g_d_cache_cv); g_d_cache_cv = nullptr; }
+    if (g_d_cache_fwd_hom_site_mean) { cudaFree(g_d_cache_fwd_hom_site_mean); g_d_cache_fwd_hom_site_mean = nullptr; }
+    if (g_d_cache_fwd_hom_site_cv)   { cudaFree(g_d_cache_fwd_hom_site_cv); g_d_cache_fwd_hom_site_cv = nullptr; }
+    if (g_d_cache_fwd_het_site_mean) { cudaFree(g_d_cache_fwd_het_site_mean); g_d_cache_fwd_het_site_mean = nullptr; }
+    if (g_d_cache_fwd_het_site_cv)   { cudaFree(g_d_cache_fwd_het_site_cv); g_d_cache_fwd_het_site_cv = nullptr; }
+    if (g_d_cache_bwd_hom_site_mean) { cudaFree(g_d_cache_bwd_hom_site_mean); g_d_cache_bwd_hom_site_mean = nullptr; }
+    if (g_d_cache_bwd_hom_site_cv)   { cudaFree(g_d_cache_bwd_hom_site_cv); g_d_cache_bwd_hom_site_cv = nullptr; }
+    if (g_d_cache_bwd_het_site_mean) { cudaFree(g_d_cache_bwd_het_site_mean); g_d_cache_bwd_het_site_mean = nullptr; }
+    if (g_d_cache_bwd_het_site_cv)   { cudaFree(g_d_cache_bwd_het_site_cv); g_d_cache_bwd_het_site_cv = nullptr; }
     if (g_d_cache_f2)   { cudaFree(g_d_cache_f2); g_d_cache_f2 = nullptr; }
     if (g_d_cache_h2)   { cudaFree(g_d_cache_h2); g_d_cache_h2 = nullptr; }
     if (g_cache_tex)    { cudaDestroyTextureObject(g_cache_tex); g_cache_tex = 0; }
     if (g_cache_array)  { cudaFreeArray(g_cache_array); g_cache_array = nullptr; }
     g_cache_tex_layers = 0;
 
-    float scaled_rho = 2.0f * Ne * rho;
+    float scaled_rho = 4.0f * Ne * rho;
     float scaled_mu  = 4.0f * Ne * mu;
 
     FlowFieldCache cache = build_flow_field_cache(g_flow_field, n_steps,
                                                    scaled_rho, scaled_mu);
 
     size_t total = (size_t)n_steps * FF_GRID;
+    CUDA_CHECK(cudaMalloc(&g_d_cache_missing_mean, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&g_d_cache_missing_cv,   total * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_missing_mean, cache.missing_mean,
+                          total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_missing_cv, cache.missing_cv,
+                          total * sizeof(float), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMalloc(&g_d_cache_mean, total * sizeof(float)));
     CUDA_CHECK(cudaMalloc(&g_d_cache_cv,   total * sizeof(float)));
     CUDA_CHECK(cudaMemcpy(g_d_cache_mean, cache.mean,
                           total * sizeof(float), cudaMemcpyHostToDevice));
     CUDA_CHECK(cudaMemcpy(g_d_cache_cv, cache.cv,
+                          total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&g_d_cache_fwd_hom_site_mean, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&g_d_cache_fwd_hom_site_cv,   total * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_fwd_hom_site_mean, cache.fwd_hom_site_mean,
+                          total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_fwd_hom_site_cv, cache.fwd_hom_site_cv,
+                          total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&g_d_cache_fwd_het_site_mean, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&g_d_cache_fwd_het_site_cv,   total * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_fwd_het_site_mean, cache.fwd_het_site_mean,
+                          total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_fwd_het_site_cv, cache.fwd_het_site_cv,
+                          total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&g_d_cache_bwd_hom_site_mean, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&g_d_cache_bwd_hom_site_cv,   total * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_bwd_hom_site_mean, cache.bwd_hom_site_mean,
+                          total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_bwd_hom_site_cv, cache.bwd_hom_site_cv,
+                          total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMalloc(&g_d_cache_bwd_het_site_mean, total * sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&g_d_cache_bwd_het_site_cv,   total * sizeof(float)));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_bwd_het_site_mean, cache.bwd_het_site_mean,
+                          total * sizeof(float), cudaMemcpyHostToDevice));
+    CUDA_CHECK(cudaMemcpy(g_d_cache_bwd_het_site_cv, cache.bwd_het_site_cv,
                           total * sizeof(float), cudaMemcpyHostToDevice));
 
     // Build interleaved float2 cache for fwd-only kernel
@@ -2240,19 +2313,9 @@ py::dict py_gamma_smc_flow_cached_fb(
     int n_words = (S + 63) / 64;
     int n_pairs = (int)pairs.size();
 
-    // Determine cache size from data if not specified
+    // Match upstream gamma_smc's fixed default cache size.
     if (cache_steps <= 0) {
-        // Find max gap between consecutive sites
-        const double* pos = (const double*)pos_buf.ptr;
-        double max_gap = 0;
-        for (int i = 1; i < S; i++) {
-            double gap = pos[i] - pos[i - 1];
-            if (gap > max_gap) max_gap = gap;
-        }
-        // Add 10% margin, minimum 1024
-        cache_steps = std::max(1024, (int)(max_gap * 1.1) + 1);
-        // Cap at 16384 to limit memory (16384 * 2550 * 4 * 2 = 314 MB)
-        cache_steps = std::min(cache_steps, 16384);
+        cache_steps = 1000;
     }
 
     // Build/upload cache (reuses if params match)
@@ -2327,7 +2390,7 @@ py::dict py_gamma_smc_flow_cached_fb(
         gamma_smc_flow_cached_fb_gpu(
             d_packed, n_words, d_pos, S, (float)Ne,
             d_pi + offset, d_pj + offset, chunk,
-            g_d_cache_mean, g_d_cache_cv, g_cache_n_steps,
+            current_cache_view(),
             d_fwd_buf,
             d_mean, d_lower, d_upper,
             nullptr, nullptr);
@@ -2394,10 +2457,12 @@ class FlowContext {
     bool has_ci_;
     float* d_fwd_buf_ = nullptr;
     int fwd_buf_pairs_ = 0;  // how many pairs the fwd_buf can hold
+    int pair_buf_pairs_ = 0;  // how many pairs d_pi_/d_pj_ can hold
     int device_id_ = 0;  // GPU device this context lives on
     float* ctx_cache_mean_ = nullptr;
     float* ctx_cache_cv_ = nullptr;
     void* ctx_cache_h2_ = nullptr;
+    FlowFieldDeviceCacheView ctx_cache_{};
     int ctx_cache_steps_ = 0;
     float ctx_cache_Ne_ = 0;
 
@@ -2413,8 +2478,7 @@ class FlowContext {
             CUDA_CHECK(cudaMalloc(&d_lower_, total * sizeof(float)));
             CUDA_CHECK(cudaMalloc(&d_upper_, total * sizeof(float)));
         }
-        CUDA_CHECK(cudaMalloc(&d_pi_, n_pairs * sizeof(int)));
-        CUDA_CHECK(cudaMalloc(&d_pj_, n_pairs * sizeof(int)));
+        alloc_pair_buf(n_pairs);
     }
 
     void alloc_fwd_buf(int n_pairs) {
@@ -2425,6 +2489,15 @@ class FlowContext {
         fwd_buf_pairs_ = n_pairs;
     }
 
+    void alloc_pair_buf(int n_pairs) {
+        if (n_pairs <= pair_buf_pairs_ && d_pi_ && d_pj_) return;
+        if (d_pi_) { cudaFree(d_pi_); d_pi_ = nullptr; }
+        if (d_pj_) { cudaFree(d_pj_); d_pj_ = nullptr; }
+        CUDA_CHECK(cudaMalloc(&d_pi_, n_pairs * sizeof(int)));
+        CUDA_CHECK(cudaMalloc(&d_pj_, n_pairs * sizeof(int)));
+        pair_buf_pairs_ = n_pairs;
+    }
+
     void free_output() {
         if (d_mean_) { cudaFree(d_mean_); d_mean_ = nullptr; }
         if (d_lower_) { cudaFree(d_lower_); d_lower_ = nullptr; }
@@ -2432,6 +2505,7 @@ class FlowContext {
         if (d_pi_) { cudaFree(d_pi_); d_pi_ = nullptr; }
         if (d_pj_) { cudaFree(d_pj_); d_pj_ = nullptr; }
         max_pairs_ = 0;
+        pair_buf_pairs_ = 0;
     }
 
     std::vector<BlockWindow> make_block_windows(
@@ -2484,16 +2558,9 @@ public:
         max_pairs_ = 0;
         has_ci_ = false;
 
-        // Determine cache steps from positions
+        // Match upstream gamma_smc's fixed default cache size.
         if (cache_steps <= 0) {
-            const double* pos = (const double*)pos_buf.ptr;
-            double max_gap = 0;
-            for (int i = 1; i < S_; i++) {
-                double gap = pos[i] - pos[i - 1];
-                if (gap > max_gap) max_gap = gap;
-            }
-            cache_steps = std::max(1024, (int)(max_gap * 1.1) + 1);
-            cache_steps = std::min(cache_steps, 16384);
+            cache_steps = 1000;
         }
 
         // Build/upload cache
@@ -2502,8 +2569,18 @@ public:
         // Multi-GPU: each device needs its own cache allocation.
         // Save global pointers, force rebuild on this device, then restore.
         {
+            float* saved_missing_mean = g_d_cache_missing_mean;
+            float* saved_missing_cv = g_d_cache_missing_cv;
             float* saved_mean = g_d_cache_mean;
             float* saved_cv = g_d_cache_cv;
+            float* saved_fwd_hom_mean = g_d_cache_fwd_hom_site_mean;
+            float* saved_fwd_hom_cv = g_d_cache_fwd_hom_site_cv;
+            float* saved_fwd_het_mean = g_d_cache_fwd_het_site_mean;
+            float* saved_fwd_het_cv = g_d_cache_fwd_het_site_cv;
+            float* saved_bwd_hom_mean = g_d_cache_bwd_hom_site_mean;
+            float* saved_bwd_hom_cv = g_d_cache_bwd_hom_site_cv;
+            float* saved_bwd_het_mean = g_d_cache_bwd_het_site_mean;
+            float* saved_bwd_het_cv = g_d_cache_bwd_het_site_cv;
             float2* saved_f2 = g_d_cache_f2;
             void* saved_h2 = g_d_cache_h2;
             int saved_steps = g_cache_n_steps;
@@ -2518,8 +2595,18 @@ public:
             
             if (cache_device != device_id_ && cache_device >= 0) {
                 // Force rebuild: temporarily null the globals so ensure_cache rebuilds
+                g_d_cache_missing_mean = nullptr;
+                g_d_cache_missing_cv = nullptr;
                 g_d_cache_mean = nullptr;
                 g_d_cache_cv = nullptr;
+                g_d_cache_fwd_hom_site_mean = nullptr;
+                g_d_cache_fwd_hom_site_cv = nullptr;
+                g_d_cache_fwd_het_site_mean = nullptr;
+                g_d_cache_fwd_het_site_cv = nullptr;
+                g_d_cache_bwd_hom_site_mean = nullptr;
+                g_d_cache_bwd_hom_site_cv = nullptr;
+                g_d_cache_bwd_het_site_mean = nullptr;
+                g_d_cache_bwd_het_site_cv = nullptr;
                 g_d_cache_f2 = nullptr;
                 g_d_cache_h2 = nullptr;
                 g_cache_n_steps = 0;
@@ -2530,12 +2617,23 @@ public:
                 ctx_cache_mean_ = g_d_cache_mean;
                 ctx_cache_cv_ = g_d_cache_cv;
                 ctx_cache_h2_ = g_d_cache_h2;
+                ctx_cache_ = current_cache_view();
                 ctx_cache_steps_ = g_cache_n_steps;
                 ctx_cache_Ne_ = g_cache_Ne;
                 
                 // Restore globals (so the original device's cache isn't lost)
+                g_d_cache_missing_mean = saved_missing_mean;
+                g_d_cache_missing_cv = saved_missing_cv;
                 g_d_cache_mean = saved_mean;
                 g_d_cache_cv = saved_cv;
+                g_d_cache_fwd_hom_site_mean = saved_fwd_hom_mean;
+                g_d_cache_fwd_hom_site_cv = saved_fwd_hom_cv;
+                g_d_cache_fwd_het_site_mean = saved_fwd_het_mean;
+                g_d_cache_fwd_het_site_cv = saved_fwd_het_cv;
+                g_d_cache_bwd_hom_site_mean = saved_bwd_hom_mean;
+                g_d_cache_bwd_hom_site_cv = saved_bwd_hom_cv;
+                g_d_cache_bwd_het_site_mean = saved_bwd_het_mean;
+                g_d_cache_bwd_het_site_cv = saved_bwd_het_cv;
                 g_d_cache_f2 = saved_f2;
                 g_d_cache_h2 = saved_h2;
                 g_cache_n_steps = saved_steps;
@@ -2544,6 +2642,7 @@ public:
                 ctx_cache_mean_ = g_d_cache_mean;
                 ctx_cache_cv_ = g_d_cache_cv;
                 ctx_cache_h2_ = g_d_cache_h2;
+                ctx_cache_ = current_cache_view();
                 ctx_cache_steps_ = g_cache_n_steps;
                 ctx_cache_Ne_ = g_cache_Ne;
             }
@@ -2643,7 +2742,7 @@ public:
                 gamma_smc_flow_cached_fb_reduce_gpu(
                     d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
                     d_pi_, d_pj_, chunk,
-                    ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
+                    ctx_cache_,
                     d_fwd_buf_,
                     d_site_mean, d_site_min, d_site_max);
 
@@ -2741,6 +2840,52 @@ public:
         return result;
     }
 
+    py::dict run_fwd_states(std::vector<std::pair<int, int>> pairs) {
+        int n_pairs = (int)pairs.size();
+        auto mean_log10 = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        auto cv_log10 = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        if (n_pairs == 0) {
+            py::dict result;
+            result["mean_log10"] = mean_log10;
+            result["cv_log10"] = cv_log10;
+            return result;
+        }
+
+        std::vector<int> pi(n_pairs), pj(n_pairs);
+        for (int p = 0; p < n_pairs; p++) {
+            pi[p] = pairs[p].first;
+            pj[p] = pairs[p].second;
+        }
+
+        size_t bytes = (size_t)S_ * n_pairs * sizeof(float);
+        float* h_mean = mean_log10.mutable_data();
+        float* h_cv = cv_log10.mutable_data();
+
+        {
+            py::gil_scoped_release release;
+            cudaSetDevice(device_id_);
+            alloc_fwd_buf(n_pairs);
+            alloc_pair_buf(n_pairs);
+
+            CUDA_CHECK(cudaMemcpy(d_pi_, pi.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(d_pj_, pj.data(), n_pairs * sizeof(int), cudaMemcpyHostToDevice));
+
+            gamma_smc_flow_cached_forward_states_gpu(
+                d_packed_, n_words_, d_pos_, S_,
+                d_pi_, d_pj_, n_pairs,
+                ctx_cache_,
+                d_fwd_buf_);
+
+            CUDA_CHECK(cudaMemcpy(h_mean, d_fwd_buf_, bytes, cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaMemcpy(h_cv, d_fwd_buf_ + (long long)S_ * n_pairs, bytes, cudaMemcpyDeviceToHost));
+        }
+
+        py::dict result;
+        result["mean_log10"] = mean_log10;
+        result["cv_log10"] = cv_log10;
+        return result;
+    }
+
     py::dict run_fb(std::vector<std::pair<int, int>> pairs, bool mean_only,
                     bool return_posterior) {
         int n_pairs = (int)pairs.size();
@@ -2802,7 +2947,7 @@ public:
             gamma_smc_flow_cached_fb_gpu(
                 d_packed_, n_words_, d_pos_, S_, ctx_cache_Ne_,
                 d_pi_, d_pj_, n_pairs,
-                ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
+                ctx_cache_,
                 d_fwd_buf,
                 d_mean_, ci ? d_lower_ : nullptr, ci ? d_upper_ : nullptr,
                 d_alpha, d_beta);
@@ -2976,7 +3121,7 @@ public:
                             block.padded_start, padded_sites,
                             ctx_cache_Ne_,
                             d_pi_block, d_pj_block, chunk,
-                            ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
+                            ctx_cache_,
                             d_fwd_block,
                             d_mean_block,
                             ci ? d_lower_block : nullptr,
@@ -3065,7 +3210,7 @@ public:
                         block.padded_start, padded_sites,
                         ctx_cache_Ne_,
                         scratch.d_pi, scratch.d_pj, chunk,
-                        ctx_cache_mean_, ctx_cache_cv_, ctx_cache_steps_,
+                        ctx_cache_,
                         scratch.d_fwd,
                         scratch.d_mean,
                         ci ? scratch.d_lower : nullptr,
@@ -3167,16 +3312,9 @@ py::dict py_gamma_smc_flow_cached_fwd(
     int n_words = (S + 63) / 64;
     int n_pairs = (int)pairs.size();
 
-    // Determine cache size from data if not specified
+    // Match upstream gamma_smc's fixed default cache size.
     if (cache_steps <= 0) {
-        const double* pos = (const double*)pos_buf.ptr;
-        double max_gap = 0;
-        for (int i = 1; i < S; i++) {
-            double gap = pos[i] - pos[i - 1];
-            if (gap > max_gap) max_gap = gap;
-        }
-        cache_steps = std::max(1024, (int)(max_gap * 1.1) + 1);
-        cache_steps = std::min(cache_steps, 16384);
+        cache_steps = 1000;
     }
 
     ensure_cache((float)Ne, (float)mu_scalar, (float)rho_scalar, cache_steps,
@@ -3508,6 +3646,9 @@ PYBIND11_MODULE(_core, m) {
              "Forward-only filtering (fastest). Returns dict with 'mean'.\n"
              "No forward buffer needed — single pass, pinned D2H.",
              py::arg("pairs"), py::arg("mean_only") = true)
+        .def("run_fwd_states", &FlowContext::run_fwd_states,
+             "Debug helper: return cached-FB forward states as log10(mean) and log10(cv).",
+             py::arg("pairs"))
         .def("run_fb", &FlowContext::run_fb,
              "Forward-backward smoothing. Returns dict with 'mean'.\n"
              "If return_posterior=True, also returns 'posterior_alpha' and\n"

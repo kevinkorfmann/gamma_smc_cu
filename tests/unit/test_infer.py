@@ -5,6 +5,7 @@ import pytest
 import msprime
 
 import tmrca_cu
+from tmrca_cu.infer import _estimate_scaled_params
 
 
 @pytest.fixture(scope="module")
@@ -92,6 +93,55 @@ class TestInferGenotypeMatrix:
         G, pos = genotype_data
         with pytest.raises(ValueError, match="positions length"):
             tmrca_cu.infer(G, pos[:-1], pairs=[(0, 1)])
+
+
+class TestAutoEstimateTheta:
+    def test_estimate_scaled_params_uses_4ne_convention_for_rho(self):
+        G = np.array(
+            [
+                [0, 0, 1, 1],
+                [0, 1, 1, 1],
+                [0, 0, 0, 1],
+                [1, 0, 0, 1],
+            ],
+            dtype=np.uint8,
+        )
+        positions = np.array([10.0, 20.0, 30.0, 40.0], dtype=np.float64)
+        Ne = 10_000.0
+        mu = 2.0e-8
+        rho = 5.0e-8
+
+        eff_mu, eff_rho = _estimate_scaled_params(G, positions, mu, rho, Ne)
+
+        seq_len = positions[-1] + 1.0
+        pi_hat = 1.0 / seq_len
+        ratio = rho / mu
+
+        np.testing.assert_allclose(4.0 * Ne * eff_mu, pi_hat)
+        np.testing.assert_allclose(4.0 * Ne * eff_rho, pi_hat * ratio)
+
+    def test_estimate_scaled_params_counts_leading_span_like_gamma_smc(self):
+        G = np.array(
+            [
+                [0, 1],
+                [1, 1],
+                [0, 0],
+                [0, 1],
+            ],
+            dtype=np.uint8,
+        )
+        positions = np.array([100.0, 200.0], dtype=np.float64)
+        Ne = 10_000.0
+        mu = 2.0e-8
+        rho = 5.0e-8
+
+        eff_mu, eff_rho = _estimate_scaled_params(G, positions, mu, rho, Ne)
+
+        pi_hat = 1.0 / (positions[-1] + 1.0)
+        ratio = rho / mu
+
+        np.testing.assert_allclose(4.0 * Ne * eff_mu, pi_hat)
+        np.testing.assert_allclose(4.0 * Ne * eff_rho, pi_hat * ratio)
 
 
 class TestInferSegregatingFilter:

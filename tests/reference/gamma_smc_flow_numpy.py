@@ -57,11 +57,15 @@ def _bilinear(table, mean_log10, cv_log10, ff):
     fm = (mean_log10 - ff['mean_log10_min']) / m_step
     fc = (cv_log10 - ff['cv_log10_min']) / c_step
 
-    fm = np.clip(fm, 0, mn - 2)
-    fc = np.clip(fc, 0, cn - 2)
+    fm = np.clip(fm, 0, mn - 1)
+    fc = np.clip(fc, 0, cn - 1)
 
     m0 = int(fm)
     c0 = int(fc)
+    if m0 == mn - 1:
+        m0 -= 1
+    if c0 == cn - 1:
+        c0 -= 1
     m1 = min(m0 + 1, mn - 1)
     c1 = min(c0 + 1, cn - 1)
     wm = fm - m0
@@ -118,7 +122,7 @@ def gamma_smc_flow_fb(G, positions, pair, Ne=10_000, mu=1.25e-8, rho=1e-8,
     xor = (G[hi] ^ G[hj]).astype(np.int32)
 
     lam = 1.0 / (2.0 * Ne)
-    scaled_rho_per_bp = 2.0 * Ne * rho
+    scaled_rho_per_bp = 4.0 * Ne * rho
     scaled_mu_per_bp = 2.0 * mu / lam  # = 4*Ne*mu
 
     # Forward pass
@@ -140,16 +144,15 @@ def gamma_smc_flow_fb(G, positions, pair, Ne=10_000, mu=1.25e-8, rho=1e-8,
                 scaled_rho_per_bp * gap,
                 scaled_mu_per_bp * gap)
 
-        # Site emission
+        # Site emission: upstream gamma_smc applies beta += mu at every
+        # observed site, and het sites additionally apply alpha += 1.
+        a_log = -2.0 * cv_log10
+        beta_log10 = a_log - mean_log10
+        beta_log10 = np.log10(10.0**beta_log10 + scaled_mu_per_bp)
         if xor[s]:
-            a_log = -2.0 * cv_log10
-            alpha = 10.0**a_log + 1.0
-            a_log = np.log10(alpha)
-            b_log = a_log - (a_log + 2.0 * cv_log10)  # beta unchanged in log
-            # Actually: beta_log10 stays the same, mean_log10 changes
-            beta_log10 = -2.0 * cv_log10 - mean_log10
-            mean_log10 = a_log - beta_log10
-            cv_log10 = -0.5 * a_log
+            a_log = np.log10(10.0**a_log + 1.0)
+        mean_log10 = a_log - beta_log10
+        cv_log10 = -0.5 * a_log
 
         fwd_m[s] = mean_log10
         fwd_c[s] = cv_log10
@@ -186,14 +189,14 @@ def gamma_smc_flow_fb(G, positions, pair, Ne=10_000, mu=1.25e-8, rho=1e-8,
         lowers[s] = max(mean_gen * lo_f**3, 0.0)
         uppers[s] = mean_gen * hi_f**3
 
-        # Absorb emission
+        # Absorb emission with the same site semantics as the forward pass.
+        a_log = -2.0 * cv_log10
+        beta_log10 = a_log - mean_log10
+        beta_log10 = np.log10(10.0**beta_log10 + scaled_mu_per_bp)
         if xor[s]:
-            a_log = -2.0 * cv_log10
-            alpha = 10.0**a_log + 1.0
-            a_log_new = np.log10(alpha)
-            beta_log10 = a_log - mean_log10
-            mean_log10 = a_log_new - beta_log10
-            cv_log10 = -0.5 * a_log_new
+            a_log = np.log10(10.0**a_log + 1.0)
+        mean_log10 = a_log - beta_log10
+        cv_log10 = -0.5 * a_log
 
         # Transition
         if s > 0:

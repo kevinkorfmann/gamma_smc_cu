@@ -27,6 +27,7 @@ import numpy as np
 import msprime
 import stdpopsim
 from scipy.stats import pearsonr
+from bench_paths import resolve_flow_field_path, resolve_gamma_smc_bin
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -35,8 +36,8 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 from tmrca_cu import _core  # noqa: E402
 
-FF = "/vast/projects/smathi/cohort/kkor/tmrca.cu/default_flow_field.txt"
-GSMC = os.path.join(HERE, "gamma_smc", "bin", "gamma_smc")
+FF = resolve_flow_field_path(HERE)
+GSMC = resolve_gamma_smc_bin(HERE)
 
 CONFIGS = [
     ("HomSap", "OutOfAfrica_3G09", "YRI"),

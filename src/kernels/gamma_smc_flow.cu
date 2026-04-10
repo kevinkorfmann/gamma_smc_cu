@@ -38,11 +38,13 @@ __device__ __forceinline__ float bilinear_smem(
     float fm = (mean_log10 - MEAN_LOG10_MIN) * MEAN_STEP_INV;
     float fc = (cv_log10 - CV_LOG10_MIN) * CV_STEP_INV;
 
-    fm = fmaxf(0.0f, fminf(fm, (float)(FF_MEAN_N - 2)));
-    fc = fmaxf(0.0f, fminf(fc, (float)(FF_CV_N - 2)));
+    fm = fmaxf(0.0f, fminf(fm, (float)(FF_MEAN_N - 1)));
+    fc = fmaxf(0.0f, fminf(fc, (float)(FF_CV_N - 1)));
 
     int m0 = (int)fm;
     int c0 = (int)fc;
+    if (m0 == FF_MEAN_N - 1) m0--;
+    if (c0 == FF_CV_N - 1) c0--;
     float wm = fm - (float)m0;
     float wc = fc - (float)c0;
 
@@ -92,13 +94,40 @@ __device__ __forceinline__ void flow_field_advance(
     }
 }
 
+__device__ __forceinline__ void flow_field_recomb_step(
+    float& mean_log10, float& cv_log10,
+    const float* __restrict__ smem_u,
+    const float* __restrict__ smem_v,
+    float scaled_rho_per_bp)
+{
+    if (scaled_rho_per_bp < 1e-12f) return;
+    float u = bilinear_smem(smem_u, mean_log10, cv_log10);
+    float v = bilinear_smem(smem_v, mean_log10, cv_log10);
+    mean_log10 += u * scaled_rho_per_bp;
+    cv_log10   += v * scaled_rho_per_bp;
+    mean_log10 = fmaxf(MEAN_LOG10_MIN, fminf(mean_log10, MEAN_LOG10_MAX));
+    cv_log10   = fmaxf(CV_LOG10_MIN, fminf(cv_log10, CV_LOG10_MAX));
+}
+
+// Upstream gamma_smc reconstructs 10^x with a specific bit-hack AVX
+// approximation in gamma_smc.h::_mm256_expfaster_ps. We mirror that here so
+// posterior reconstruction stays numerically interchangeable with the oracle.
+__device__ __forceinline__ float gamma_smc_fast_pow10(float x)
+{
+    constexpr float LN10 = 2.30258509299f;
+    constexpr float C1 = 1064872507.1541044f;
+    constexpr float C2 = 12102203.161561485f;
+    int bits = __float2int_rz(C2 * (x * LN10) + C1);
+    return __int_as_float(bits);
+}
+
 // (mean_log10, cv_log10) → (alpha, beta) in linear space
 __device__ __forceinline__ void mc_to_ab(
     float m, float c, float& alpha, float& beta)
 {
     float a_log = -2.0f * c;
-    alpha = __exp10f(a_log);
-    beta  = __exp10f(a_log - m);
+    alpha = gamma_smc_fast_pow10(a_log);
+    beta  = gamma_smc_fast_pow10(a_log - m);
 }
 
 // (alpha, beta) → (mean_log10, cv_log10)
@@ -108,6 +137,29 @@ __device__ __forceinline__ void ab_to_mc(
     float a_log = __log10f(fmaxf(alpha, 1e-30f));
     m = a_log - __log10f(fmaxf(beta, 1e-30f));
     c = -0.5f * a_log;
+}
+
+__device__ __forceinline__ void site_emission_mc(
+    bool is_het,
+    float scaled_mu,
+    float& m,
+    float& c)
+{
+    float a_log = -2.0f * c;
+    float b_log = a_log - m;
+    // Upstream gamma_smc applies the per-site hom emission (beta += mu)
+    // at every observed site, and het sites additionally apply alpha += 1.
+    b_log = __log10f(__exp10f(b_log) + scaled_mu);
+    if (is_het) {
+        a_log = __log10f(__exp10f(a_log) + 1.0f);
+    }
+    m = a_log - b_log;
+    c = -0.5f * a_log;
+}
+
+__device__ __forceinline__ int rounded_segment_steps(double delta)
+{
+    return max(1, __double2int_rn(delta));
 }
 
 // ============================================================
@@ -148,18 +200,12 @@ __global__ void gamma_smc_flow_forward_kernel(
 
     int cur_word = -1;
     uint64_t xor_w = 0;
-    double prev_pos = 0.0;
+    double prev_pos = -1.0;
 
     for (int s = 0; s < S; s++) {
         double pos = positions[s];
-        float gap = (float)(pos - prev_pos);
+        int seg_steps = rounded_segment_steps(pos - prev_pos);
         prev_pos = pos;
-
-        if (s > 0 && gap > 0.0f) {
-            flow_field_advance(mean_log10, cv_log10, smem_u, smem_v,
-                               scaled_rho_per_bp * gap,
-                               scaled_mu_per_bp * gap);
-        }
 
         // Site emission
         int w = s >> 6;
@@ -169,12 +215,17 @@ __global__ void gamma_smc_flow_forward_kernel(
                   ^ packed[(long long)hj * n_words + w];
             cur_word = w;
         }
-        if ((xor_w >> bit) & 1ULL) {
-            float alpha, beta;
-            mc_to_ab(mean_log10, cv_log10, alpha, beta);
-            alpha += 1.0f;
-            ab_to_mc(alpha, beta, mean_log10, cv_log10);
+        bool is_het = ((xor_w >> bit) & 1ULL) != 0;
+        flow_field_recomb_step(
+            mean_log10, cv_log10,
+            smem_u, smem_v,
+            scaled_rho_per_bp);
+        if (seg_steps > 1) {
+            flow_field_advance(mean_log10, cv_log10, smem_u, smem_v,
+                               scaled_rho_per_bp * (seg_steps - 1),
+                               scaled_mu_per_bp * (seg_steps - 1));
         }
+        site_emission_mc(is_het, scaled_mu_per_bp, mean_log10, cv_log10);
 
         long long idx = (long long)s * n_pairs + pid;
         fwd_mean[idx] = mean_log10;
@@ -237,13 +288,14 @@ __global__ void gamma_smc_flow_backward_kernel(
         mc_to_ab(fwd_mean[idx], fwd_cv[idx], fwd_a, fwd_b);
 
         // Combine (scaled prior α=1, β=1)
-        float a_s = fmaxf(fwd_a + bwd_a - 1.0f, 1.0f);
-        float b_s = fmaxf(fwd_b + bwd_b - 1.0f, 1e-10f);
-        float mean_gen = (a_s / b_s) * unscale;
+        float a_s = fwd_a + bwd_a - 1.0f;
+        float b_s = fwd_b + bwd_b - 1.0f;
+        float mean_gen = (a_s / fmaxf(b_s, 1e-10f)) * unscale;
         mean_out[idx] = mean_gen;
 
         if constexpr (WRITE_CI) {
-            float inv9a = __frcp_rn(9.0f * a_s);
+            float a_ci = fmaxf(a_s, 1.0f);
+            float inv9a = __frcp_rn(9.0f * a_ci);
             float sq = __fsqrt_rn(inv9a);
             float base = 1.0f - inv9a;
             float lo_f = fmaxf(base - 1.96f * sq, 0.0f);
@@ -252,7 +304,8 @@ __global__ void gamma_smc_flow_backward_kernel(
             upper_out[idx] = mean_gen * hi_f * hi_f * hi_f;
         }
 
-        // Absorb emission
+        // Process the full segment ending at s so the next iteration sees the
+        // backward state at the previous output position.
         int w = s >> 6;
         int bit = s & 63;
         if (w != cur_word) {
@@ -260,21 +313,19 @@ __global__ void gamma_smc_flow_backward_kernel(
                   ^ packed[(long long)hj * n_words + w];
             cur_word = w;
         }
-        if ((xor_w >> bit) & 1ULL) {
-            float alpha, beta;
-            mc_to_ab(mean_log10, cv_log10, alpha, beta);
-            alpha += 1.0f;
-            ab_to_mc(alpha, beta, mean_log10, cv_log10);
-        }
-
-        // Transition to s-1
-        if (s > 0) {
-            float gap = (float)(positions[s] - positions[s - 1]);
-            if (gap > 0.0f) {
-                flow_field_advance(mean_log10, cv_log10, smem_u, smem_v,
-                                   scaled_rho_per_bp * gap,
-                                   scaled_mu_per_bp * gap);
-            }
+        bool is_het = ((xor_w >> bit) & 1ULL) != 0;
+        int seg_steps = (s == 0)
+            ? rounded_segment_steps(positions[0] + 1.0)
+            : rounded_segment_steps(positions[s] - positions[s - 1]);
+        site_emission_mc(is_het, scaled_mu_per_bp, mean_log10, cv_log10);
+        flow_field_recomb_step(
+            mean_log10, cv_log10,
+            smem_u, smem_v,
+            scaled_rho_per_bp);
+        if (seg_steps > 1) {
+            flow_field_advance(mean_log10, cv_log10, smem_u, smem_v,
+                               scaled_rho_per_bp * (seg_steps - 1),
+                               scaled_mu_per_bp * (seg_steps - 1));
         }
     }
 }
@@ -294,7 +345,7 @@ void gamma_smc_flow_fb_gpu(
     float* tmrca_upper_out)
 {
     float lambda = 1.0f / (2.0f * Ne);
-    float scaled_rho_per_bp = 2.0f * Ne * rho;
+    float scaled_rho_per_bp = 4.0f * Ne * rho;
     float scaled_mu_per_bp  = 2.0f * mu / lambda;  // = 4*Ne*mu
 
     const int block = 256;
@@ -360,10 +411,12 @@ __device__ __forceinline__ float cache_bilinear_ldg(
 {
     float fm = (mean_log10 - MEAN_LOG10_MIN) * MEAN_STEP_INV;
     float fc = (cv_log10 - CV_LOG10_MIN) * CV_STEP_INV;
-    fm = fmaxf(0.0f, fminf(fm, (float)(FF_MEAN_N - 2)));
-    fc = fmaxf(0.0f, fminf(fc, (float)(FF_CV_N - 2)));
+    fm = fmaxf(0.0f, fminf(fm, (float)(FF_MEAN_N - 1)));
+    fc = fmaxf(0.0f, fminf(fc, (float)(FF_CV_N - 1)));
 
     int m0 = (int)fm, c0 = (int)fc;
+    if (m0 == FF_MEAN_N - 1) m0--;
+    if (c0 == FF_CV_N - 1) c0--;
     float wm = fm - (float)m0, wc = fc - (float)c0;
 
     int base = m0 * FF_CV_N + c0;
@@ -401,6 +454,65 @@ __device__ __forceinline__ void cache_advance(
     }
 }
 
+__device__ __forceinline__ void cache_lookup_apply(
+    float& m, float& c,
+    const float* __restrict__ cache_mean,
+    const float* __restrict__ cache_cv,
+    int step_idx)
+{
+    const float* pm = cache_mean + (size_t)step_idx * FF_GRID;
+    const float* pc = cache_cv   + (size_t)step_idx * FF_GRID;
+    float m_new = cache_bilinear_ldg(pm, m, c);
+    float c_new = cache_bilinear_ldg(pc, m, c);
+    m = m_new;
+    c = c_new;
+}
+
+__device__ __forceinline__ void cache_apply_forward_segment(
+    float& m,
+    float& c,
+    FlowFieldDeviceCacheView cache,
+    int seg_steps,
+    bool is_het)
+{
+    while (seg_steps > cache.n_max_steps) {
+        cache_lookup_apply(
+            m, c,
+            cache.mean,
+            cache.cv,
+            cache.n_max_steps - 1);
+        seg_steps -= cache.n_max_steps;
+    }
+    const float* final_mean = is_het ? cache.fwd_het_site_mean : cache.fwd_hom_site_mean;
+    const float* final_cv   = is_het ? cache.fwd_het_site_cv   : cache.fwd_hom_site_cv;
+    cache_lookup_apply(m, c, final_mean, final_cv, seg_steps - 1);
+}
+
+__device__ __forceinline__ void cache_apply_backward_segment(
+    float& m,
+    float& c,
+    FlowFieldDeviceCacheView cache,
+    int seg_steps,
+    bool is_het)
+{
+    int rem = seg_steps;
+    while (rem > cache.n_max_steps) {
+        rem -= cache.n_max_steps;
+    }
+    const float* first_mean = is_het ? cache.bwd_het_site_mean : cache.bwd_hom_site_mean;
+    const float* first_cv   = is_het ? cache.bwd_het_site_cv   : cache.bwd_hom_site_cv;
+    cache_lookup_apply(m, c, first_mean, first_cv, rem - 1);
+    seg_steps -= rem;
+    while (seg_steps > 0) {
+        cache_lookup_apply(
+            m, c,
+            cache.mean,
+            cache.cv,
+            cache.n_max_steps - 1);
+        seg_steps -= cache.n_max_steps;
+    }
+}
+
 // ============================================================
 // Interleaved float2 cache: (mean, cv) packed per grid point.
 // Halves L2 requests: 4 float2 reads vs 8 float reads.
@@ -412,10 +524,12 @@ __device__ __forceinline__ void cache_bilinear_f2(
 {
     float fm = (mean_log10 - MEAN_LOG10_MIN) * MEAN_STEP_INV;
     float fc = (cv_log10 - CV_LOG10_MIN) * CV_STEP_INV;
-    fm = fmaxf(0.0f, fminf(fm, (float)(FF_MEAN_N - 2)));
-    fc = fmaxf(0.0f, fminf(fc, (float)(FF_CV_N - 2)));
+    fm = fmaxf(0.0f, fminf(fm, (float)(FF_MEAN_N - 1)));
+    fc = fmaxf(0.0f, fminf(fc, (float)(FF_CV_N - 1)));
 
     int m0 = (int)fm, c0 = (int)fc;
+    if (m0 == FF_MEAN_N - 1) m0--;
+    if (c0 == FF_CV_N - 1) c0--;
     float wm = fm - (float)m0, wc = fc - (float)c0;
 
     int base = m0 * FF_CV_N + c0;
@@ -458,9 +572,7 @@ __global__ void gamma_smc_cached_forward_kernel(
     const int* __restrict__ pair_i,
     const int* __restrict__ pair_j,
     int n_pairs,
-    const float* __restrict__ cache_mean,
-    const float* __restrict__ cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* __restrict__ fwd_mean,
     float* __restrict__ fwd_cv_out)
 {
@@ -473,18 +585,13 @@ __global__ void gamma_smc_cached_forward_kernel(
     float m = 0.0f, c = 0.0f;
     int cur_word = -1;
     uint64_t xor_w = 0;
-    double prev_pos = 0.0;
+    double prev_pos = -1.0;
 
     for (int s = 0; s < S; s++) {
         double pos = positions[s];
-        int gap_steps = (int)(pos - prev_pos + 0.5);
+        int seg_steps = rounded_segment_steps(pos - prev_pos);
         prev_pos = pos;
 
-        if (s > 0 && gap_steps > 0) {
-            cache_advance(m, c, cache_mean, cache_cv, gap_steps, n_max_steps);
-        }
-
-        // Site emission: het → alpha += 1
         int w = s >> 6;
         int bit = s & 63;
         if (w != cur_word) {
@@ -492,13 +599,8 @@ __global__ void gamma_smc_cached_forward_kernel(
                   ^ packed[(long long)hj * n_words + w];
             cur_word = w;
         }
-        if ((xor_w >> bit) & 1ULL) {
-            float alpha = __exp10f(-2.0f * c) + 1.0f;
-            float a_log = __log10f(alpha);
-            float b_log = -2.0f * c - m;
-            m = a_log - b_log;
-            c = -0.5f * a_log;
-        }
+        bool is_het = ((xor_w >> bit) & 1ULL) != 0;
+        cache_apply_forward_segment(m, c, cache, seg_steps, is_het);
 
         long long idx = (long long)s * n_pairs + pid;
         fwd_mean[idx] = m;
@@ -518,9 +620,7 @@ __global__ void gamma_smc_cached_forward_block_kernel(
     const int* __restrict__ pair_i,
     const int* __restrict__ pair_j,
     int n_pairs,
-    const float* __restrict__ cache_mean,
-    const float* __restrict__ cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* __restrict__ fwd_mean,
     float* __restrict__ fwd_cv_out)
 {
@@ -533,18 +633,13 @@ __global__ void gamma_smc_cached_forward_block_kernel(
     float m = 0.0f, c = 0.0f;
     int cur_word = -1;
     uint64_t xor_w = 0;
+    double prev_pos = (site_start == 0) ? -1.0 : (positions[site_start] - 1.0);
 
     for (int s = 0; s < block_S; s++) {
         int global_s = site_start + s;
-
-        if (s > 0) {
-            int gap_steps = (int)(positions[global_s] - positions[global_s - 1] + 0.5);
-            if (gap_steps > 0) {
-                cache_advance(m, c, cache_mean, cache_cv, gap_steps, n_max_steps);
-            }
-        }
-
-        // Site emission: het -> alpha += 1
+        double pos = positions[global_s];
+        int seg_steps = rounded_segment_steps(pos - prev_pos);
+        prev_pos = pos;
         int w = global_s >> 6;
         int bit = global_s & 63;
         if (w != cur_word) {
@@ -552,13 +647,8 @@ __global__ void gamma_smc_cached_forward_block_kernel(
                   ^ packed[(long long)hj * n_words + w];
             cur_word = w;
         }
-        if ((xor_w >> bit) & 1ULL) {
-            float alpha = __exp10f(-2.0f * c) + 1.0f;
-            float a_log = __log10f(alpha);
-            float b_log = -2.0f * c - m;
-            m = a_log - b_log;
-            c = -0.5f * a_log;
-        }
+        bool is_het = ((xor_w >> bit) & 1ULL) != 0;
+        cache_apply_forward_segment(m, c, cache, seg_steps, is_het);
 
         long long idx = (long long)s * n_pairs + pid;
         fwd_mean[idx] = m;
@@ -583,9 +673,7 @@ __global__ void gamma_smc_cached_backward_kernel(
     const int* __restrict__ pair_i,
     const int* __restrict__ pair_j,
     int n_pairs,
-    const float* __restrict__ cache_mean,
-    const float* __restrict__ cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     const float* __restrict__ fwd_mean_in,
     const float* __restrict__ fwd_cv_in,
     float* __restrict__ mean_out,
@@ -607,23 +695,24 @@ __global__ void gamma_smc_cached_backward_kernel(
 
     for (int s = S - 1; s >= 0; s--) {
         // Backward state BEFORE emission
-        float bwd_a = __exp10f(-2.0f * c);
-        float bwd_b = __exp10f(-2.0f * c - m);
+        float bwd_a, bwd_b;
+        mc_to_ab(m, c, bwd_a, bwd_b);
 
         // Forward state
         long long idx = (long long)s * n_pairs + pid;
         float fm = fwd_mean_in[idx], fc = fwd_cv_in[idx];
-        float fwd_a = __exp10f(-2.0f * fc);
-        float fwd_b = __exp10f(-2.0f * fc - fm);
+        float fwd_a, fwd_b;
+        mc_to_ab(fm, fc, fwd_a, fwd_b);
 
         // Combine
-        float a_s = fmaxf(fwd_a + bwd_a - 1.0f, 1.0f);
-        float b_s = fmaxf(fwd_b + bwd_b - 1.0f, 1e-10f);
-        float mean_gen = (a_s / b_s) * unscale;
+        float a_s = fwd_a + bwd_a - 1.0f;
+        float b_s = fwd_b + bwd_b - 1.0f;
+        float mean_gen = (a_s / fmaxf(b_s, 1e-10f)) * unscale;
         mean_out[idx] = mean_gen;
 
         if constexpr (WRITE_CI) {
-            float inv9a = __frcp_rn(9.0f * a_s);
+            float a_ci = fmaxf(a_s, 1.0f);
+            float inv9a = __frcp_rn(9.0f * a_ci);
             float sq = __fsqrt_rn(inv9a);
             float base = 1.0f - inv9a;
             float lo_f = fmaxf(base - 1.96f * sq, 0.0f);
@@ -635,7 +724,8 @@ __global__ void gamma_smc_cached_backward_kernel(
         if (alpha_out != nullptr) alpha_out[idx] = a_s;
         if (beta_out  != nullptr) beta_out[idx]  = b_s;
 
-        // Absorb emission
+        // Process the segment ending at s so the next iteration is aligned to
+        // the previous output position, matching upstream gamma_smc.
         int w = s >> 6;
         int bit = s & 63;
         if (w != cur_word) {
@@ -643,20 +733,11 @@ __global__ void gamma_smc_cached_backward_kernel(
                   ^ packed[(long long)hj * n_words + w];
             cur_word = w;
         }
-        if ((xor_w >> bit) & 1ULL) {
-            float alpha = __exp10f(-2.0f * c) + 1.0f;
-            float a_log = __log10f(alpha);
-            float b_log = -2.0f * c - m;
-            m = a_log - b_log;
-            c = -0.5f * a_log;
-        }
-
-        // Transition to s-1
-        if (s > 0) {
-            int gap_steps = (int)(positions[s] - positions[s - 1] + 0.5);
-            if (gap_steps > 0)
-                cache_advance(m, c, cache_mean, cache_cv, gap_steps, n_max_steps);
-        }
+        bool is_het = ((xor_w >> bit) & 1ULL) != 0;
+        int seg_steps = (s == 0)
+            ? rounded_segment_steps(positions[0] + 1.0)
+            : rounded_segment_steps(positions[s] - positions[s - 1]);
+        cache_apply_backward_segment(m, c, cache, seg_steps, is_het);
     }
 }
 
@@ -677,9 +758,7 @@ __global__ void gamma_smc_cached_backward_block_kernel(
     const int* __restrict__ pair_i,
     const int* __restrict__ pair_j,
     int n_pairs,
-    const float* __restrict__ cache_mean,
-    const float* __restrict__ cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     const float* __restrict__ fwd_mean_in,
     const float* __restrict__ fwd_cv_in,
     float* __restrict__ mean_out,
@@ -703,23 +782,24 @@ __global__ void gamma_smc_cached_backward_block_kernel(
         int global_s = site_start + s;
 
         // Backward state BEFORE emission
-        float bwd_a = __exp10f(-2.0f * c);
-        float bwd_b = __exp10f(-2.0f * c - m);
+        float bwd_a, bwd_b;
+        mc_to_ab(m, c, bwd_a, bwd_b);
 
         // Forward state
         long long idx = (long long)s * n_pairs + pid;
         float fm = fwd_mean_in[idx], fc = fwd_cv_in[idx];
-        float fwd_a = __exp10f(-2.0f * fc);
-        float fwd_b = __exp10f(-2.0f * fc - fm);
+        float fwd_a, fwd_b;
+        mc_to_ab(fm, fc, fwd_a, fwd_b);
 
         // Combine
-        float a_s = fmaxf(fwd_a + bwd_a - 1.0f, 1.0f);
-        float b_s = fmaxf(fwd_b + bwd_b - 1.0f, 1e-10f);
-        float mean_gen = (a_s / b_s) * unscale;
+        float a_s = fwd_a + bwd_a - 1.0f;
+        float b_s = fwd_b + bwd_b - 1.0f;
+        float mean_gen = (a_s / fmaxf(b_s, 1e-10f)) * unscale;
         mean_out[idx] = mean_gen;
 
         if constexpr (WRITE_CI) {
-            float inv9a = __frcp_rn(9.0f * a_s);
+            float a_ci = fmaxf(a_s, 1.0f);
+            float inv9a = __frcp_rn(9.0f * a_ci);
             float sq = __fsqrt_rn(inv9a);
             float base = 1.0f - inv9a;
             float lo_f = fmaxf(base - 1.96f * sq, 0.0f);
@@ -731,7 +811,8 @@ __global__ void gamma_smc_cached_backward_block_kernel(
         if (alpha_out != nullptr) alpha_out[idx] = a_s;
         if (beta_out  != nullptr) beta_out[idx]  = b_s;
 
-        // Absorb emission
+        // Process the segment ending at global_s so the next iteration sees
+        // the backward state at the previous local output position.
         int w = global_s >> 6;
         int bit = global_s & 63;
         if (w != cur_word) {
@@ -739,21 +820,16 @@ __global__ void gamma_smc_cached_backward_block_kernel(
                   ^ packed[(long long)hj * n_words + w];
             cur_word = w;
         }
-        if ((xor_w >> bit) & 1ULL) {
-            float alpha = __exp10f(-2.0f * c) + 1.0f;
-            float a_log = __log10f(alpha);
-            float b_log = -2.0f * c - m;
-            m = a_log - b_log;
-            c = -0.5f * a_log;
+        bool is_het = ((xor_w >> bit) & 1ULL) != 0;
+        int seg_steps;
+        if (global_s == 0) {
+            seg_steps = rounded_segment_steps(positions[0] + 1.0);
+        } else if (s == 0 && site_start > 0) {
+            seg_steps = 1;
+        } else {
+            seg_steps = rounded_segment_steps(positions[global_s] - positions[global_s - 1]);
         }
-
-        // Transition to s-1 within the local block
-        if (s > 0) {
-            int gap_steps = (int)(positions[global_s] - positions[global_s - 1] + 0.5);
-            if (gap_steps > 0) {
-                cache_advance(m, c, cache_mean, cache_cv, gap_steps, n_max_steps);
-            }
-        }
+        cache_apply_backward_segment(m, c, cache, seg_steps, is_het);
     }
 }
 
@@ -765,8 +841,7 @@ void gamma_smc_flow_cached_fb_gpu(
     const double* positions, int S,
     float Ne,
     const int* pair_i, const int* pair_j, int n_pairs,
-    const float* d_cache_mean, const float* d_cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
@@ -784,7 +859,7 @@ void gamma_smc_flow_cached_fb_gpu(
     gamma_smc_cached_forward_kernel<<<grid, block>>>(
         packed, n_words, positions, S,
         pair_i, pair_j, n_pairs,
-        d_cache_mean, d_cache_cv, n_max_steps,
+        cache,
         fwd_mean, fwd_cv);
 
     cudaError_t err = cudaGetLastError();
@@ -800,7 +875,7 @@ void gamma_smc_flow_cached_fb_gpu(
         gamma_smc_cached_backward_kernel<true><<<grid, block>>>(
             packed, n_words, positions, S, Ne,
             pair_i, pair_j, n_pairs,
-            d_cache_mean, d_cache_cv, n_max_steps,
+            cache,
             fwd_mean, fwd_cv,
             tmrca_mean_out, tmrca_lower_out, tmrca_upper_out,
             posterior_alpha_out, posterior_beta_out);
@@ -808,7 +883,7 @@ void gamma_smc_flow_cached_fb_gpu(
         gamma_smc_cached_backward_kernel<false><<<grid, block>>>(
             packed, n_words, positions, S, Ne,
             pair_i, pair_j, n_pairs,
-            d_cache_mean, d_cache_cv, n_max_steps,
+            cache,
             fwd_mean, fwd_cv,
             tmrca_mean_out, nullptr, nullptr,
             posterior_alpha_out, posterior_beta_out);
@@ -831,8 +906,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
     int site_start, int block_S,
     float Ne,
     const int* pair_i, const int* pair_j, int n_pairs,
-    const float* d_cache_mean, const float* d_cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
@@ -851,7 +925,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
     gamma_smc_cached_forward_block_kernel<<<grid, block, 0, stream>>>(
         packed, n_words, positions, site_start, block_S,
         pair_i, pair_j, n_pairs,
-        d_cache_mean, d_cache_cv, n_max_steps,
+        cache,
         fwd_mean, fwd_cv);
 
     cudaError_t err = cudaPeekAtLastError();
@@ -865,7 +939,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
         gamma_smc_cached_backward_block_kernel<true><<<grid, block, 0, stream>>>(
             packed, n_words, positions, site_start, block_S, Ne,
             pair_i, pair_j, n_pairs,
-            d_cache_mean, d_cache_cv, n_max_steps,
+            cache,
             fwd_mean, fwd_cv,
             tmrca_mean_out, tmrca_lower_out, tmrca_upper_out,
             posterior_alpha_out, posterior_beta_out);
@@ -873,7 +947,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
         gamma_smc_cached_backward_block_kernel<false><<<grid, block, 0, stream>>>(
             packed, n_words, positions, site_start, block_S, Ne,
             pair_i, pair_j, n_pairs,
-            d_cache_mean, d_cache_cv, n_max_steps,
+            cache,
             fwd_mean, fwd_cv,
             tmrca_mean_out, nullptr, nullptr,
             posterior_alpha_out, posterior_beta_out);
@@ -892,8 +966,7 @@ void gamma_smc_flow_cached_fb_block_gpu(
     int site_start, int block_S,
     float Ne,
     const int* pair_i, const int* pair_j, int n_pairs,
-    const float* d_cache_mean, const float* d_cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
@@ -905,7 +978,7 @@ void gamma_smc_flow_cached_fb_block_gpu(
         packed, n_words, positions,
         site_start, block_S, Ne,
         pair_i, pair_j, n_pairs,
-        d_cache_mean, d_cache_cv, n_max_steps,
+        cache,
         fwd_buf,
         tmrca_mean_out,
         tmrca_lower_out,
@@ -1063,10 +1136,12 @@ __device__ __forceinline__ void cache_bilinear_h2(
 {
     float fm = (mean_log10 - MEAN_LOG10_MIN) * MEAN_STEP_INV;
     float fc = (cv_log10 - CV_LOG10_MIN) * CV_STEP_INV;
-    fm = fmaxf(0.0f, fminf(fm, (float)(FF_MEAN_N - 2)));
-    fc = fmaxf(0.0f, fminf(fc, (float)(FF_CV_N - 2)));
+    fm = fmaxf(0.0f, fminf(fm, (float)(FF_MEAN_N - 1)));
+    fc = fmaxf(0.0f, fminf(fc, (float)(FF_CV_N - 1)));
 
     int m0 = (int)fm, c0 = (int)fc;
+    if (m0 == FF_MEAN_N - 1) m0--;
+    if (c0 == FF_CV_N - 1) c0--;
     float wm = fm - (float)m0, wc = fc - (float)c0;
 
     int base = m0 * FF_CV_N + c0;
@@ -1457,6 +1532,32 @@ void gamma_smc_flow_cached_fwd_gpu(
     cudaDeviceSynchronize();
 }
 
+void gamma_smc_flow_cached_forward_states_gpu(
+    const uint64_t* packed, int n_words,
+    const double* positions, int S,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    FlowFieldDeviceCacheView cache,
+    float* fwd_buf)
+{
+    const int block = 256;
+    int grid = (n_pairs + block - 1) / block;
+    float* fwd_mean = fwd_buf;
+    float* fwd_cv = fwd_buf + (long long)S * n_pairs;
+
+    gamma_smc_cached_forward_kernel<<<grid, block>>>(
+        packed, n_words, positions, S,
+        pair_i, pair_j, n_pairs,
+        cache,
+        fwd_mean, fwd_cv);
+
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        fprintf(stderr, "gamma_smc_cached forward_states: %s\n", cudaGetErrorString(err));
+        return;
+    }
+    cudaDeviceSynchronize();
+}
+
 // ============================================================
 // Fused backward + per-site reduction kernel
 // Instead of writing [S × n_pairs] mean_out, accumulates per-site
@@ -1472,9 +1573,7 @@ __global__ void gamma_smc_cached_backward_reduce_kernel(
     const int* __restrict__ pair_i,
     const int* __restrict__ pair_j,
     int n_pairs,
-    const float* __restrict__ cache_mean,
-    const float* __restrict__ cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     const float* __restrict__ fwd_mean_in,
     const float* __restrict__ fwd_cv_in,
     float* __restrict__ site_sum,    // [S] — atomicAdd accumulator
@@ -1493,23 +1592,24 @@ __global__ void gamma_smc_cached_backward_reduce_kernel(
     uint64_t xor_w = 0;
 
     for (int s = S - 1; s >= 0; s--) {
-        float bwd_a = __exp10f(-2.0f * c);
-        float bwd_b = __exp10f(-2.0f * c - m);
+        float bwd_a, bwd_b;
+        mc_to_ab(m, c, bwd_a, bwd_b);
 
         long long idx = (long long)s * n_pairs + pid;
         float fm = fwd_mean_in[idx], fc = fwd_cv_in[idx];
-        float fwd_a = __exp10f(-2.0f * fc);
-        float fwd_b = __exp10f(-2.0f * fc - fm);
+        float fwd_a, fwd_b;
+        mc_to_ab(fm, fc, fwd_a, fwd_b);
 
-        float a_s = fmaxf(fwd_a + bwd_a - 1.0f, 1.0f);
-        float b_s = fmaxf(fwd_b + bwd_b - 1.0f, 1e-10f);
-        float mean_gen = (a_s / b_s) * unscale;
+        float a_s = fwd_a + bwd_a - 1.0f;
+        float b_s = fwd_b + bwd_b - 1.0f;
+        float mean_gen = (a_s / fmaxf(b_s, 1e-10f)) * unscale;
 
         // Simple per-thread atomicAdd (no warp shuffle needed)
         atomicAdd(&site_sum[s], mean_gen);
 
 
-        // Absorb emission for backward propagation
+        // Propagate the segment ending at s so the next iteration matches the
+        // backward state at the previous output position.
         int w = s >> 6;
         int bit = s & 63;
         if (w != cur_word) {
@@ -1517,19 +1617,11 @@ __global__ void gamma_smc_cached_backward_reduce_kernel(
                   ^ packed[(long long)hj * n_words + w];
             cur_word = w;
         }
-        if ((xor_w >> bit) & 1ULL) {
-            float alpha = __exp10f(-2.0f * c) + 1.0f;
-            float a_log = __log10f(alpha);
-            float b_log = -2.0f * c - m;
-            m = a_log - b_log;
-            c = -0.5f * a_log;
-        }
-
-        if (s > 0) {
-            int gap_steps = (int)(positions[s] - positions[s - 1] + 0.5);
-            if (gap_steps > 0)
-                cache_advance(m, c, cache_mean, cache_cv, gap_steps, n_max_steps);
-        }
+        bool is_het = ((xor_w >> bit) & 1ULL) != 0;
+        int seg_steps = (s == 0)
+            ? rounded_segment_steps(positions[0] + 1.0)
+            : rounded_segment_steps(positions[s] - positions[s - 1]);
+        cache_apply_backward_segment(m, c, cache, seg_steps, is_het);
     }
 }
 
@@ -1545,8 +1637,7 @@ void gamma_smc_flow_cached_fb_reduce_gpu(
     const double* positions, int S,
     float Ne,
     const int* pair_i, const int* pair_j, int n_pairs,
-    const float* d_cache_mean, const float* d_cache_cv,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* site_mean_out,  // [S] device
     float* site_min_out,   // [S] device or NULL
@@ -1562,7 +1653,7 @@ void gamma_smc_flow_cached_fb_reduce_gpu(
     gamma_smc_cached_forward_kernel<<<grid, block>>>(
         packed, n_words, positions, S,
         pair_i, pair_j, n_pairs,
-        d_cache_mean, d_cache_cv, n_max_steps,
+        cache,
         fwd_mean, fwd_cv);
     cudaDeviceSynchronize();
 
@@ -1573,7 +1664,7 @@ void gamma_smc_flow_cached_fb_reduce_gpu(
     gamma_smc_cached_backward_reduce_kernel<<<grid, block>>>(
         packed, n_words, positions, S, Ne,
         pair_i, pair_j, n_pairs,
-        d_cache_mean, d_cache_cv, n_max_steps,
+        cache,
         fwd_mean, fwd_cv,
         site_mean_out, nullptr, nullptr);
     cudaDeviceSynchronize();

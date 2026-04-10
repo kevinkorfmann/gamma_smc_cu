@@ -37,6 +37,8 @@ import numpy as np
 import msprime
 import stdpopsim
 from scipy.stats import pearsonr
+from bench_inputs import materialize_binary_snp_vcf
+from bench_paths import resolve_flow_field_path, resolve_gamma_smc_bin
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -46,8 +48,8 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 from tmrca_cu import _core  # noqa: E402
 from tmrca_cu.infer import _estimate_scaled_params  # noqa: E402
 
-FF = "/vast/projects/smathi/cohort/kkor/tmrca.cu/default_flow_field.txt"
-GSMC = os.path.join(HERE, "gamma_smc", "bin", "gamma_smc")
+FF = resolve_flow_field_path(HERE)
+GSMC = resolve_gamma_smc_bin(HERE)
 
 # (species, model, pop) tuples that still lose to gamma_smc after auto-theta.
 CONFIGS = [
@@ -94,39 +96,38 @@ def schweiger_pair_order(nh):
     return pairs
 
 
-def run_gsmc_auto(ts, nh, mu, rho, ne):
+def run_gsmc_auto(vcf_path, nh, mu, rho, ne):
     """gamma_smc auto_mt: omit -m, pass -t (rho/mu)."""
-    with tempfile.TemporaryDirectory() as td:
-        vp = os.path.join(td, "s.vcf")
-        with open(vp, "w") as f:
-            ts.write_vcf(f, contig_id="chr1", allow_position_zero=True)
-        subprocess.run(f"bgzip -f {vp} && tabix -p vcf {vp}.gz",
-                       shell=True, check=True, capture_output=True)
-        out = os.path.join(td, "out")
-        result = subprocess.run(
-            [GSMC, "-i", vp + ".gz", "-o", out,
-             "-t", str(rho / max(mu, 1e-30)), "-f", FF, "-h"],
-            capture_output=True, text=True, check=True, timeout=600,
-        )
-        m = re.search(r"Scaled mutation rate:\s*([0-9.eE+-]+)", result.stdout)
-        reported = float(m.group(1)) if m else None
+    td = os.path.dirname(vcf_path)
+    subprocess.run(f"bgzip -f {vcf_path} && tabix -f -p vcf {vcf_path}.gz",
+                   shell=True, check=True, capture_output=True)
+    out = os.path.join(td, "out")
+    result = subprocess.run(
+        [GSMC, "-i", vcf_path + ".gz", "-o", out,
+         "-t", str(rho / max(mu, 1e-30)), "-f", FF, "-h"],
+        capture_output=True, text=True, check=True, timeout=600,
+    )
+    m = re.search(r"Scaled mutation rate:\s*([0-9.eE+-]+)", result.stdout)
+    reported = float(m.group(1)) if m else None
 
-        dec = os.path.join(td, "out.bin")
-        subprocess.run(["zstd", "-d", out, "-o", dec], capture_output=True)
-        with open(dec, "rb") as f: raw = f.read()
-        with open(out + ".meta") as f: meta = json.load(f)
-        n_pairs = meta["num_pairs"]; n_sites = meta["sequence_length"]
-        cs = meta["chunk_size"]; nc = (n_pairs + cs - 1) // cs
-        positions = np.array(meta["output_positions"])
-        arr = np.frombuffer(raw, dtype=np.float32).reshape(nc, 2, n_sites, cs)
-        pair_layout = schweiger_pair_order(nh)
-        results = {}
-        for pidx, p in enumerate(pair_layout[:n_pairs]):
-            alpha = arr[pidx // cs, 0, :, pidx % cs]
-            beta = arr[pidx // cs, 1, :, pidx % cs]
-            mean_gen = (alpha / np.maximum(beta, 1e-10)) * 2 * ne
-            results[tuple(sorted(p))] = mean_gen
-        return results, positions, reported
+    dec = os.path.join(td, "out.bin")
+    subprocess.run(["zstd", "-d", out, "-o", dec], capture_output=True)
+    with open(dec, "rb") as f:
+        raw = f.read()
+    with open(out + ".meta") as f:
+        meta = json.load(f)
+    n_pairs = meta["num_pairs"]; n_sites = meta["sequence_length"]
+    cs = meta["chunk_size"]; nc = (n_pairs + cs - 1) // cs
+    positions = np.array(meta["output_positions"])
+    arr = np.frombuffer(raw, dtype=np.float32).reshape(nc, 2, n_sites, cs)
+    pair_layout = schweiger_pair_order(nh)
+    results = {}
+    for pidx, p in enumerate(pair_layout[:n_pairs]):
+        alpha = arr[pidx // cs, 0, :, pidx % cs]
+        beta = arr[pidx // cs, 1, :, pidx % cs]
+        mean_gen = (alpha / np.maximum(beta, 1e-10)) * 2 * ne
+        results[tuple(sorted(p))] = mean_gen
+    return results, positions, reported
 
 
 def run_config(species_id, model_id, pop):
@@ -149,50 +150,59 @@ def run_config(species_id, model_id, pop):
     )
     ts = msprime.sim_mutations(ts_raw, rate=mu, random_seed=SEED + 1)
 
-    G = ts.genotype_matrix().T.astype(np.uint8)
-    pos = np.array([v.position for v in ts.variants()], dtype=np.float64)
-    n, S = G.shape
-    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
-    print(f"  n={n}, S={S}, mu={mu:.2e}, rho={rho:.2e}")
+    with tempfile.TemporaryDirectory() as td:
+        vcf_path = os.path.join(td, "s.vcf")
+        prepared = materialize_binary_snp_vcf(ts, vcf_path)
+        G = prepared.G
+        pos = prepared.pos
+        n, S = G.shape
+        pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        print(f"  n={n}, S={S}, mu={mu:.2e}, rho={rho:.2e}")
+        print(
+            f"  normalized-vcf: kept={prepared.n_kept_records}/{prepared.n_total_records} "
+            f"drop_non_snp={prepared.n_dropped_non_snp} "
+            f"drop_non_binary={prepared.n_dropped_non_binary} "
+            f"drop_missing={prepared.n_dropped_missing}"
+        )
 
-    # auto-theta both ways
-    kernel_mu, kernel_rho = _estimate_scaled_params(G, pos, mu, rho, NE)
-    pi_hat = 4 * NE * kernel_mu
-    print(f"  pi_hat (tmrca.cu auto-theta)     = {pi_hat:.4e}")
+        # auto-theta both ways
+        kernel_mu, kernel_rho = _estimate_scaled_params(G, pos, mu, rho, NE)
+        pi_hat = 4 * NE * kernel_mu
+        print(f"  pi_hat (tmrca.cu auto-theta)     = {pi_hat:.4e}")
 
-    # tmrca.cu cached FB with auto-theta
-    cached = _core.gamma_smc_flow_cached_fb(
-        G, pos, pairs, float(NE), kernel_mu, kernel_rho, FF, True, 0
-    )["mean"]
-
-    # tmrca.cu iterative FB (no cache) with auto-theta
-    try:
-        iterative = _core.gamma_smc_flow_fb(
-            G, pos, pairs, float(NE), kernel_mu, kernel_rho, FF, True
+        # tmrca.cu cached FB with auto-theta
+        cached = _core.gamma_smc_flow_cached_fb(
+            G, pos, pairs, float(NE), kernel_mu, kernel_rho, FF, True, 0
         )["mean"]
-    except Exception as e:
-        print(f"  iterative_fb FAILED: {e}")
-        iterative = None
 
-    # gamma_smc auto_mt
-    gsmc_results, gsmc_pos, reported_mu = run_gsmc_auto(ts, n, mu, rho, NE)
-    print(f"  pi_hat (gamma_smc auto_mt)        = {reported_mu:.4e}")
-    print(f"  ratio (gsmc/tmrca)               = "
-          f"{(reported_mu/pi_hat) if pi_hat>0 else float('nan'):.4f}")
+        # tmrca.cu iterative FB (no cache) with auto-theta
+        try:
+            iterative = _core.gamma_smc_flow_fb(
+                G, pos, pairs, float(NE), kernel_mu, kernel_rho, FF, True
+            )["mean"]
+        except Exception as e:
+            print(f"  iterative_fb FAILED: {e}")
+            iterative = None
 
-    # per-pair r_log against truth
-    r_cached = []
-    r_iterative = []
-    r_gsmc = []
-    for pidx, pair in enumerate(pairs):
-        truth = true_t(ts, pair[0], pair[1], pos)
-        r_cached.append(r_log_safe(truth, cached[:, pidx]))
-        if iterative is not None:
-            r_iterative.append(r_log_safe(truth, iterative[:, pidx]))
-        key = tuple(sorted(pair))
-        if key in gsmc_results:
-            est = np.interp(pos, gsmc_pos, gsmc_results[key])
-            r_gsmc.append(r_log_safe(truth, est))
+        # gamma_smc auto_mt
+        gsmc_results, gsmc_pos, reported_mu = run_gsmc_auto(vcf_path, n, mu, rho, NE)
+        print(f"  pi_hat (gamma_smc auto_mt)        = {reported_mu:.4e}")
+        print(f"  ratio (gsmc/tmrca)               = "
+              f"{(reported_mu/pi_hat) if pi_hat>0 else float('nan'):.4f}")
+
+        # per-pair r_log against truth
+        r_cached = []
+        r_iterative = []
+        r_gsmc = []
+        for pidx, pair in enumerate(pairs):
+            truth = true_t(ts, pair[0], pair[1], pos)
+            r_cached.append(r_log_safe(truth, cached[:, pidx]))
+            if iterative is not None:
+                r_iterative.append(r_log_safe(truth, iterative[:, pidx]))
+            key = tuple(sorted(pair))
+            if key in gsmc_results:
+                est = np.interp(pos, gsmc_pos, gsmc_results[key])
+                r_gsmc.append(r_log_safe(truth, est))
 
     def stats(v):
         a = np.asarray(v, dtype=float)

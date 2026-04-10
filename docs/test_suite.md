@@ -7,6 +7,32 @@ models. Each config simulates 5 Mb × 20 haplotypes (190 pairs), runs both
 methods on the same phased data, and reports accuracy (Pearson *r* of log
 TMRCA vs the msprime truth) and wall-clock time.
 
+## 2026-04-10 parity update
+
+The main remaining oracle-parity bug in the cached CUDA path was an
+edge-case mismatch in bilinear interpolation at the **upper flow-field
+grid boundary**. Exact-boundary states were being snapped to the
+previous cell instead of retaining weight on the final cell, which
+distorted cached forward `beta` on high auto-theta configs such as
+CanFam.
+
+After fixing that boundary handling in the CPU cache builder, CUDA cache
+lookups, and NumPy reference, the previously hard benchmark configs
+moved to parity or better against upstream `gamma_smc`:
+
+- `HomSap / OutOfAfrica_3G09`: `0.845` vs `0.841`
+- `DroMel / African3Epoch_1S16`: `0.661` vs `0.625`
+- `AraTha / African2Epoch_1H18`: `0.935` vs `0.935`
+- `AnoGam / GabonAg1000G_1A17`: `0.770` vs `0.737`
+- `CanFam / EarlyWolfAdmixture_6F14`: `0.877` vs `0.873`
+
+At the time of this update, a full 15-config stdpopsim rerun on
+`poppy` was still in progress; `12 / 15` configs had completed and all
+completed configs were at parity or above the oracle on benchmark
+accuracy. The comparison figure in this page was regenerated from that
+completed subset so the visual summary matches the current parity state,
+not the older pre-fix run.
+
 The suite is scripted as a SLURM array job: one task per config, all
 configs in parallel, results written as per-config JSON, then aggregated
 into a single 2×2 figure and CSV.

@@ -5,6 +5,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 import numpy as np
 import pytest
+from tests.reference.gamma_smc_flow_numpy import _bilinear
 
 # Generate test data with msprime
 def make_test_data(n=20, length=1_000_000, Ne=10_000, mu=1.25e-8, rho=1e-8, seed=42):
@@ -134,6 +135,27 @@ def test_flow_fb_vs_moment_match():
     # Flow FB should be substantially better
     assert avg_flow > avg_mm, \
         f"Flow FB ({avg_flow:.4f}) should beat MM forward ({avg_mm:.4f})"
+
+
+def test_reference_bilinear_uses_upper_boundary_cell():
+    """At the max grid boundary, interpolation should keep weight on the last cell."""
+    table = np.array([
+        [0.0, 1.0, 2.0],
+        [10.0, 11.0, 12.0],
+        [20.0, 21.0, 22.0],
+    ], dtype=np.float64)
+    ff = {
+        "mean_n": 3,
+        "cv_n": 3,
+        "mean_log10_min": 0.0,
+        "mean_log10_max": 2.0,
+        "cv_log10_min": 0.0,
+        "cv_log10_max": 2.0,
+    }
+
+    assert _bilinear(table, 2.0, 2.0, ff) == pytest.approx(22.0)
+    assert _bilinear(table, 2.0, 1.0, ff) == pytest.approx(21.0)
+    assert _bilinear(table, 1.0, 2.0, ff) == pytest.approx(12.0)
 
 
 if __name__ == "__main__":

@@ -21,13 +21,15 @@ import numpy as np
 import msprime
 import stdpopsim
 from scipy.stats import pearsonr
+from bench_inputs import materialize_binary_snp_vcf
+from bench_paths import resolve_flow_field_path, resolve_gamma_smc_bin
 
 # --- betty paths ---------------------------------------------------------
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 PY_MOD = os.path.join(REPO, "python")
-FF = "/vast/projects/smathi/cohort/kkor/tmrca.cu/default_flow_field.txt"
-GSMC = os.path.join(HERE, "gamma_smc", "bin", "gamma_smc")
+FF = resolve_flow_field_path(HERE)
+GSMC = resolve_gamma_smc_bin(HERE)
 CONFIGS_JSON = os.path.join(HERE, "configs.json")
 RESULTS_DIR = os.path.join(HERE, "results")
 
@@ -79,7 +81,7 @@ def schweiger_pair_order(nh):
     return pairs
 
 
-def run_schweiger(ts, nh, mu_d, rho_d, ne_d):
+def run_schweiger(vcf_path, nh, mu_d, rho_d, ne_d):
     """Run gamma_smc binary in auto-estimation mode; return
     ``(dict[pair -> mean_array], positions, wall_total, wall_compute)``.
 
@@ -95,64 +97,59 @@ def run_schweiger(ts, nh, mu_d, rho_d, ne_d):
     wall_total   = everything including I/O wrapping.
     """
     t_total0 = time.perf_counter()
-    with tempfile.TemporaryDirectory() as td:
-        vp = os.path.join(td, "s.vcf")
-        with open(vp, "w") as f:
-            # Some stdpopsim simulations emit a variant at position 0, which
-            # tskit refuses to write by default.
-            ts.write_vcf(f, contig_id="chr1", allow_position_zero=True)
-        subprocess.run(
-            f"bgzip -f {vp} && tabix -p vcf {vp}.gz",
-            shell=True, check=True, capture_output=True,
+    td = os.path.dirname(vcf_path)
+    subprocess.run(
+        f"bgzip -f {vcf_path} && tabix -f -p vcf {vcf_path}.gz",
+        shell=True, check=True, capture_output=True,
+    )
+    out = os.path.join(td, "out")
+
+    t_c0 = time.perf_counter()
+    result = subprocess.run(
+        [GSMC, "-i", vcf_path + ".gz", "-o", out,
+         "-t", str(rho_d / max(mu_d, 1e-30)),
+         "-f", FF, "-h"],
+        capture_output=True, text=True, timeout=600,
+    )
+    wall_compute = time.perf_counter() - t_c0
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"gamma_smc failed: rc={result.returncode}\n"
+            f"stdout: {result.stdout[-500:]}\nstderr: {result.stderr[-500:]}"
         )
-        out = os.path.join(td, "out")
 
-        t_c0 = time.perf_counter()
-        result = subprocess.run(
-            [GSMC, "-i", vp + ".gz", "-o", out,
-             "-t", str(rho_d / max(mu_d, 1e-30)),
-             "-f", FF, "-h"],
-            capture_output=True, text=True, timeout=600,
-        )
-        wall_compute = time.perf_counter() - t_c0
+    dec = os.path.join(td, "out.bin")
+    subprocess.run(["zstd", "-d", out, "-o", dec], capture_output=True)
+    if not os.path.exists(dec):
+        if os.path.exists(out):
+            shutil.copy(out, dec)
+        else:
+            raise RuntimeError("gamma_smc output not found after decompress")
 
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"gamma_smc failed: rc={result.returncode}\n"
-                f"stdout: {result.stdout[-500:]}\nstderr: {result.stderr[-500:]}"
-            )
+    with open(dec, "rb") as f:
+        raw = f.read()
+    meta_path = out + ".meta"
+    if not os.path.exists(meta_path):
+        metas = glob.glob(os.path.join(td, "*.meta"))
+        meta_path = metas[0] if metas else meta_path
+    with open(meta_path) as f:
+        meta = json.load(f)
 
-        dec = os.path.join(td, "out.bin")
-        subprocess.run(["zstd", "-d", out, "-o", dec], capture_output=True)
-        if not os.path.exists(dec):
-            if os.path.exists(out):
-                shutil.copy(out, dec)
-            else:
-                raise RuntimeError("gamma_smc output not found after decompress")
+    n_pairs = meta["num_pairs"]
+    n_sites = meta["sequence_length"]
+    cs = meta["chunk_size"]
+    nc = (n_pairs + cs - 1) // cs
+    positions = np.array(meta["output_positions"])
 
-        with open(dec, "rb") as f:
-            raw = f.read()
-        meta_path = out + ".meta"
-        if not os.path.exists(meta_path):
-            metas = glob.glob(os.path.join(td, "*.meta"))
-            meta_path = metas[0] if metas else meta_path
-        with open(meta_path) as f:
-            meta = json.load(f)
-
-        n_pairs = meta["num_pairs"]
-        n_sites = meta["sequence_length"]
-        cs = meta["chunk_size"]
-        nc = (n_pairs + cs - 1) // cs
-        positions = np.array(meta["output_positions"])
-
-        arr = np.frombuffer(raw, dtype=np.float32).reshape(nc, 2, n_sites, cs)
-        pair_layout = schweiger_pair_order(nh)
-        results = {}
-        for pidx, p in enumerate(pair_layout[:n_pairs]):
-            alpha = arr[pidx // cs, 0, :, pidx % cs]
-            beta = arr[pidx // cs, 1, :, pidx % cs]
-            mean_gen = (alpha / np.maximum(beta, 1e-10)) * 2 * ne_d
-            results[tuple(sorted(p))] = mean_gen
+    arr = np.frombuffer(raw, dtype=np.float32).reshape(nc, 2, n_sites, cs)
+    pair_layout = schweiger_pair_order(nh)
+    results = {}
+    for pidx, p in enumerate(pair_layout[:n_pairs]):
+        alpha = arr[pidx // cs, 0, :, pidx % cs]
+        beta = arr[pidx // cs, 1, :, pidx % cs]
+        mean_gen = (alpha / np.maximum(beta, 1e-10)) * 2 * ne_d
+        results[tuple(sorted(p))] = mean_gen
 
     wall_total = time.perf_counter() - t_total0
     return results, positions, wall_total, wall_compute
@@ -186,72 +183,84 @@ def run(cfg):
     t_sim = time.perf_counter() - t0
     print(f"  sim: {t_sim:.1f}s", flush=True)
 
-    G = ts.genotype_matrix().T.astype(np.uint8)
-    pos = np.array([v.position for v in ts.variants()], dtype=np.float64)
-    n, S = G.shape
-    if S < 50:
-        raise RuntimeError(f"too few segregating sites: S={S}")
-    all_pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
-    n_pairs = len(all_pairs)
-    print(f"  n={n}, S={S}, pairs={n_pairs}", flush=True)
+    with tempfile.TemporaryDirectory() as td:
+        vcf_path = os.path.join(td, "s.vcf")
+        prepared = materialize_binary_snp_vcf(ts, vcf_path)
+        G = prepared.G
+        pos = prepared.pos
+        print(
+            f"  normalized-vcf: kept={prepared.n_kept_records}/{prepared.n_total_records} "
+            f"drop_non_snp={prepared.n_dropped_non_snp} "
+            f"drop_non_binary={prepared.n_dropped_non_binary} "
+            f"drop_missing={prepared.n_dropped_missing}",
+            flush=True,
+        )
+        n, S = G.shape
+        if S < 50:
+            raise RuntimeError(f"too few segregating sites after VCF normalization: S={S}")
+        all_pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        n_pairs = len(all_pairs)
+        print(f"  n={n}, S={S}, pairs={n_pairs}", flush=True)
 
-    ne = 10_000  # constant Ne assumption (the point of a misspec benchmark)
-    mu, rho = cfg["mu"], cfg["rho"]
+        ne = 10_000  # constant Ne assumption (the point of a misspec benchmark)
+        mu, rho = cfg["mu"], cfg["rho"]
 
-    # ------ tmrca.cu timing (warmup + 3 reps, take min) ------------------
-    # Replace (mu, rho) with the data-driven auto-estimate that matches
-    # gamma_smc's auto_mt mode -- the scaled mutation rate becomes the
-    # observed pairwise heterozygosity and the scaled recombination rate
-    # becomes pi_hat * (rho/mu). See tmrca_cu.infer._estimate_scaled_params.
-    # Ne is still used to invert the kernel's internal per-bp scaling.
-    kernel_mu, kernel_rho = _estimate_scaled_params(G, pos, mu, rho, ne)
-    print(
-        f"  auto-theta: pi_hat={4*ne*kernel_mu:.3e} "
-        f"(vs passed 4*Ne*mu={4*ne*mu:.3e})", flush=True,
-    )
-    print("  tmrca.cu: warmup ...", flush=True)
-    ctx = _core.FlowContext(G, pos, float(ne), kernel_mu, kernel_rho, FF, 0)
-    _ = ctx.run_fb_summary([(0, 1)])  # small warmup to page in kernels
-    del ctx
+        # ------ tmrca.cu timing (warmup + 3 reps, take min) ------------------
+        # Replace (mu, rho) with the data-driven auto-estimate that matches
+        # gamma_smc's auto_mt mode -- the scaled mutation rate becomes the
+        # observed pairwise heterozygosity and the scaled recombination rate
+        # becomes pi_hat * (rho/mu). See tmrca_cu.infer._estimate_scaled_params.
+        # Ne is still used to invert the kernel's internal per-bp scaling.
+        kernel_mu, kernel_rho = _estimate_scaled_params(G, pos, mu, rho, ne)
+        print(
+            f"  auto-theta: pi_hat={4*ne*kernel_mu:.3e} "
+            f"(vs passed 4*Ne*mu={4*ne*mu:.3e})", flush=True,
+        )
+        print("  tmrca.cu: warmup ...", flush=True)
+        ctx = _core.FlowContext(G, pos, float(ne), kernel_mu, kernel_rho, FF, 0)
+        _ = ctx.run_fb_summary([(0, 1)])  # small warmup to page in kernels
+        del ctx
 
-    tmrca_times = []
-    tmrca_mean = None
-    for rep in range(3):
-        t0 = time.perf_counter()
-        out = _core.gamma_smc_flow_cached_fb(
-            G, pos, all_pairs, float(ne), kernel_mu, kernel_rho, FF, True, 0
-        )["mean"]  # shape (S, n_pairs)
-        dt = time.perf_counter() - t0
-        tmrca_times.append(dt)
-        if rep == 0:
-            tmrca_mean = out
-    t_tmrca_cu_compute = float(min(tmrca_times))
-    t_tmrca_cu_total = t_tmrca_cu_compute  # no I/O wrapping
-    print(f"  tmrca.cu: {t_tmrca_cu_compute:.3f}s (min of {len(tmrca_times)})", flush=True)
+        tmrca_times = []
+        tmrca_mean = None
+        for rep in range(3):
+            t0 = time.perf_counter()
+            out = _core.gamma_smc_flow_cached_fb(
+                G, pos, all_pairs, float(ne), kernel_mu, kernel_rho, FF, True, 0
+            )["mean"]  # shape (S, n_pairs)
+            dt = time.perf_counter() - t0
+            tmrca_times.append(dt)
+            if rep == 0:
+                tmrca_mean = out
+        t_tmrca_cu_compute = float(min(tmrca_times))
+        t_tmrca_cu_total = t_tmrca_cu_compute  # no I/O wrapping
+        print(f"  tmrca.cu: {t_tmrca_cu_compute:.3f}s (min of {len(tmrca_times)})", flush=True)
 
-    # ------ gamma_smc --------------------------------------------------------
-    print("  gamma_smc: running ...", flush=True)
-    gsmc_results, gsmc_pos, t_gsmc_total, t_gsmc_compute = run_schweiger(
-        ts, n, mu, rho, ne
-    )
-    print(f"  gamma_smc: total={t_gsmc_total:.2f}s compute={t_gsmc_compute:.2f}s",
-          flush=True)
+        # ------ gamma_smc ----------------------------------------------------
+        print("  gamma_smc: running ...", flush=True)
+        gsmc_results, gsmc_pos, t_gsmc_total, t_gsmc_compute = run_schweiger(
+            vcf_path, n, mu, rho, ne
+        )
+        print(
+            f"  gamma_smc: total={t_gsmc_total:.2f}s compute={t_gsmc_compute:.2f}s",
+            flush=True,
+        )
 
-    # ------ accuracy (per pair) ------------------------------------------
-    r_tmrca, r_gsmc = [], []
-    rmse_tmrca, rmse_gsmc = [], []
-    for pidx, pair in enumerate(all_pairs):
-        truth = true_t(ts, pair[0], pair[1], pos)
-        est_t = tmrca_mean[:, pidx]
-        r_tmrca.append(r_log(truth, est_t))
-        rmse_tmrca.append(rmse_log(truth, est_t))
+        # ------ accuracy (per pair) --------------------------------------
+        r_tmrca, r_gsmc = [], []
+        rmse_tmrca, rmse_gsmc = [], []
+        for pidx, pair in enumerate(all_pairs):
+            truth = true_t(ts, pair[0], pair[1], pos)
+            est_t = tmrca_mean[:, pidx]
+            r_tmrca.append(r_log(truth, est_t))
+            rmse_tmrca.append(rmse_log(truth, est_t))
 
-        key = tuple(sorted(pair))
-        if key in gsmc_results:
-            raw = gsmc_results[key]
-            est_g = np.interp(pos, gsmc_pos, raw)
-            r_gsmc.append(r_log(truth, est_g))
-            rmse_gsmc.append(rmse_log(truth, est_g))
+            key = tuple(sorted(pair))
+            if key in gsmc_results:
+                raw = gsmc_results[key]
+                est_g = np.interp(pos, gsmc_pos, raw)
+                r_gsmc.append(r_log(truth, est_g))
+                rmse_gsmc.append(rmse_log(truth, est_g))
 
     def _qstats(v):
         a = np.asarray(v, dtype=float)

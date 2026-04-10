@@ -64,12 +64,11 @@ def _estimate_scaled_params(G, positions, mu, rho, Ne):
     very dense segregating sites — that small difference matters for
     the lowest-rho/mu configs (e.g. ``AraTha African2Epoch_1H18``).
 
-    The flow field expects the gamma_smc convention where both scaled
-    rates are ``4*Ne*...``. tmrca.cu's ``FlowContext`` instead uses the
-    split convention ``scaled_mu = 4*Ne*mu``, ``scaled_rho = 2*Ne*rho``
-    internally, so we return ``effective_mu`` and ``effective_rho`` with
-    the inverses baked in: ``4*Ne*eff_mu == pi_hat`` and
-    ``2*Ne*eff_rho == pi_hat * (rho/mu)``.
+    tmrca.cu's ``FlowContext`` now matches gamma_smc's ``4*Ne``
+    convention for both scaled rates, so we return ``effective_mu`` and
+    ``effective_rho`` with the inverses baked in:
+    ``4*Ne*eff_mu == pi_hat`` and
+    ``4*Ne*eff_rho == pi_hat * (rho/mu)``.
 
     Returns the original ``(mu, rho)`` unchanged if the input has
     fewer than two haplotypes, an odd number of haplotypes (unphased
@@ -78,7 +77,11 @@ def _estimate_scaled_params(G, positions, mu, rho, Ne):
     n, S = G.shape
     if n < 2 or S == 0 or n % 2 != 0:
         return float(mu), float(rho)
-    seq_len = float(positions[-1] - positions[0] + 1)
+    # gamma_smc's default no-mask path uses a global mask spanning
+    # [0, last_pos + 1), so the heterozygosity denominator is the full
+    # left-anchored contig span implied by the VCF coordinates rather than
+    # the distance between the first and last segregating sites.
+    seq_len = float(positions[-1] + 1.0)
     if seq_len <= 0:
         return float(mu), float(rho)
     nd = n // 2
@@ -92,7 +95,7 @@ def _estimate_scaled_params(G, positions, mu, rho, Ne):
         return float(mu), float(rho)
     ratio = float(rho) / max(float(mu), 1e-30)
     effective_mu = pi_hat / (4.0 * float(Ne))
-    effective_rho = pi_hat * ratio / (2.0 * float(Ne))
+    effective_rho = pi_hat * ratio / (4.0 * float(Ne))
     return float(effective_mu), float(effective_rho)
 
 
@@ -250,10 +253,10 @@ def infer(
         If True (the default), replace the scaled parameters derived
         from ``(Ne, mu, rho)`` with ones learned from the data, matching
         gamma_smc's auto-estimation mode (``calculate_heterozygosity()``
-        plus ``-t rho/mu``). The scaled mutation rate is set to
-        observed pairwise pi and the scaled recombination rate to
-        ``pi * (rho/mu)``; ``Ne`` is only used to invert tmrca.cu's
-        internal per-bp scaling. This consistently outperforms the
+        plus ``-t rho/mu``). The scaled mutation rate is set to the
+        observed per-individual heterozygosity and the scaled
+        recombination rate to ``pi_hat * (rho/mu)``; ``Ne`` is only used
+        to invert tmrca.cu's internal per-bp scaling. This consistently outperforms the
         naive ``Ne=10000`` assumption on non-HomSap species where the
         data-implied effective Ne differs from the user-supplied one.
         Pass ``False`` to force the kernel to use the raw

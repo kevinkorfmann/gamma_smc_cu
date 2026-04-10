@@ -22,6 +22,8 @@ import numpy as np
 import msprime
 import stdpopsim
 from scipy.stats import pearsonr
+from bench_inputs import materialize_binary_snp_vcf
+from bench_paths import resolve_flow_field_path, resolve_gamma_smc_bin
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -30,8 +32,8 @@ os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 from tmrca_cu import _core  # noqa: E402
 
-FF = "/vast/projects/smathi/cohort/kkor/tmrca.cu/default_flow_field.txt"
-GSMC = os.path.join(HERE, "gamma_smc", "bin", "gamma_smc")
+FF = resolve_flow_field_path(HERE)
+GSMC = resolve_gamma_smc_bin(HERE)
 
 CONFIGS = [
     ("HomSap", "OutOfAfrica_3G09", "YRI"),        # control (tmrca.cu wins)
@@ -78,36 +80,35 @@ def schweiger_pair_order(nh):
     return pairs
 
 
-def run_gsmc(ts, nh, mu, rho, ne):
-    with tempfile.TemporaryDirectory() as td:
-        vp = os.path.join(td, "s.vcf")
-        with open(vp, "w") as f:
-            ts.write_vcf(f, contig_id="chr1", allow_position_zero=True)
-        subprocess.run(f"bgzip -f {vp} && tabix -p vcf {vp}.gz",
-                       shell=True, check=True, capture_output=True)
-        out = os.path.join(td, "out")
-        subprocess.run(
-            [GSMC, "-i", vp + ".gz", "-o", out,
-             "-m", str(4 * ne * mu), "-r", str(4 * ne * rho),
-             "-f", FF, "-h"],
-            check=True, capture_output=True, timeout=600,
-        )
-        dec = os.path.join(td, "out.bin")
-        subprocess.run(["zstd", "-d", out, "-o", dec], capture_output=True)
-        with open(dec, "rb") as f: raw = f.read()
-        with open(out + ".meta") as f: meta = json.load(f)
-        n_pairs = meta["num_pairs"]; n_sites = meta["sequence_length"]
-        cs = meta["chunk_size"]; nc = (n_pairs + cs - 1) // cs
-        positions = np.array(meta["output_positions"])
-        arr = np.frombuffer(raw, dtype=np.float32).reshape(nc, 2, n_sites, cs)
-        pair_layout = schweiger_pair_order(nh)
-        results = {}
-        for pidx, p in enumerate(pair_layout[:n_pairs]):
-            alpha = arr[pidx // cs, 0, :, pidx % cs]
-            beta = arr[pidx // cs, 1, :, pidx % cs]
-            mean_gen = (alpha / np.maximum(beta, 1e-10)) * 2 * ne
-            results[tuple(sorted(p))] = mean_gen
-        return results, positions
+def run_gsmc(vcf_path, nh, mu, rho, ne):
+    td = os.path.dirname(vcf_path)
+    subprocess.run(f"bgzip -f {vcf_path} && tabix -f -p vcf {vcf_path}.gz",
+                   shell=True, check=True, capture_output=True)
+    out = os.path.join(td, "out")
+    subprocess.run(
+        [GSMC, "-i", vcf_path + ".gz", "-o", out,
+         "-m", str(4 * ne * mu), "-r", str(4 * ne * rho),
+         "-f", FF, "-h"],
+        check=True, capture_output=True, timeout=600,
+    )
+    dec = os.path.join(td, "out.bin")
+    subprocess.run(["zstd", "-d", out, "-o", dec], capture_output=True)
+    with open(dec, "rb") as f:
+        raw = f.read()
+    with open(out + ".meta") as f:
+        meta = json.load(f)
+    n_pairs = meta["num_pairs"]; n_sites = meta["sequence_length"]
+    cs = meta["chunk_size"]; nc = (n_pairs + cs - 1) // cs
+    positions = np.array(meta["output_positions"])
+    arr = np.frombuffer(raw, dtype=np.float32).reshape(nc, 2, n_sites, cs)
+    pair_layout = schweiger_pair_order(nh)
+    results = {}
+    for pidx, p in enumerate(pair_layout[:n_pairs]):
+        alpha = arr[pidx // cs, 0, :, pidx % cs]
+        beta = arr[pidx // cs, 1, :, pidx % cs]
+        mean_gen = (alpha / np.maximum(beta, 1e-10)) * 2 * ne
+        results[tuple(sorted(p))] = mean_gen
+    return results, positions
 
 
 def diagnose(species_id, model_id, pop):
@@ -130,48 +131,57 @@ def diagnose(species_id, model_id, pop):
     )
     ts = msprime.sim_mutations(ts_raw, rate=mu, random_seed=SEED + 1)
 
-    G = ts.genotype_matrix().T.astype(np.uint8)
-    pos = np.array([v.position for v in ts.variants()], dtype=np.float64)
-    n, S = G.shape
-    pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
-    print(f"  n={n}, S={S}, pairs={len(pairs)}")
-    print(f"  mu={mu:.2e}, rho={rho:.2e}")
-    print(f"  4*Ne*mu={4*NE*mu:.2e}, 2*Ne*rho={2*NE*rho:.2e}")
+    with tempfile.TemporaryDirectory() as td:
+        vcf_path = os.path.join(td, "s.vcf")
+        prepared = materialize_binary_snp_vcf(ts, vcf_path)
+        G = prepared.G
+        pos = prepared.pos
+        n, S = G.shape
+        pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        print(f"  n={n}, S={S}, pairs={len(pairs)}")
+        print(f"  mu={mu:.2e}, rho={rho:.2e}")
+        print(f"  4*Ne*mu={4*NE*mu:.2e}, 2*Ne*rho={2*NE*rho:.2e}")
+        print(
+            f"  normalized-vcf: kept={prepared.n_kept_records}/{prepared.n_total_records} "
+            f"drop_non_snp={prepared.n_dropped_non_snp} "
+            f"drop_non_binary={prepared.n_dropped_non_binary} "
+            f"drop_missing={prepared.n_dropped_missing}"
+        )
 
-    # tmrca.cu cached FB
-    t0 = time.perf_counter()
-    cached = _core.gamma_smc_flow_cached_fb(
-        G, pos, pairs, float(NE), mu, rho, FF, True, 0
-    )["mean"]
-    t_cached = time.perf_counter() - t0
-    print(f"  cached_fb: {t_cached:.2f}s")
+        # tmrca.cu cached FB
+        t0 = time.perf_counter()
+        cached = _core.gamma_smc_flow_cached_fb(
+            G, pos, pairs, float(NE), mu, rho, FF, True, 0
+        )["mean"]
+        t_cached = time.perf_counter() - t0
+        print(f"  cached_fb: {t_cached:.2f}s")
 
-    # tmrca.cu iterative FB
-    t0 = time.perf_counter()
-    iterative = _core.gamma_smc_flow_fb(
-        G, pos, pairs, float(NE), mu, rho, FF, True
-    )["mean"]
-    t_iter = time.perf_counter() - t0
-    print(f"  iterative_fb: {t_iter:.2f}s")
+        # tmrca.cu iterative FB
+        t0 = time.perf_counter()
+        iterative = _core.gamma_smc_flow_fb(
+            G, pos, pairs, float(NE), mu, rho, FF, True
+        )["mean"]
+        t_iter = time.perf_counter() - t0
+        print(f"  iterative_fb: {t_iter:.2f}s")
 
-    # gamma_smc binary
-    t0 = time.perf_counter()
-    gsmc_results, gsmc_pos = run_gsmc(ts, n, mu, rho, NE)
-    t_gsmc = time.perf_counter() - t0
-    print(f"  gamma_smc: {t_gsmc:.2f}s")
+        # gamma_smc binary
+        t0 = time.perf_counter()
+        gsmc_results, gsmc_pos = run_gsmc(vcf_path, n, mu, rho, NE)
+        t_gsmc = time.perf_counter() - t0
+        print(f"  gamma_smc: {t_gsmc:.2f}s")
 
-    rows = []
-    for pidx, pair in enumerate(pairs):
-        truth = true_t(ts, pair[0], pair[1], pos)
-        r_cached = r_log(truth, cached[:, pidx])
-        r_iter = r_log(truth, iterative[:, pidx])
-        key = tuple(sorted(pair))
-        if key in gsmc_results:
-            est_g = np.interp(pos, gsmc_pos, gsmc_results[key])
-            r_gsmc = r_log(truth, est_g)
-        else:
-            r_gsmc = np.nan
-        rows.append((r_cached, r_iter, r_gsmc))
+        rows = []
+        for pidx, pair in enumerate(pairs):
+            truth = true_t(ts, pair[0], pair[1], pos)
+            r_cached = r_log(truth, cached[:, pidx])
+            r_iter = r_log(truth, iterative[:, pidx])
+            key = tuple(sorted(pair))
+            if key in gsmc_results:
+                est_g = np.interp(pos, gsmc_pos, gsmc_results[key])
+                r_gsmc = r_log(truth, est_g)
+            else:
+                r_gsmc = np.nan
+            rows.append((r_cached, r_iter, r_gsmc))
 
     arr = np.array(rows)
     print(f"\n  per-pair r_log summary (n={len(rows)} pairs):")
