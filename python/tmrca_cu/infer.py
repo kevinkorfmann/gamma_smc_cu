@@ -41,6 +41,33 @@ def _coerce_inputs(G_or_ts, positions):
     return G, positions_arr
 
 
+def _filter_segregating(G, positions):
+    """Drop sites that are monomorphic within ``G``.
+
+    Gamma-SMC's observation model operates on segregating sites only;
+    the homozygous stretches between segregating sites are handled
+    analytically by the per-bp mutation emission (``beta += 2*mu*gap``
+    in the forward pass). Feeding monomorphic-in-subset sites to the
+    kernel would add extra moment-match transition steps outside the
+    algorithm's validated envelope — the original gamma_smc reference
+    implementation filters these out at VCF parse time
+    (``io.h:462``, Schweiger & Durbin, 2023).
+
+    Returns the filtered ``(G, positions)`` plus the boolean keep mask
+    so callers can project auxiliary per-site arrays onto the kept
+    sites. For already-segregating input (e.g. an msprime tree
+    sequence) the filter is a no-op and no copy is made.
+    """
+    n = G.shape[0]
+    ac = G.sum(axis=0, dtype=np.int64)
+    keep = (ac > 0) & (ac < n)
+    if bool(keep.all()):
+        return G, positions, keep
+    G_filt = np.ascontiguousarray(G[:, keep])
+    positions_filt = np.ascontiguousarray(positions[keep])
+    return G_filt, positions_filt, keep
+
+
 def _resolve_flow_field_path(flow_field_path):
     """Locate the default flow field if the caller did not pass one."""
     if flow_field_path is not None:
@@ -142,6 +169,15 @@ def infer(
 ):
     """Estimate pairwise TMRCA at every segregating site.
 
+    Monomorphic sites (allele count 0 or equal to ``n_haplotypes``) in
+    the provided ``G`` are silently dropped before decoding, matching
+    the original gamma_smc reference implementation (Schweiger &
+    Durbin, 2023), which filters at VCF parse time. The returned
+    ``result["positions"]`` therefore reflects the segregating sites
+    actually decoded and may be shorter than the input ``positions``.
+    For inputs that are already segregating-only (e.g. an msprime tree
+    sequence) the filter is a no-op.
+
     Parameters
     ----------
     mean_only : bool, default True
@@ -158,6 +194,7 @@ def infer(
     from tmrca_cu import _core
 
     G, positions = _coerce_inputs(G_or_ts, positions)
+    G, positions, _ = _filter_segregating(G, positions)
     n = G.shape[0]
 
     if pairs is None:
@@ -204,6 +241,10 @@ def infer_blockwise(
     site-major output array. The flanks act as a forward/backward burn-in
     so the per-block posterior matches the full-sequence posterior to
     floating-point precision.
+
+    Monomorphic sites in ``G`` are filtered before decoding to match
+    :func:`infer` and the original gamma_smc (Schweiger & Durbin,
+    2023); see :func:`infer` for details.
 
     Memory: peak GPU usage is bounded by one padded block,
     ``(core_block_sites + 2 * flank_sites) * pair_chunk * (12 or 20) bytes``,
@@ -272,6 +313,7 @@ def infer_blockwise(
 
     # ----- parse inputs to learn n_sites / n_pairs -----
     G, positions = _coerce_inputs(G_or_ts, positions)
+    G, positions, _ = _filter_segregating(G, positions)
     pairs = _normalize_pairs(pairs)
     n_sites = G.shape[1]
     n_pairs = len(pairs)

@@ -94,6 +94,75 @@ class TestInferGenotypeMatrix:
             tmrca_cu.infer(G, pos[:-1], pairs=[(0, 1)])
 
 
+class TestInferSegregatingFilter:
+    """tmrca_cu.infer() must drop monomorphic-in-subset sites before decoding,
+    matching the original gamma_smc reference implementation (Schweiger &
+    Durbin, 2023). Without the filter, the HMM kernel applies extra
+    moment-match transition steps at non-informative sites, which is
+    outside the algorithm's validated envelope.
+    """
+
+    def _pad_with_monomorphic(self, G, pos):
+        """Insert synthetic all-0 and all-1 columns into a genotype matrix."""
+        n, S = G.shape
+        # Add one all-ref column at the start and one all-alt column at the end.
+        all_ref = np.zeros((n, 1), dtype=G.dtype)
+        all_alt = np.ones((n, 1), dtype=G.dtype)
+        G_padded = np.concatenate([all_ref, G, all_alt], axis=1)
+        pos_padded = np.concatenate(
+            [[pos[0] - 1.0], pos, [pos[-1] + 1.0]]
+        ).astype(np.float64)
+        return G_padded, pos_padded
+
+    def test_drops_monomorphic_columns(self, genotype_data):
+        G, pos = genotype_data
+        G_padded, pos_padded = self._pad_with_monomorphic(G, pos)
+        assert G_padded.shape[1] == G.shape[1] + 2
+
+        result = tmrca_cu.infer(G_padded, pos_padded, pairs=[(0, 1)])
+
+        # Filtered result must not contain the two synthetic monomorphic sites.
+        assert result["mean"].shape[0] == G.shape[1]
+        assert len(result["positions"]) == G.shape[1]
+        np.testing.assert_array_equal(result["positions"], pos)
+
+    def test_filter_matches_unpadded(self, genotype_data):
+        """Decoding padded+filtered input must match decoding the original
+        segregating-only input exactly — the filter is the whole invariant."""
+        G, pos = genotype_data
+        G_padded, pos_padded = self._pad_with_monomorphic(G, pos)
+        pairs = [(0, 1), (2, 3)]
+
+        r_orig = tmrca_cu.infer(G, pos, pairs=pairs)
+        r_padded = tmrca_cu.infer(G_padded, pos_padded, pairs=pairs)
+
+        np.testing.assert_array_equal(r_orig["mean"], r_padded["mean"])
+        np.testing.assert_array_equal(r_orig["positions"], r_padded["positions"])
+
+    def test_segregating_input_is_noop(self, ts):
+        """Simulated tree sequences only carry segregating sites, so the
+        filter must be invisible — same shape as before the patch."""
+        result = tmrca_cu.infer(ts, pairs=[(0, 1)])
+        assert result["mean"].shape[0] == ts.num_sites
+        assert len(result["positions"]) == ts.num_sites
+
+    def test_blockwise_filter_matches_unpadded(self, genotype_data):
+        G, pos = genotype_data
+        G_padded, pos_padded = self._pad_with_monomorphic(G, pos)
+        pairs = [(0, 1), (2, 3)]
+
+        r_orig = tmrca_cu.infer_blockwise(
+            G, pos, pairs=pairs,
+            core_block_sites=G.shape[1], flank_sites=0,
+        )
+        r_padded = tmrca_cu.infer_blockwise(
+            G_padded, pos_padded, pairs=pairs,
+            core_block_sites=G.shape[1], flank_sites=0,
+        )
+        np.testing.assert_array_equal(r_orig["mean"], r_padded["mean"])
+        np.testing.assert_array_equal(r_orig["positions"], r_padded["positions"])
+
+
 class TestInferConsistency:
     def test_ts_and_matrix_agree(self, ts, genotype_data):
         G, pos = genotype_data
