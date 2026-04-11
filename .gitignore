@@ -54,6 +54,7 @@ analysis/genome_wide/cache/
 analysis/genome_wide/results/
 analysis/genome_wide/logs/
 analysis/genome_wide/old_genome_wide_stats.csv
+analysis/genome_wide/genomicSuperDups.txt.gz
 
 # Vendored third-party tools (built locally)
 vendor/
