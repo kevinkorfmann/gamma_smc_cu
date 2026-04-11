@@ -98,8 +98,8 @@ def run_selscan(stat: str, hap_path: str, map_path: str, out_prefix: str,
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print("  stderr:", r.stderr[-800:], flush=True)
-    else:
-        print(f"  {stat} OK ({time.time()-t0:.1f}s)", flush=True)
+        raise SystemExit(f"selscan {stat} failed with code {r.returncode}")
+    print(f"  {stat} OK ({time.time()-t0:.1f}s)", flush=True)
     return r.returncode
 
 
