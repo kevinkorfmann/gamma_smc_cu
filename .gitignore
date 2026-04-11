@@ -48,7 +48,12 @@ _scratch/
 archive_*/
 
 # Local analysis data (downloaded VCFs, caches, results)
-analysis/
+# Keep top-level analysis scripts tracked, ignore data/cache/results subdirs.
+analysis/genome_wide/data/
+analysis/genome_wide/cache/
+analysis/genome_wide/results/
+analysis/genome_wide/logs/
+analysis/genome_wide/old_genome_wide_stats.csv
 
 # Vendored third-party tools (built locally)
 vendor/
