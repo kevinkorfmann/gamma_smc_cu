@@ -2540,8 +2540,8 @@ class FlowContext {
         free_mem -= 512ULL * 1024 * 1024;  // reserve 512MB headroom
 
         int n_arrays = ci ? 3 : 1;
-        // fwd_buf: 4 floats per site (mean, cv, alpha, beta) + output arrays + XOR buffer
-        size_t per_pair = (size_t)padded_sites * (4 + n_arrays) * sizeof(float)
+        // fwd_buf: 2 floats per site (mean, cv) + output arrays + XOR buffer
+        size_t per_pair = (size_t)padded_sites * (2 + n_arrays) * sizeof(float)
                         + (size_t)n_words_ * sizeof(uint64_t)  // XOR buffer
                         + sizeof(int) * 2;
         int max_chunk = (int)(free_mem / std::max<size_t>(per_pair, 1));
@@ -3109,7 +3109,7 @@ public:
                 CUDA_CHECK(cudaMalloc(&d_pi_block, chunk_cap * sizeof(int)));
                 CUDA_CHECK(cudaMalloc(&d_pj_block, chunk_cap * sizeof(int)));
                 // fwd_buf: 4× for (mean, cv, alpha, beta) caching
-                CUDA_CHECK(cudaMalloc(&d_fwd_block, 4ULL * max_padded_sites * chunk_cap * sizeof(float)));
+                CUDA_CHECK(cudaMalloc(&d_fwd_block, 2ULL * max_padded_sites * chunk_cap * sizeof(float)));
                 CUDA_CHECK(cudaMalloc(&d_mean_block, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
                 // XOR pre-compute buffer: [chunk_cap × n_words] uint64
                 CUDA_CHECK(cudaMalloc(&d_xor_block, (size_t)chunk_cap * n_words_ * sizeof(uint64_t)));
@@ -3222,7 +3222,7 @@ public:
                     CUDA_CHECK(cudaStreamCreate(&scratch.stream));
                     CUDA_CHECK(cudaMalloc(&scratch.d_pi, chunk_cap * sizeof(int)));
                     CUDA_CHECK(cudaMalloc(&scratch.d_pj, chunk_cap * sizeof(int)));
-                    CUDA_CHECK(cudaMalloc(&scratch.d_fwd, 4ULL * max_padded_sites * chunk_cap * sizeof(float)));
+                    CUDA_CHECK(cudaMalloc(&scratch.d_fwd, 2ULL * max_padded_sites * chunk_cap * sizeof(float)));
                     CUDA_CHECK(cudaMalloc(&scratch.d_mean, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
                     CUDA_CHECK(cudaMalloc(&scratch.d_xor, (size_t)chunk_cap * n_words_ * sizeof(uint64_t)));
                     if (ci) {

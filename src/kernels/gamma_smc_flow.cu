@@ -638,9 +638,7 @@ __global__ void gamma_smc_cached_forward_block_kernel(
     int n_pairs,
     FlowFieldDeviceCacheView cache,
     float* __restrict__ fwd_mean,
-    float* __restrict__ fwd_cv_out,
-    float* __restrict__ fwd_alpha_out,  // cached mc_to_ab alpha for backward
-    float* __restrict__ fwd_beta_out)   // cached mc_to_ab beta for backward
+    float* __restrict__ fwd_cv_out)
 {
     int pid = blockIdx.x * blockDim.x + threadIdx.x;
     if (pid >= n_pairs) return;
@@ -667,14 +665,6 @@ __global__ void gamma_smc_cached_forward_block_kernel(
         long long idx = (long long)s * n_pairs + pid;
         fwd_mean[idx] = m;
         fwd_cv_out[idx] = c;
-
-        // Cache (alpha, beta) so backward doesn't recompute mc_to_ab
-        if (fwd_alpha_out) {
-            float a, b;
-            mc_to_ab(m, c, a, b);
-            fwd_alpha_out[idx] = a;
-            fwd_beta_out[idx] = b;
-        }
     }
 }
 
@@ -781,8 +771,6 @@ __global__ void gamma_smc_cached_backward_block_kernel(
     FlowFieldDeviceCacheView cache,
     const float* __restrict__ fwd_mean_in,
     const float* __restrict__ fwd_cv_in,
-    const float* __restrict__ fwd_alpha_in,  // cached from forward (nullptr to recompute)
-    const float* __restrict__ fwd_beta_in,
     float* __restrict__ mean_out,
     float* __restrict__ lower_out,
     float* __restrict__ upper_out,
@@ -804,16 +792,11 @@ __global__ void gamma_smc_cached_backward_block_kernel(
         float bwd_a, bwd_b;
         mc_to_ab(m, c, bwd_a, bwd_b);
 
-        // Forward state — use cached (a,b) if available
+        // Forward state
         long long idx = (long long)s * n_pairs + pid;
+        float fm = fwd_mean_in[idx], fc = fwd_cv_in[idx];
         float fwd_a, fwd_b;
-        if (fwd_alpha_in) {
-            fwd_a = fwd_alpha_in[idx];
-            fwd_b = fwd_beta_in[idx];
-        } else {
-            float fm = fwd_mean_in[idx], fc = fwd_cv_in[idx];
-            mc_to_ab(fm, fc, fwd_a, fwd_b);
-        }
+        mc_to_ab(fm, fc, fwd_a, fwd_b);
 
         // Combine
         float a_s = fwd_a + bwd_a - 1.0f;
@@ -941,19 +924,16 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
     int grid = (n_pairs + block - 1) / block;
     cudaStream_t stream = static_cast<cudaStream_t>(stream_handle);
 
-    // fwd_buf layout: [fwd_mean][fwd_cv][fwd_alpha][fwd_beta]
-    // Total: 4 × block_S × n_pairs floats
-    float* fwd_mean  = fwd_buf;
-    float* fwd_cv    = fwd_buf + (long long)block_S * n_pairs;
-    float* fwd_alpha = fwd_buf + 2LL * block_S * n_pairs;
-    float* fwd_beta  = fwd_buf + 3LL * block_S * n_pairs;
+    // fwd_buf layout: [fwd_mean][fwd_cv]
+    float* fwd_mean = fwd_buf;
+    float* fwd_cv   = fwd_buf + (long long)block_S * n_pairs;
 
-    // Forward pass: uses pre-computed XOR buffer, stores (alpha, beta)
+    // Forward pass: uses pre-computed XOR buffer
     gamma_smc_cached_forward_block_kernel<<<grid, block, 0, stream>>>(
         xor_buf, n_words, positions, site_start, block_S,
         n_pairs,
         cache,
-        fwd_mean, fwd_cv, fwd_alpha, fwd_beta);
+        fwd_mean, fwd_cv);
 
     cudaError_t err = cudaPeekAtLastError();
     if (err != cudaSuccess) {
@@ -967,7 +947,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
             xor_buf, n_words, positions, site_start, block_S, Ne,
             n_pairs,
             cache,
-            fwd_mean, fwd_cv, fwd_alpha, fwd_beta,
+            fwd_mean, fwd_cv,
             tmrca_mean_out, tmrca_lower_out, tmrca_upper_out,
             posterior_alpha_out, posterior_beta_out);
     } else {
@@ -975,7 +955,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
             xor_buf, n_words, positions, site_start, block_S, Ne,
             n_pairs,
             cache,
-            fwd_mean, fwd_cv, fwd_alpha, fwd_beta,
+            fwd_mean, fwd_cv,
             tmrca_mean_out, nullptr, nullptr,
             posterior_alpha_out, posterior_beta_out);
     }
