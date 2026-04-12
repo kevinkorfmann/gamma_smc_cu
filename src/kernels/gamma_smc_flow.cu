@@ -608,36 +608,20 @@ __global__ void gamma_smc_cached_forward_kernel(
     }
 }
 
-// ============================================================
-// XOR pre-compute kernel: precompute packed[hi] ^ packed[hj]
-// for all pairs so forward/backward reads are coalesced.
-// ============================================================
-__global__ void precompute_xor_kernel(
-    const uint64_t* __restrict__ packed,
-    int n_words,
-    const int* __restrict__ pair_i,
-    const int* __restrict__ pair_j,
-    int n_pairs,
-    uint64_t* __restrict__ xor_out)
-{
-    int pid = blockIdx.x * blockDim.x + threadIdx.x;
-    if (pid >= n_pairs) return;
-    int hi = pair_i[pid];
-    int hj = pair_j[pid];
-    for (int w = 0; w < n_words; w++) {
-        xor_out[(long long)pid * n_words + w] =
-            packed[(long long)hi * n_words + w]
-          ^ packed[(long long)hj * n_words + w];
-    }
-}
+// precompute_xor_kernel is defined in gamma_smc.cu — reused here.
+// Host wrapper for the blockwise path.
+extern __global__ void precompute_xor_kernel(
+    const uint64_t* __restrict__ packed, int n_words,
+    const int* __restrict__ pair_i, const int* __restrict__ pair_j,
+    int n_pairs, uint64_t* __restrict__ xor_buf);
 
-// Host wrapper for XOR pre-compute
 void launch_precompute_xor(
     const uint64_t* packed, int n_words,
     const int* pair_i, const int* pair_j, int n_pairs,
     uint64_t* xor_out)
 {
-    int grid = (n_pairs + 255) / 256;
+    int total = n_pairs * n_words;
+    int grid = (total + 255) / 256;
     precompute_xor_kernel<<<grid, 256>>>(packed, n_words, pair_i, pair_j, n_pairs, xor_out);
 }
 
