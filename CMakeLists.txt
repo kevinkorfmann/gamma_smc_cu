@@ -9,9 +9,8 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 80)
 endif()
 
-# Performance flags: --use_fast_math gives ~10-15% on transcendentals
-# (acceptable for Gamma-SMC where fast_pow10 is already approximate)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --use_fast_math")
+# Note: --use_fast_math was tested (+1s speedup) but removed to preserve
+# bit-identical output with the main branch for reproducibility.
 
 # Find pybind11
 find_package(pybind11 REQUIRED)
