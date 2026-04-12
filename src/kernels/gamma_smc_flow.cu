@@ -964,10 +964,9 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
     float* fwd_alpha = fwd_buf + 2LL * block_S * n_pairs;
     float* fwd_beta  = fwd_buf + 3LL * block_S * n_pairs;
 
-    // Forward pass: uses XOR buffer (packed is now the xor_buf),
-    // stores (alpha, beta) for backward
+    // Forward pass: uses pre-computed XOR buffer, stores (alpha, beta)
     gamma_smc_cached_forward_block_kernel<<<grid, block, 0, stream>>>(
-        packed, n_words, positions, site_start, block_S,
+        xor_buf, n_words, positions, site_start, block_S,
         n_pairs,
         cache,
         fwd_mean, fwd_cv, fwd_alpha, fwd_beta);
@@ -981,7 +980,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
     bool ci = (tmrca_lower_out != nullptr && tmrca_upper_out != nullptr);
     if (ci) {
         gamma_smc_cached_backward_block_kernel<true><<<grid, block, 0, stream>>>(
-            packed, n_words, positions, site_start, block_S, Ne,
+            xor_buf, n_words, positions, site_start, block_S, Ne,
             n_pairs,
             cache,
             fwd_mean, fwd_cv, fwd_alpha, fwd_beta,
@@ -989,7 +988,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
             posterior_alpha_out, posterior_beta_out);
     } else {
         gamma_smc_cached_backward_block_kernel<false><<<grid, block, 0, stream>>>(
-            packed, n_words, positions, site_start, block_S, Ne,
+            xor_buf, n_words, positions, site_start, block_S, Ne,
             n_pairs,
             cache,
             fwd_mean, fwd_cv, fwd_alpha, fwd_beta,
