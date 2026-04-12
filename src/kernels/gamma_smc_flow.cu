@@ -631,6 +631,16 @@ __global__ void precompute_xor_kernel(
     }
 }
 
+// Host wrapper for XOR pre-compute
+void launch_precompute_xor(
+    const uint64_t* packed, int n_words,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    uint64_t* xor_out)
+{
+    int grid = (n_pairs + 255) / 256;
+    precompute_xor_kernel<<<grid, 256>>>(packed, n_words, pair_i, pair_j, n_pairs, xor_out);
+}
+
 // ============================================================
 // Forward pass with cache on a local site block
 // Uses pre-computed XOR buffer and caches (alpha, beta) for backward.

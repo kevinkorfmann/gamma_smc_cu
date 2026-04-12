@@ -1957,12 +1957,18 @@ extern void gamma_smc_flow_h2_fwd_gpu(
     float* tmrca_lower_out,
     float* tmrca_upper_out);
 
-extern void gamma_smc_flow_cached_fb_block_gpu(
+// XOR pre-compute host wrapper (defined in gamma_smc_flow.cu)
+extern void launch_precompute_xor(
     const uint64_t* packed, int n_words,
+    const int* pair_i, const int* pair_j, int n_pairs,
+    uint64_t* xor_out);
+
+extern void gamma_smc_flow_cached_fb_block_gpu(
+    const uint64_t* xor_buf, int n_words,
     const double* positions,
     int site_start, int block_S,
     float Ne,
-    const int* pair_i, const int* pair_j, int n_pairs,
+    int n_pairs,
     FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* tmrca_mean_out,
@@ -1972,11 +1978,11 @@ extern void gamma_smc_flow_cached_fb_block_gpu(
     float* posterior_beta_out);
 
 extern void gamma_smc_flow_cached_fb_block_gpu_async(
-    const uint64_t* packed, int n_words,
+    const uint64_t* xor_buf, int n_words,
     const double* positions,
     int site_start, int block_S,
     float Ne,
-    const int* pair_i, const int* pair_j, int n_pairs,
+    int n_pairs,
     FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* tmrca_mean_out,
@@ -2534,7 +2540,9 @@ class FlowContext {
         free_mem -= 512ULL * 1024 * 1024;  // reserve 512MB headroom
 
         int n_arrays = ci ? 3 : 1;
-        size_t per_pair = (size_t)padded_sites * (2 + n_arrays) * sizeof(float)
+        // fwd_buf: 4 floats per site (mean, cv, alpha, beta) + output arrays + XOR buffer
+        size_t per_pair = (size_t)padded_sites * (4 + n_arrays) * sizeof(float)
+                        + (size_t)n_words_ * sizeof(uint64_t)  // XOR buffer
                         + sizeof(int) * 2;
         int max_chunk = (int)(free_mem / std::max<size_t>(per_pair, 1));
         return std::max(max_chunk, 1);
@@ -3096,11 +3104,15 @@ public:
                 float* d_upper_block = nullptr;
                 float* d_alpha_block = nullptr;
                 float* d_beta_block  = nullptr;
+                uint64_t* d_xor_block = nullptr;
 
                 CUDA_CHECK(cudaMalloc(&d_pi_block, chunk_cap * sizeof(int)));
                 CUDA_CHECK(cudaMalloc(&d_pj_block, chunk_cap * sizeof(int)));
-                CUDA_CHECK(cudaMalloc(&d_fwd_block, 2ULL * max_padded_sites * chunk_cap * sizeof(float)));
+                // fwd_buf: 4× for (mean, cv, alpha, beta) caching
+                CUDA_CHECK(cudaMalloc(&d_fwd_block, 4ULL * max_padded_sites * chunk_cap * sizeof(float)));
                 CUDA_CHECK(cudaMalloc(&d_mean_block, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
+                // XOR pre-compute buffer: [chunk_cap × n_words] uint64
+                CUDA_CHECK(cudaMalloc(&d_xor_block, (size_t)chunk_cap * n_words_ * sizeof(uint64_t)));
                 if (ci) {
                     CUDA_CHECK(cudaMalloc(&d_lower_block, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
                     CUDA_CHECK(cudaMalloc(&d_upper_block, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
@@ -3125,11 +3137,17 @@ public:
                         CUDA_CHECK(cudaMemcpy(
                             d_pj_block, pj.data() + offset, chunk * sizeof(int), cudaMemcpyHostToDevice));
 
+                        // Pre-compute XOR for this pair chunk
+                        launch_precompute_xor(
+                            d_packed_, n_words_,
+                            d_pi_block, d_pj_block, chunk,
+                            d_xor_block);
+
                         gamma_smc_flow_cached_fb_block_gpu(
-                            d_packed_, n_words_, d_pos_,
+                            d_xor_block, n_words_, d_pos_,
                             block.padded_start, padded_sites,
                             ctx_cache_Ne_,
-                            d_pi_block, d_pj_block, chunk,
+                            chunk,
                             ctx_cache_,
                             d_fwd_block,
                             d_mean_block,
@@ -3138,15 +3156,26 @@ public:
                             return_posterior ? d_alpha_block : nullptr,
                             return_posterior ? d_beta_block  : nullptr);
 
+                        // Copy core block output to host
                         auto copy_core = [&](float* d_src, float* h_dst) {
-                            CUDA_CHECK(cudaMemcpy2D(
-                                h_dst + (size_t)block.core_start * n_pairs + offset,
-                                (size_t)n_pairs * sizeof(float),
-                                d_src + (size_t)core_offset * chunk,
-                                (size_t)chunk * sizeof(float),
-                                (size_t)chunk * sizeof(float),
-                                core_sites,
-                                cudaMemcpyDeviceToHost));
+                            if (chunk == n_pairs) {
+                                // Contiguous: single fast memcpy
+                                CUDA_CHECK(cudaMemcpy(
+                                    h_dst + (size_t)block.core_start * n_pairs,
+                                    d_src + (size_t)core_offset * chunk,
+                                    (size_t)core_sites * chunk * sizeof(float),
+                                    cudaMemcpyDeviceToHost));
+                            } else {
+                                // Strided: 2D memcpy for sub-chunks
+                                CUDA_CHECK(cudaMemcpy2D(
+                                    h_dst + (size_t)block.core_start * n_pairs + offset,
+                                    (size_t)n_pairs * sizeof(float),
+                                    d_src + (size_t)core_offset * chunk,
+                                    (size_t)chunk * sizeof(float),
+                                    (size_t)chunk * sizeof(float),
+                                    core_sites,
+                                    cudaMemcpyDeviceToHost));
+                            }
                         };
 
                         copy_core(d_mean_block, h_mean);
@@ -3161,6 +3190,7 @@ public:
                     }
                 }
 
+                if (d_xor_block) cudaFree(d_xor_block);
                 cudaFree(d_pi_block);
                 cudaFree(d_pj_block);
                 cudaFree(d_fwd_block);
