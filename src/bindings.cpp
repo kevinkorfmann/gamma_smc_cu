@@ -3208,6 +3208,7 @@ public:
                     float* d_mean = nullptr;
                     float* d_lower = nullptr;
                     float* d_upper = nullptr;
+                    uint64_t* d_xor = nullptr;
                 };
 
                 alloc_output(n_pairs, ci);
@@ -3221,8 +3222,9 @@ public:
                     CUDA_CHECK(cudaStreamCreate(&scratch.stream));
                     CUDA_CHECK(cudaMalloc(&scratch.d_pi, chunk_cap * sizeof(int)));
                     CUDA_CHECK(cudaMalloc(&scratch.d_pj, chunk_cap * sizeof(int)));
-                    CUDA_CHECK(cudaMalloc(&scratch.d_fwd, 2ULL * max_padded_sites * chunk_cap * sizeof(float)));
+                    CUDA_CHECK(cudaMalloc(&scratch.d_fwd, 4ULL * max_padded_sites * chunk_cap * sizeof(float)));
                     CUDA_CHECK(cudaMalloc(&scratch.d_mean, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
+                    CUDA_CHECK(cudaMalloc(&scratch.d_xor, (size_t)chunk_cap * n_words_ * sizeof(uint64_t)));
                     if (ci) {
                         CUDA_CHECK(cudaMalloc(&scratch.d_lower, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
                         CUDA_CHECK(cudaMalloc(&scratch.d_upper, (size_t)max_padded_sites * chunk_cap * sizeof(float)));
@@ -3244,11 +3246,17 @@ public:
                         scratch.d_pj, pj.data() + offset, chunk * sizeof(int),
                         cudaMemcpyHostToDevice, scratch.stream));
 
+                    // Pre-compute XOR for this chunk
+                    launch_precompute_xor(
+                        d_packed_, n_words_,
+                        scratch.d_pi, scratch.d_pj, chunk,
+                        scratch.d_xor);
+
                     gamma_smc_flow_cached_fb_block_gpu_async(
-                        d_packed_, n_words_, d_pos_,
+                        scratch.d_xor, n_words_, d_pos_,
                         block.padded_start, padded_sites,
                         ctx_cache_Ne_,
-                        scratch.d_pi, scratch.d_pj, chunk,
+                        chunk,
                         ctx_cache_,
                         scratch.d_fwd,
                         scratch.d_mean,
@@ -3311,6 +3319,7 @@ public:
                     if (scratch.d_mean) cudaFree(scratch.d_mean);
                     if (scratch.d_lower) cudaFree(scratch.d_lower);
                     if (scratch.d_upper) cudaFree(scratch.d_upper);
+                    if (scratch.d_xor) cudaFree(scratch.d_xor);
                     if (scratch.stream) cudaStreamDestroy(scratch.stream);
                 }
             }
