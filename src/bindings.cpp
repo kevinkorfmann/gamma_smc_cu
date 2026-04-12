@@ -3074,6 +3074,15 @@ public:
         {
             py::gil_scoped_release release;
             cudaSetDevice(device_id_);
+
+            // Pin host output memory for faster D2H via DMA (PCIe Gen5: 64 GB/s)
+            size_t pin_bytes = (size_t)S_ * n_pairs * sizeof(float);
+            cudaHostRegister(h_mean, pin_bytes, cudaHostRegisterDefault);
+            if (h_lower) cudaHostRegister(h_lower, pin_bytes, cudaHostRegisterDefault);
+            if (h_upper) cudaHostRegister(h_upper, pin_bytes, cudaHostRegisterDefault);
+            if (h_alpha) cudaHostRegister(h_alpha, pin_bytes, cudaHostRegisterDefault);
+            if (h_beta)  cudaHostRegister(h_beta,  pin_bytes, cudaHostRegisterDefault);
+
             if (max_streams == 1) {
                 int auto_chunk_cap = compute_max_fb_block_chunk(max_padded_sites, ci);
                 chunk_cap = pair_batch_size > 0 ? pair_batch_size : auto_chunk_cap;
@@ -3275,6 +3284,13 @@ public:
                     if (scratch.stream) cudaStreamDestroy(scratch.stream);
                 }
             }
+
+            // Unpin host output memory
+            cudaHostUnregister(h_mean);
+            if (h_lower) cudaHostUnregister(h_lower);
+            if (h_upper) cudaHostUnregister(h_upper);
+            if (h_alpha) cudaHostUnregister(h_alpha);
+            if (h_beta)  cudaHostUnregister(h_beta);
         }
 
         result["mean"] = mean_out;
