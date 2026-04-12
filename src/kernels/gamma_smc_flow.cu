@@ -609,26 +609,47 @@ __global__ void gamma_smc_cached_forward_kernel(
 }
 
 // ============================================================
+// XOR pre-compute kernel: precompute packed[hi] ^ packed[hj]
+// for all pairs so forward/backward reads are coalesced.
+// ============================================================
+__global__ void precompute_xor_kernel(
+    const uint64_t* __restrict__ packed,
+    int n_words,
+    const int* __restrict__ pair_i,
+    const int* __restrict__ pair_j,
+    int n_pairs,
+    uint64_t* __restrict__ xor_out)
+{
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= n_pairs) return;
+    int hi = pair_i[pid];
+    int hj = pair_j[pid];
+    for (int w = 0; w < n_words; w++) {
+        xor_out[(long long)pid * n_words + w] =
+            packed[(long long)hi * n_words + w]
+          ^ packed[(long long)hj * n_words + w];
+    }
+}
+
+// ============================================================
 // Forward pass with cache on a local site block
+// Uses pre-computed XOR buffer and caches (alpha, beta) for backward.
 // ============================================================
 __global__ void gamma_smc_cached_forward_block_kernel(
-    const uint64_t* __restrict__ packed,
+    const uint64_t* __restrict__ xor_buf,  // pre-computed XOR [n_pairs × n_words]
     int n_words,
     const double* __restrict__ positions,
     int site_start,
     int block_S,
-    const int* __restrict__ pair_i,
-    const int* __restrict__ pair_j,
     int n_pairs,
     FlowFieldDeviceCacheView cache,
     float* __restrict__ fwd_mean,
-    float* __restrict__ fwd_cv_out)
+    float* __restrict__ fwd_cv_out,
+    float* __restrict__ fwd_alpha_out,  // cached mc_to_ab alpha for backward
+    float* __restrict__ fwd_beta_out)   // cached mc_to_ab beta for backward
 {
     int pid = blockIdx.x * blockDim.x + threadIdx.x;
     if (pid >= n_pairs) return;
-
-    int hi = pair_i[pid];
-    int hj = pair_j[pid];
 
     float m = 0.0f, c = 0.0f;
     int cur_word = -1;
@@ -643,8 +664,7 @@ __global__ void gamma_smc_cached_forward_block_kernel(
         int w = global_s >> 6;
         int bit = global_s & 63;
         if (w != cur_word) {
-            xor_w = packed[(long long)hi * n_words + w]
-                  ^ packed[(long long)hj * n_words + w];
+            xor_w = xor_buf[(long long)pid * n_words + w];  // coalesced read
             cur_word = w;
         }
         bool is_het = ((xor_w >> bit) & 1ULL) != 0;
@@ -653,6 +673,14 @@ __global__ void gamma_smc_cached_forward_block_kernel(
         long long idx = (long long)s * n_pairs + pid;
         fwd_mean[idx] = m;
         fwd_cv_out[idx] = c;
+
+        // Cache (alpha, beta) so backward doesn't recompute mc_to_ab
+        if (fwd_alpha_out) {
+            float a, b;
+            mc_to_ab(m, c, a, b);
+            fwd_alpha_out[idx] = a;
+            fwd_beta_out[idx] = b;
+        }
     }
 }
 
@@ -749,18 +777,18 @@ __global__ void gamma_smc_cached_backward_kernel(
 // the core slice back into the global (n_sites × n_pairs) array.
 template<bool WRITE_CI>
 __global__ void gamma_smc_cached_backward_block_kernel(
-    const uint64_t* __restrict__ packed,
+    const uint64_t* __restrict__ xor_buf,  // pre-computed XOR [n_pairs × n_words]
     int n_words,
     const double* __restrict__ positions,
     int site_start,
     int block_S,
     float Ne,
-    const int* __restrict__ pair_i,
-    const int* __restrict__ pair_j,
     int n_pairs,
     FlowFieldDeviceCacheView cache,
     const float* __restrict__ fwd_mean_in,
     const float* __restrict__ fwd_cv_in,
+    const float* __restrict__ fwd_alpha_in,  // cached from forward (nullptr to recompute)
+    const float* __restrict__ fwd_beta_in,
     float* __restrict__ mean_out,
     float* __restrict__ lower_out,
     float* __restrict__ upper_out,
@@ -769,9 +797,6 @@ __global__ void gamma_smc_cached_backward_block_kernel(
 {
     int pid = blockIdx.x * blockDim.x + threadIdx.x;
     if (pid >= n_pairs) return;
-
-    int hi = pair_i[pid];
-    int hj = pair_j[pid];
 
     float m = 0.0f, c = 0.0f;
     float unscale = 2.0f * Ne;
@@ -785,11 +810,16 @@ __global__ void gamma_smc_cached_backward_block_kernel(
         float bwd_a, bwd_b;
         mc_to_ab(m, c, bwd_a, bwd_b);
 
-        // Forward state
+        // Forward state — use cached (a,b) if available
         long long idx = (long long)s * n_pairs + pid;
-        float fm = fwd_mean_in[idx], fc = fwd_cv_in[idx];
         float fwd_a, fwd_b;
-        mc_to_ab(fm, fc, fwd_a, fwd_b);
+        if (fwd_alpha_in) {
+            fwd_a = fwd_alpha_in[idx];
+            fwd_b = fwd_beta_in[idx];
+        } else {
+            float fm = fwd_mean_in[idx], fc = fwd_cv_in[idx];
+            mc_to_ab(fm, fc, fwd_a, fwd_b);
+        }
 
         // Combine
         float a_s = fwd_a + bwd_a - 1.0f;
@@ -811,13 +841,11 @@ __global__ void gamma_smc_cached_backward_block_kernel(
         if (alpha_out != nullptr) alpha_out[idx] = a_s;
         if (beta_out  != nullptr) beta_out[idx]  = b_s;
 
-        // Process the segment ending at global_s so the next iteration sees
-        // the backward state at the previous local output position.
+        // Coalesced XOR read from pre-computed buffer
         int w = global_s >> 6;
         int bit = global_s & 63;
         if (w != cur_word) {
-            xor_w = packed[(long long)hi * n_words + w]
-                  ^ packed[(long long)hj * n_words + w];
+            xor_w = xor_buf[(long long)pid * n_words + w];  // coalesced read
             cur_word = w;
         }
         bool is_het = ((xor_w >> bit) & 1ULL) != 0;
@@ -901,13 +929,13 @@ void gamma_smc_flow_cached_fb_gpu(
 // Host launcher — cached version on a local site block
 // ============================================================
 void gamma_smc_flow_cached_fb_block_gpu_async(
-    const uint64_t* packed, int n_words,
+    const uint64_t* xor_buf, int n_words,  // pre-computed XOR buffer [n_pairs × n_words]
     const double* positions,
     int site_start, int block_S,
     float Ne,
-    const int* pair_i, const int* pair_j, int n_pairs,
+    int n_pairs,
     FlowFieldDeviceCacheView cache,
-    float* fwd_buf,
+    float* fwd_buf,       // layout: [fwd_mean][fwd_cv][fwd_alpha][fwd_beta] = 4 × block_S × n_pairs
     float* tmrca_mean_out,
     float* tmrca_lower_out,
     float* tmrca_upper_out,
@@ -919,14 +947,20 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
     int grid = (n_pairs + block - 1) / block;
     cudaStream_t stream = static_cast<cudaStream_t>(stream_handle);
 
-    float* fwd_mean = fwd_buf;
-    float* fwd_cv   = fwd_buf + (long long)block_S * n_pairs;
+    // fwd_buf layout: [fwd_mean][fwd_cv][fwd_alpha][fwd_beta]
+    // Total: 4 × block_S × n_pairs floats
+    float* fwd_mean  = fwd_buf;
+    float* fwd_cv    = fwd_buf + (long long)block_S * n_pairs;
+    float* fwd_alpha = fwd_buf + 2LL * block_S * n_pairs;
+    float* fwd_beta  = fwd_buf + 3LL * block_S * n_pairs;
 
+    // Forward pass: uses XOR buffer (packed is now the xor_buf),
+    // stores (alpha, beta) for backward
     gamma_smc_cached_forward_block_kernel<<<grid, block, 0, stream>>>(
         packed, n_words, positions, site_start, block_S,
-        pair_i, pair_j, n_pairs,
+        n_pairs,
         cache,
-        fwd_mean, fwd_cv);
+        fwd_mean, fwd_cv, fwd_alpha, fwd_beta);
 
     cudaError_t err = cudaPeekAtLastError();
     if (err != cudaSuccess) {
@@ -938,17 +972,17 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
     if (ci) {
         gamma_smc_cached_backward_block_kernel<true><<<grid, block, 0, stream>>>(
             packed, n_words, positions, site_start, block_S, Ne,
-            pair_i, pair_j, n_pairs,
+            n_pairs,
             cache,
-            fwd_mean, fwd_cv,
+            fwd_mean, fwd_cv, fwd_alpha, fwd_beta,
             tmrca_mean_out, tmrca_lower_out, tmrca_upper_out,
             posterior_alpha_out, posterior_beta_out);
     } else {
         gamma_smc_cached_backward_block_kernel<false><<<grid, block, 0, stream>>>(
             packed, n_words, positions, site_start, block_S, Ne,
-            pair_i, pair_j, n_pairs,
+            n_pairs,
             cache,
-            fwd_mean, fwd_cv,
+            fwd_mean, fwd_cv, fwd_alpha, fwd_beta,
             tmrca_mean_out, nullptr, nullptr,
             posterior_alpha_out, posterior_beta_out);
     }
@@ -961,11 +995,11 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
 }
 
 void gamma_smc_flow_cached_fb_block_gpu(
-    const uint64_t* packed, int n_words,
+    const uint64_t* xor_buf, int n_words,
     const double* positions,
     int site_start, int block_S,
     float Ne,
-    const int* pair_i, const int* pair_j, int n_pairs,
+    int n_pairs,
     FlowFieldDeviceCacheView cache,
     float* fwd_buf,
     float* tmrca_mean_out,
@@ -975,9 +1009,9 @@ void gamma_smc_flow_cached_fb_block_gpu(
     float* posterior_beta_out)
 {
     gamma_smc_flow_cached_fb_block_gpu_async(
-        packed, n_words, positions,
+        xor_buf, n_words, positions,
         site_start, block_S, Ne,
-        pair_i, pair_j, n_pairs,
+        n_pairs,
         cache,
         fwd_buf,
         tmrca_mean_out,
