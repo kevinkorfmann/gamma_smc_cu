@@ -3056,22 +3056,28 @@ public:
             pj[p] = pairs[p].second;
         }
 
-        auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
-        py::array_t<float> lower_out, upper_out;
-        py::array_t<float> alpha_out, beta_out;
+        // Use cudaMallocHost for pinned D2H buffer (no per-page lock overhead).
+        // Copy pinned→numpy at the end.
+        size_t out_total = (size_t)S_ * n_pairs;
+        float* h_mean_pinned = nullptr;
+        float* h_lower_pinned = nullptr;
+        float* h_upper_pinned = nullptr;
+        float* h_alpha_pinned = nullptr;
+        float* h_beta_pinned = nullptr;
+        cudaMallocHost(&h_mean_pinned, out_total * sizeof(float));
         if (ci) {
-            lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
-            upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            cudaMallocHost(&h_lower_pinned, out_total * sizeof(float));
+            cudaMallocHost(&h_upper_pinned, out_total * sizeof(float));
         }
         if (return_posterior) {
-            alpha_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
-            beta_out  = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            cudaMallocHost(&h_alpha_pinned, out_total * sizeof(float));
+            cudaMallocHost(&h_beta_pinned, out_total * sizeof(float));
         }
-        float* h_mean = mean_out.mutable_data();
-        float* h_lower = ci ? lower_out.mutable_data() : nullptr;
-        float* h_upper = ci ? upper_out.mutable_data() : nullptr;
-        float* h_alpha = return_posterior ? alpha_out.mutable_data() : nullptr;
-        float* h_beta  = return_posterior ? beta_out.mutable_data()  : nullptr;
+        float* h_mean = h_mean_pinned;
+        float* h_lower = h_lower_pinned;
+        float* h_upper = h_upper_pinned;
+        float* h_alpha = h_alpha_pinned;
+        float* h_beta  = h_beta_pinned;
 
         int max_padded_sites = 0;
         for (const auto& block : blocks) {
@@ -3082,14 +3088,6 @@ public:
         {
             py::gil_scoped_release release;
             cudaSetDevice(device_id_);
-
-            // Pin host output memory for faster D2H via DMA (PCIe Gen5: 64 GB/s)
-            size_t pin_bytes = (size_t)S_ * n_pairs * sizeof(float);
-            cudaHostRegister(h_mean, pin_bytes, cudaHostRegisterDefault);
-            if (h_lower) cudaHostRegister(h_lower, pin_bytes, cudaHostRegisterDefault);
-            if (h_upper) cudaHostRegister(h_upper, pin_bytes, cudaHostRegisterDefault);
-            if (h_alpha) cudaHostRegister(h_alpha, pin_bytes, cudaHostRegisterDefault);
-            if (h_beta)  cudaHostRegister(h_beta,  pin_bytes, cudaHostRegisterDefault);
 
             if (max_streams == 1) {
                 int auto_chunk_cap = compute_max_fb_block_chunk(max_padded_sites, ci);
@@ -3324,12 +3322,29 @@ public:
                 }
             }
 
-            // Unpin host output memory
-            cudaHostUnregister(h_mean);
-            if (h_lower) cudaHostUnregister(h_lower);
-            if (h_upper) cudaHostUnregister(h_upper);
-            if (h_alpha) cudaHostUnregister(h_alpha);
-            if (h_beta)  cudaHostUnregister(h_beta);
+        }
+
+        // Copy pinned → numpy and free pinned buffers
+        auto mean_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+        std::memcpy(mean_out.mutable_data(), h_mean_pinned, out_total * sizeof(float));
+        cudaFreeHost(h_mean_pinned);
+
+        py::array_t<float> lower_out, upper_out, alpha_out, beta_out;
+        if (ci) {
+            lower_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            upper_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            std::memcpy(lower_out.mutable_data(), h_lower_pinned, out_total * sizeof(float));
+            std::memcpy(upper_out.mutable_data(), h_upper_pinned, out_total * sizeof(float));
+            cudaFreeHost(h_lower_pinned);
+            cudaFreeHost(h_upper_pinned);
+        }
+        if (return_posterior) {
+            alpha_out = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            beta_out  = py::array_t<float>(std::vector<ssize_t>{(ssize_t)S_, (ssize_t)n_pairs});
+            std::memcpy(alpha_out.mutable_data(), h_alpha_pinned, out_total * sizeof(float));
+            std::memcpy(beta_out.mutable_data(),  h_beta_pinned,  out_total * sizeof(float));
+            cudaFreeHost(h_alpha_pinned);
+            cudaFreeHost(h_beta_pinned);
         }
 
         result["mean"] = mean_out;
