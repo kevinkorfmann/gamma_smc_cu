@@ -12,35 +12,41 @@ claiming novelty for a signal that the field already knows about, just at a diff
    538 rank<1% → 512 replicated → 473 outside canonical ±500 kb → 165 LD-clustered at 1 Mb).
 2. For every one of the 165 stage-5 clusters, recorded all member genes
    (`stage5_cluster_members.csv`).
-3. Pulled the three prior scans the manuscript cites:
-   - **Voight 2006** (PLoS Biology) — parsed supplementary data files
-     (sd001/sd002/sd003, 100 kb windows with Entrez gene IDs for Asian, European,
-     Yoruba), mapped Entrez → symbol via NCBI `Homo_sapiens.gene_info` → **744 unique
-     gene symbols** flagged by Voight 2006 iHS.
-   - **Sabeti 2007** (Nature, Table 1, "22 strongest regions") — chr and gene names
-     pulled from the paper text (full supplement download blocked by paywall but the
-     Table 1 list is the load-bearing reference).
-   - **Metspalu 2011** (AJHG, South Asia-focused) — main-text candidate list.
-4. Cross-checked each of the 165 clusters against the 744-gene Voight 2006 set.
+3. Pulled gene-level candidate sets from three prior haplotype scans:
+   - **Voight 2006** (PLoS Biology, supp data sd001/sd002/sd003): 744 gene symbols
+     across HapMap Asian, European, Yoruba (Entrez IDs parsed, mapped via NCBI
+     `Homo_sapiens.gene_info`).
+   - **Sabeti 2007** (Nature, supp PDF NIHMS4416, Tables S1, S9, S10 + main Table 1):
+     219 gene symbols.  Table S7 (XP-EHH top 300 regions) exists only as an embedded
+     image and is not machine-readable from the NIHMS source.
+   - **Metspalu 2011** (AJHG, supp `mmc5`=S4 iHS and `mmc6`=S5 XP-EHH India top windows):
+     48 gene symbols.
+   - Union = **975 unique prior-scan gene symbols**.
+4. Cross-checked each of the 165 clusters against the combined 975-gene prior set.
 
-## Result: Cluster-level cross-check
+## Result: Three-scan cluster-level cross-check
 
 | Status | Count | Meaning |
 |-------:|------:|---------|
-| clean | 143 / 165 | No cluster member appears in Voight 2006 — novelty claim safe. |
-| rep in Voight | 16 / 165 | Representative itself is in Voight 2006 — we are independently re-detecting, not mis-labelling. Fine for validation. |
-| **neighbour in Voight, rep not** | **6 / 165** | **Mis-labelling risk.** Voight 2006 flagged selection at this region at a neighbour gene; we pick a different representative; naive reading of our paper would claim novelty. |
+| clean | 137 / 165 | No cluster member appears in any of Voight 2006, Sabeti 2007, Metspalu 2011. Novelty claim safe. |
+| rep in prior scan | 19 / 165 | Representative itself is in one of the three scans — independent rediscovery, not mis-labelling. |
+| **neighbour in prior scan, rep not** | **9 / 165** | **Mis-labelling risk.** A prior scan flagged selection at this region at a neighbour gene; we pick a different representative. |
 
-### The 6 mis-label-risk loci
+### The 9 mis-label-risk loci
 
-| Representative | Chr | Rep pop | Cluster size | Span (kb) | Voight 2006 hit(s) inside cluster |
-|---|---|---|---|---|---|
-| DEDD | 1 | YRI | 4 | 94.7 | NECTIN4 |
-| DOK1 | 2 | GBR | 8 | 322.7 | DQX1, AUP1, HTRA2, LOXL3, M1AP |
-| IGIP | 5 | LWK | 4 | 741.9 | PROB1 |
-| CYP3A5 | 7 | GBR | 6 | 271.4 | BUD31 |
-| **GRK2** | **11** | **GIH** | **15** | **918.5** | **RAD9A, CLCF1, PPP1CA, TBC1D10C, CARNS1, PITPNM1, CDK2AP2** |
-| ZNF780B | 19 | FIN | 12 | 1,771.1 | CATSPERG, PSMD8, FAM98C |
+| Representative | Chr | Rep pop | Cluster size | Voight 2006 hit(s) | Sabeti 2007 | Metspalu 2011 |
+|---|---|---|---|---|---|---|
+| DEDD | 1 | YRI | 4 | NECTIN4 | — | — |
+| DOK1 | 2 | GBR | 8 | DQX1, AUP1, HTRA2, LOXL3, M1AP | AUP1 | — |
+| ORC2 | 2 | PEL | 2 | — | NIF3L1 | — |
+| IGIP | 5 | LWK | 4 | PROB1 | — | — |
+| CYP3A5 | 7 | GBR | 6 | BUD31 | — | — |
+| BMI1 | 10 | GIH | 4 | — | SPAG6 | — |
+| **GRK2** | **11** | **GIH** | **15** | **RAD9A, CLCF1, PPP1CA, TBC1D10C, CARNS1, PITPNM1, CDK2AP2** | — | — |
+| EDC4 | 16 | CHB | 38 | — | LRRC36 | — |
+| ZNF780B | 19 | FIN | 12 | CATSPERG, PSMD8, FAM98C | — | — |
+
+**GRK2-specific:** Voight 2006 is the only prior scan with cluster-member hits at chr11q13. Sabeti 2007 and Metspalu 2011 are clean at the locus; Metspalu's only chr11 candidate is KIRREL3 at chr11:126\,Mb; Sabeti's nearest chr11 entry is MYEOV ~1.8\,Mb distal and not among its top candidates.
 
 ## GRK2 is the biggest load-bearing concern
 
@@ -130,14 +136,15 @@ to:
 
 ## Remaining cross-checks not yet done
 
-- Sabeti 2007 full supplementary table (beyond Table 1's 22 regions)
-- Metspalu 2011 supplementary tables (top 20 iHS + XP-EHH windows — most could be
-  obtained by hand-parsing their supplementary PDF)
-- PopHumanScan 2859-region aggregate (website unreachable at the time of this audit)
-- Pickrell 2009, Grossman 2013 CMS, broader meta-analyses
+- Sabeti 2007 Table S7 (XP-EHH top 300 regions) exists only as an embedded image
+  in the NIHMS supplement PDF and is not machine-readable from that source;
+  OCR pass may be worth running if reviewer pushes.
+- PopHumanScan 2859-region aggregate (website unreachable at the time of this audit).
+- Pickrell 2009, Grossman 2013 CMS, broader meta-analyses — lower priority given
+  the three primary scans we cite are now covered.
 
-If any of these adds hits to the GRK2 cluster, the wording above should be
-further softened. If they all come back clean, the above is sufficient.
+All three scans that the manuscript currently cites (Voight 2006, Sabeti 2007,
+Metspalu 2011) are covered at gene-symbol level.
 
 ## Artifacts
 
