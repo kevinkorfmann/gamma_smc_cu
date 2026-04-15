@@ -61,3 +61,23 @@ vendor/
 
 # Temporary benchmark downloads
 benchmarks/poppy_results/
+
+# Large demo data files (downloadable from betty)
+analysis/orthogonal_v41/grk2_demo.npz
+analysis/orthogonal_v41/multistat_demo.npz
+analysis/orthogonal_v41/selscan_genelevel/
+analysis/orthogonal_v41/three_method/
+
+# Relate outputs (regenerated on betty)
+analysis/relate_clues/trees/
+analysis/relate_clues/data/
+analysis/relate_clues/logs/
+analysis/relate_clues/clues/
+analysis/relate_clues/input_files/
+analysis/relate_clues/tools/
+analysis/relate_clues/figures/
+analysis/relate_clues/neutral_picks.csv
+
+# Notebooks local only (not yet reviewed)
+notebooks/
+

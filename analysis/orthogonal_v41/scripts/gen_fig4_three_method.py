@@ -198,8 +198,8 @@ def main():
     n_genes = len(GENES)
     fig, axes = plt.subplots(
         n_genes, 4,
-        figsize=(11, 1.0 * n_genes + 1.5),
-        gridspec_kw={"width_ratios": [0.9, 2, 2, 2], "wspace": 0.08, "hspace": 0.4},
+        figsize=(11, 0.75 * n_genes + 1.5),
+        gridspec_kw={"width_ratios": [0.9, 2, 2, 2], "wspace": 0.08, "hspace": 0.25},
     )
 
     for ri, (gene, chr_, focal_pop, group, color) in enumerate(GENES):
@@ -234,7 +234,7 @@ def main():
         plot_asmc_panel(axes[ri, 3], focal, control, gene, focal_pop, color)
 
         if ri == 0:
-            axes[ri, 1].set_title("tmrca.cu pairwise", fontsize=10, loc="left")
+            axes[ri, 1].set_title("gamma_smc_cu pairwise", fontsize=10, loc="left")
             axes[ri, 2].set_title("cxt regional", fontsize=10, loc="left")
             axes[ri, 3].set_title("ASMC", fontsize=10, loc="left")
         if ri == n_genes - 1:
@@ -246,7 +246,7 @@ def main():
     plt.tight_layout()
     out_png = os.path.join(OUT_DIR, "fig4_three_method.png")
     out_pdf = os.path.join(OUT_DIR, "fig4_three_method.pdf")
-    plt.savefig(out_png, dpi=180, bbox_inches="tight")
+    plt.savefig(out_png, dpi=200, bbox_inches="tight")
     plt.savefig(out_pdf, bbox_inches="tight")
     plt.close()
     print(f"Wrote {out_png}")

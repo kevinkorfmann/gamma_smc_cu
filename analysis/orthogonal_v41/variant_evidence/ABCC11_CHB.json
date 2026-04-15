@@ -1,0 +1,21 @@
+{
+  "gene": "ABCC11",
+  "chr": 16,
+  "pop": "CHB",
+  "super": "EAS",
+  "midpoint": 48206670,
+  "gstart": 48165773,
+  "gend": 48247568,
+  "win_lo": 47706670,
+  "win_hi": 48706670,
+  "n_variants": 19858,
+  "n_enriched": 1737,
+  "n_depleted": 18121,
+  "depleted_to_enriched_ratio": 10.432354634427174,
+  "max_fst": 0.7907340222737202,
+  "mean_top10_fst": 0.6469136956825553,
+  "most_diff_variant_pos": 48341866,
+  "most_diff_variant_focal_af": 0.024271844660194174,
+  "most_diff_variant_other_af": 0.8236530378295759,
+  "most_diff_variant_diff": -0.7993811931693817
+}

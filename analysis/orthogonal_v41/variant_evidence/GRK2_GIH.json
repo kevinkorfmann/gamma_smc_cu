@@ -1,0 +1,21 @@
+{
+  "gene": "GRK2",
+  "chr": 11,
+  "pop": "GIH",
+  "super": "SAS",
+  "midpoint": 67276514,
+  "gstart": 67266473,
+  "gend": 67286556,
+  "win_lo": 66776514,
+  "win_hi": 67776514,
+  "n_variants": 24473,
+  "n_enriched": 3028,
+  "n_depleted": 21445,
+  "depleted_to_enriched_ratio": 7.08223249669749,
+  "max_fst": 0.4304134753567917,
+  "mean_top10_fst": 0.4099964543496529,
+  "most_diff_variant_pos": 67407126,
+  "most_diff_variant_focal_af": 0.019417475728155338,
+  "most_diff_variant_other_af": 0.46981930026912727,
+  "most_diff_variant_diff": -0.45040182454097194
+}

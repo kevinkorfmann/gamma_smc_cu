@@ -1,0 +1,21 @@
+{
+  "gene": "EDAR",
+  "chr": 2,
+  "pop": "CHB",
+  "super": "EAS",
+  "midpoint": 108941921,
+  "gstart": 108894471,
+  "gend": 108989372,
+  "win_lo": 108441921,
+  "win_hi": 109441921,
+  "n_variants": 23378,
+  "n_enriched": 3166,
+  "n_depleted": 20212,
+  "depleted_to_enriched_ratio": 6.384080859128238,
+  "max_fst": 0.8447872406669142,
+  "mean_top10_fst": 0.8327126465879013,
+  "most_diff_variant_pos": 108897145,
+  "most_diff_variant_focal_af": 0.9368932038834952,
+  "most_diff_variant_other_af": 0.08158196408100879,
+  "most_diff_variant_diff": 0.8553112398024864
+}
