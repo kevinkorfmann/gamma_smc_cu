@@ -29,7 +29,7 @@ ${RELATE}/scripts/EstimatePopulationSize/EstimatePopulationSize.sh \
     --poplabels ${POPLABELS} \
     --pop_of_interest GIH \
     --num_iter 5 --threads 16 \
-    --years_per_gen 28 --seed 42
+    --years_per_gen 28 --seed 42 || true
 
 echo "Output:"
 ls -lh ${OUTPUT_PREFIX}.*

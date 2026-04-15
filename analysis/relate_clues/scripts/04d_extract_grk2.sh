@@ -6,32 +6,22 @@
 #SBATCH --time=04:00:00
 #SBATCH --output=analysis/relate_clues/logs/04d_extract_grk2_%j.log
 
-# Step 4: Extract GIH subtree + sample branch lengths at GRK2 + neutral control.
+# Step 4: Sample branch lengths at GRK2 + neutral.
+# PopSize already extracted GIH subtree.
 
 set -euo pipefail
 
 cd /vast/projects/smathi/cohort/kkor/tmrca.cu
 BASE=analysis/relate_clues
 RELATE=${BASE}/tools/relate_v1.2.4
-POPLABELS=${BASE}/data/chr11/chr11_eursas.poplabels
 TREEDIR=${BASE}/trees/chr11_EURSAS
 
-echo "=== Step 4: Extract + sample (GRK2, chr11, GIH) ==="
+echo "=== Step 4: SampleBranchLengths (GRK2 + neutral, chr11, GIH) ==="
 echo "Start: $(date)"
 
-# Extract GIH subtree
-${RELATE}/bin/RelateExtract --mode SubTreesForSubpopulation \
-    --anc ${TREEDIR}/chr11_popsize.anc.gz \
-    --mut ${TREEDIR}/chr11_popsize.mut.gz \
-    --poplabels ${POPLABELS} \
-    --pop_of_interest GIH \
-    -o ${TREEDIR}/chr11_GIH
-
-echo "  GIH subtree extracted."
-
-# GRK2 window
+# GRK2
 ${RELATE}/scripts/SampleBranchLengths/SampleBranchLengths.sh \
-    -i ${TREEDIR}/chr11_GIH \
+    -i ${TREEDIR}/chr11_popsize \
     -o ${BASE}/clues/GRK2/grk2_sampled \
     -m 1.25e-8 \
     --coal ${TREEDIR}/chr11_popsize.coal \
@@ -39,14 +29,12 @@ ${RELATE}/scripts/SampleBranchLengths/SampleBranchLengths.sh \
     --first_bp 67200000 --last_bp 67500000 \
     --format n --seed 42
 
-echo "  GRK2 branch lengths sampled:"
+echo "GRK2 done:"
 ls -lh ${BASE}/clues/GRK2/grk2_sampled.*
 
-# Neutral control (KCNQ1, chr11:2.4 Mb)
-echo ""
-echo "--- Neutral control ---"
+# Neutral control (KCNQ1)
 ${RELATE}/scripts/SampleBranchLengths/SampleBranchLengths.sh \
-    -i ${TREEDIR}/chr11_GIH \
+    -i ${TREEDIR}/chr11_popsize \
     -o ${BASE}/clues/neutral/neutral_sampled \
     -m 1.25e-8 \
     --coal ${TREEDIR}/chr11_popsize.coal \
@@ -54,6 +42,6 @@ ${RELATE}/scripts/SampleBranchLengths/SampleBranchLengths.sh \
     --first_bp 2400000 --last_bp 2700000 \
     --format n --seed 42
 
-echo "  Neutral branch lengths sampled:"
+echo "Neutral done:"
 ls -lh ${BASE}/clues/neutral/neutral_sampled.*
-echo "=== Extract done at $(date) ==="
+echo "=== Done at $(date) ==="
