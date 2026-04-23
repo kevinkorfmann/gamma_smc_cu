@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run cxt + tmrca.cu pairwise mode at one (gene, population) window.
+"""Run cxt + gamma_smc_cu pairwise mode at one (gene, population) window.
 
 For one task in the SLURM array we:
   1. Load the parsed chromosome NPZ.
@@ -7,7 +7,7 @@ For one task in the SLURM array we:
   3. Cut a +/-500 kb window around the gene midpoint.
   4. Pick a fixed set of pivot pairs (capped at PAIR_CAP).
   5. Run cxt regional inference -> log-TMRCA per pair per window
-  6. Run tmrca.cu pairwise mode (the existing tmrca_cu.infer) -> per-site
+  6. Run gamma_smc_cu pairwise mode (the existing gamma_smc_cu.infer) -> per-site
      posterior mean TMRCA per pair
   7. Save both results to one NPZ at
      analysis/orthogonal_v41/three_method/{gene}_{pop}_{group}.npz
@@ -26,9 +26,9 @@ import time
 import traceback
 
 # IMPORTANT: import torch/cxt FIRST so the newer libcudart 12.8 (shipped by
-# nvidia-cuda-runtime-cu12 in the pip cache) is loaded before tmrca.cu pulls
+# nvidia-cuda-runtime-cu12 in the pip cache) is loaded before gamma_smc_cu pulls
 # in the older pixi libcudart 12.2. The dynamic linker only loads each
-# soname once per process, so the first one wins. tmrca.cu (built against
+# soname once per process, so the first one wins. gamma_smc_cu (built against
 # 12.2) is forward-compatible with the 12.8 runtime.
 try:
     import torch  # noqa: F401
@@ -88,8 +88,8 @@ def gene_midpoint(gene_chr, gene_name):
     return int((r["start"] + r["end"]) / 2), int(r["start"]), int(r["end"])
 
 
-def run_tmrcacu(G_pop_full, positions_full, site_mask, pairs):
-    """Run tmrca.cu on the FULL chromosome so auto_estimate_theta sees
+def run_gamma_smc_cu(G_pop_full, positions_full, site_mask, pairs):
+    """Run gamma_smc_cu on the FULL chromosome so auto_estimate_theta sees
     chromosome-wide heterozygosity (not the gene-window's depleted pi),
     then slice the output back to the gene window for plotting.
 
@@ -98,9 +98,9 @@ def run_tmrcacu(G_pop_full, positions_full, site_mask, pairs):
     pairs) because sweep regions are heterozygosity-depleted and the
     window-local pi biases theta down -> biases TMRCAs up.
     """
-    import tmrca_cu
+    import gamma_smc_cu
     t0 = time.time()
-    result = tmrca_cu.infer(
+    result = gamma_smc_cu.infer(
         G_pop_full, positions_full,
         mu=1.25e-8, rho=1e-8, Ne=10_000,
         pairs=pairs,
@@ -112,7 +112,7 @@ def run_tmrcacu(G_pop_full, positions_full, site_mask, pairs):
     # Slice the output to the gene window
     out_mask = np.isin(out_positions, positions_full[site_mask])
     return {
-        "method": "tmrca_cu_pairwise",
+        "method": "gamma_smc_cu_pairwise",
         "mean": mean[out_mask, :],
         "positions": out_positions[out_mask],
         "elapsed": time.time() - t0,
@@ -123,7 +123,7 @@ def run_cxt(G_pop, positions, pairs, win_lo, win_hi):
     """cxt regional inference (transformer-based).
 
     Runs on CPU. cxt and torch are imported at the top of this module
-    BEFORE tmrca.cu, so the newer libcudart 12.8 from the pip-shipped
+    BEFORE gamma_smc_cu, so the newer libcudart 12.8 from the pip-shipped
     nvidia-cuda-runtime-cu12 wheel wins the dynamic-linker race and
     libc10_cuda.so resolves cleanly.
 
@@ -214,7 +214,7 @@ def main():
 
     G_pop_full = np.ascontiguousarray(G[np.array(hap_idx), :])
     G_pop_win = np.ascontiguousarray(G_pop_full[:, site_mask])
-    print(f"G_pop_full: {G_pop_full.shape} (used by tmrca.cu)", flush=True)
+    print(f"G_pop_full: {G_pop_full.shape} (used by gamma_smc_cu)", flush=True)
     print(f"G_pop_win: {G_pop_win.shape} (used by cxt+ASMC)", flush=True)
 
     n_pop = len(hap_idx)
@@ -229,8 +229,8 @@ def main():
     print(f"Using {len(pairs)} pivot pairs", flush=True)
 
     results = {}
-    print("Running tmrca.cu pairwise (full chromosome for stable auto-theta)...", flush=True)
-    results["tmrca_cu"] = run_tmrcacu(G_pop_full, positions, site_mask, pairs)
+    print("Running gamma_smc_cu pairwise (full chromosome for stable auto-theta)...", flush=True)
+    results["gamma_smc_cu"] = run_gamma_smc_cu(G_pop_full, positions, site_mask, pairs)
 
     print("Running cxt...", flush=True)
     results["cxt"] = run_cxt(G_pop_win, pos_win, pairs, win_lo, win_hi)

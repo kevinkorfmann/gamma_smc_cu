@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-import tmrca_cu
+import gamma_smc_cu
 
 
 class TestInvariants:
@@ -20,11 +20,11 @@ class TestInvariants:
         pairs = [(0, 5), (1, 10), (3, 15)]
 
         for i, j in pairs:
-            gamma_ij = np.array(tmrca_cu.hmm_posterior(
+            gamma_ij = np.array(gamma_smc_cu.hmm_posterior(
                 G, positions, (i, j), K=32, Ne=10000.0,
                 mu=uniform_mu, rho=uniform_rho
             ))
-            gamma_ji = np.array(tmrca_cu.hmm_posterior(
+            gamma_ji = np.array(gamma_smc_cu.hmm_posterior(
                 G, positions, (j, i), K=32, Ne=10000.0,
                 mu=uniform_mu, rho=uniform_rho
             ))
@@ -40,7 +40,7 @@ class TestInvariants:
         pairs = [(0, 1), (2, 7), (5, 15)]
 
         for pair in pairs:
-            gamma = np.array(tmrca_cu.hmm_posterior(
+            gamma = np.array(gamma_smc_cu.hmm_posterior(
                 G, positions, pair, K=32, Ne=10000.0,
                 mu=uniform_mu, rho=uniform_rho
             ))
@@ -60,9 +60,9 @@ class TestInvariants:
         _, G, _ = small_simulation
         n = G.shape[0]
 
-        sfs_original = np.array(tmrca_cu.compute_sfs(G))
+        sfs_original = np.array(gamma_smc_cu.compute_sfs(G))
         G_flipped = 1 - G
-        sfs_flipped = np.array(tmrca_cu.compute_sfs(G_flipped))
+        sfs_flipped = np.array(gamma_smc_cu.compute_sfs(G_flipped))
 
         # sfs_original[k] should equal sfs_flipped[n-k]
         for k in range(n + 1):
@@ -74,7 +74,7 @@ class TestInvariants:
                                     uniform_mu, uniform_rho):
         """All posterior entries must be non-negative."""
         _, G, positions = small_simulation
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho
         ))
@@ -84,7 +84,7 @@ class TestInvariants:
                                        uniform_mu, uniform_rho):
         """Log-likelihood should be finite and negative."""
         _, G, positions = small_simulation
-        ll = tmrca_cu.hmm_log_likelihood(
+        ll = gamma_smc_cu.hmm_log_likelihood(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho
         )

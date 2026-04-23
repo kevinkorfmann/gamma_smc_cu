@@ -1,4 +1,4 @@
-#include "tmrca_cu/gamma_smc.h"
+#include "gamma_smc_cu/gamma_smc.h"
 #include <cmath>
 #include <cstdio>
 

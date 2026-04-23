@@ -3,7 +3,7 @@
 
 Reads analysis/orthogonal_v41/three_method/{gene}_{pop}_{group}.npz
 files (one per task in the SLURM array) and produces a 15-row x 2-col
-figure (cxt + tmrca.cu pairwise) with the focal pop traces in color
+figure (cxt + gamma_smc_cu pairwise) with the focal pop traces in color
 and the YRI control traces overlaid in gray.
 
 The third column (ASMC) is reserved for a future sub-task and is shown
@@ -68,14 +68,14 @@ def load_task(gene, pop, group):
     return np.load(path, allow_pickle=True)
 
 
-def plot_tmrca_cu_panel(ax, focal, control, gene, focal_pop, color):
-    """Per-pair TMRCA traces from tmrca.cu pairwise mode."""
-    if focal is None or "tmrca_cu_mean" not in focal.files:
+def plot_gamma_smc_cu_panel(ax, focal, control, gene, focal_pop, color):
+    """Per-pair TMRCA traces from gamma_smc_cu pairwise mode."""
+    if focal is None or "gamma_smc_cu_mean" not in focal.files:
         ax.text(0.5, 0.5, "no data", ha="center", va="center",
                 transform=ax.transAxes, fontsize=8, color="gray")
         return
-    pos = focal["tmrca_cu_positions"]
-    mean = focal["tmrca_cu_mean"]   # (n_filtered_sites, n_pairs)
+    pos = focal["gamma_smc_cu_positions"]
+    mean = focal["gamma_smc_cu_mean"]   # (n_filtered_sites, n_pairs)
     pos_mb = pos / 1e6
     # log10 generations, clipped
     log_gen = np.log10(np.clip(mean, 10, 1e6))
@@ -85,9 +85,9 @@ def plot_tmrca_cu_panel(ax, focal, control, gene, focal_pop, color):
         ax.plot(pos_mb, log_gen[:, j], color=color, alpha=0.18, linewidth=0.5)
 
     # YRI control overlay
-    if control is not None and "tmrca_cu_mean" in control.files:
-        cpos = control["tmrca_cu_positions"]
-        cmean = control["tmrca_cu_mean"]
+    if control is not None and "gamma_smc_cu_mean" in control.files:
+        cpos = control["gamma_smc_cu_positions"]
+        cmean = control["gamma_smc_cu_mean"]
         clog = np.log10(np.clip(cmean, 10, 1e6))
         for j in range(min(20, clog.shape[1])):
             ax.plot(cpos / 1e6, clog[:, j], color="gray", alpha=0.12, linewidth=0.4)
@@ -167,7 +167,7 @@ def plot_asmc_panel(ax, focal, control, gene, focal_pop, color):
             ax.spines[s].set_visible(False)
         return
     pos = focal["asmc_positions"]
-    mean = focal["asmc_mean"]   # (n_pairs, n_sites) — note transposed vs tmrca.cu
+    mean = focal["asmc_mean"]   # (n_pairs, n_sites) — note transposed vs gamma_smc_cu
     pos_mb = pos / 1e6
     log_gen = np.log10(np.clip(mean, 10, 1e6))
 
@@ -229,7 +229,7 @@ def main():
         focal = load_task(gene, focal_pop, group)
         control = load_task(gene, "YRI", "control")
 
-        plot_tmrca_cu_panel(axes[ri, 1], focal, control, gene, focal_pop, color)
+        plot_gamma_smc_cu_panel(axes[ri, 1], focal, control, gene, focal_pop, color)
         plot_cxt_panel(axes[ri, 2], focal, control, gene, focal_pop, color)
         plot_asmc_panel(axes[ri, 3], focal, control, gene, focal_pop, color)
 

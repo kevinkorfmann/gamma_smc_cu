@@ -19,7 +19,7 @@ PRS transferability problems across populations.
 
 ## Data needed
 
-1. **Per-gene TMRCA rank per population** — from tmrca.cu on 1kGP
+1. **Per-gene TMRCA rank per population** — from gamma_smc_cu on 1kGP
    (already have chr21, need genome-wide)
 2. **AlphaMissense scores** — per-variant pathogenicity for all
    possible missense substitutions (Zenodo, 7 GB)
@@ -74,7 +74,7 @@ This directly connects population TMRCA to a clinical problem.
   selection has altered the frequency of functionally important variants
 - **Clean framing**: "does evolution respect protein constraint
   boundaries, and does this vary across populations?"
-- **tmrca.cu is a tool, not the paper**: it enables the analysis but
+- **gamma_smc_cu is a tool, not the paper**: it enables the analysis but
   the contribution is the biological finding
 
 ## Possible venues

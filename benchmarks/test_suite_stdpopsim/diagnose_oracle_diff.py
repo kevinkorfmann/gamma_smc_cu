@@ -28,8 +28,8 @@ PY_MOD = os.path.join(REPO, "python")
 sys.path.insert(0, PY_MOD)
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
-from tmrca_cu import _core  # noqa: E402
-from tmrca_cu.infer import _estimate_scaled_params  # noqa: E402
+from gamma_smc_cu import _core  # noqa: E402
+from gamma_smc_cu.infer import _estimate_scaled_params  # noqa: E402
 
 FF = resolve_flow_field_path(HERE)
 GSMC = resolve_gamma_smc_bin(HERE)
@@ -143,12 +143,12 @@ def _top_sites(pos, tm_mean, gm_mean, tm_alpha, gm_alpha, tm_beta, gm_beta, k):
                 "site_index": int(idx),
                 "position": float(pos[idx]),
                 "gap_from_prev": float(pos[idx] - prev[idx]),
-                "mean_tmrca_cu": float(tm_mean[idx]),
+                "mean_gamma_smc_cu": float(tm_mean[idx]),
                 "mean_gamma_smc": float(gm_mean[idx]),
                 "mean_rel_err": float(rel[idx]),
-                "alpha_tmrca_cu": float(tm_alpha[idx]),
+                "alpha_gamma_smc_cu": float(tm_alpha[idx]),
                 "alpha_gamma_smc": float(gm_alpha[idx]),
-                "beta_tmrca_cu": float(tm_beta[idx]),
+                "beta_gamma_smc_cu": float(tm_beta[idx]),
                 "beta_gamma_smc": float(gm_beta[idx]),
             }
         )

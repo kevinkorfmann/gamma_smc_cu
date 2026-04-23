@@ -8,8 +8,8 @@ clears the paper's thresholds: 0.99 (main 347-loci set), 0.90, 0.50 (FDR~50%).
 import pandas as pd
 from collections import defaultdict
 
-STATS = "/Users/kevinkorfmann/Projects/tmrca.cu/local_memory/akbari2026/selection_stats.tsv"
-USER_CSV = "/Users/kevinkorfmann/Projects/tmrca.cu/analysis/genome_wide/postprocess/genes_sd_flag.csv"
+STATS = "/Users/kevinkorfmann/Projects/gamma_smc_cu/local_memory/akbari2026/selection_stats.tsv"
+USER_CSV = "/Users/kevinkorfmann/Projects/gamma_smc_cu/analysis/genome_wide/postprocess/genes_sd_flag.csv"
 FLANK = 100_000  # +/- 100 kb around gene boundaries
 
 # Pull the candidate regions from the user's file.
@@ -75,7 +75,7 @@ with open(STATS) as f:
 
 # Print report.
 print()
-print(f"{'gene':<12} {'chr':>3}  {'tmrca.cu rank':>14}  "
+print(f"{'gene':<12} {'chr':>3}  {'gamma_smc_cu rank':>14}  "
       f"{'n_var':>6} {'max_post':>9} {'#≥.99':>6} {'#≥.90':>6} {'#≥.50':>6}  "
       f"top_variant")
 print("-" * 130)
@@ -95,8 +95,8 @@ for g in candidates:
           f"{b['n_99']:>6} {b['n_90']:>6} {b['n_50']:>6}  {top_str}")
     out_rows.append({
         "gene": g, "chr": int(row["chr"]),
-        "tmrca_cu_min_rank": row["min_rank"],
-        "tmrca_cu_min_pop": row["min_pop"],
+        "gamma_smc_cu_min_rank": row["min_rank"],
+        "gamma_smc_cu_min_pop": row["min_pop"],
         "akbari_n_variants": b["n_variants"],
         "akbari_max_posterior": b["max_post"],
         "akbari_n_post_ge_99": b["n_99"],
@@ -110,7 +110,7 @@ for g in candidates:
     })
 
 pd.DataFrame(out_rows).to_csv(
-    "/Users/kevinkorfmann/Projects/tmrca.cu/local_memory/akbari2026/candidate_overlap.csv",
+    "/Users/kevinkorfmann/Projects/gamma_smc_cu/local_memory/akbari2026/candidate_overlap.csv",
     index=False)
 print()
 print("wrote: local_memory/akbari2026/candidate_overlap.csv")

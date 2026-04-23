@@ -1,4 +1,4 @@
-# tmrca.cu computation strategy for Akbari-2026 lead variants
+# gamma_smc_cu computation strategy for Akbari-2026 lead variants
 
 Per (chromosome, population), the driver in `infer_akbari_windows.py` does:
 
@@ -11,7 +11,7 @@ Per (chromosome, population), the driver in `infer_akbari_windows.py` does:
 
 3. **Loop over Akbari leads on this chromosome.** For each lead variant at position `v`:
    1. **Slice** `G` and `positions` to sites in `[v − 500 kb, v + 500 kb]` (~25 k sites at 1KG density on chr1).
-   2. **Decode** with `tmrca_cu.infer_blockwise(G_slice, pos_slice, mu=eff_mu, rho=eff_rho, auto_estimate_theta=False)` for every haplotype pair, in pair-chunks of 2000 to cap peak RAM. The kernel's internal `flank_sites=2048` handles block boundaries inside the slice.
+   2. **Decode** with `gamma_smc_cu.infer_blockwise(G_slice, pos_slice, mu=eff_mu, rho=eff_rho, auto_estimate_theta=False)` for every haplotype pair, in pair-chunks of 2000 to cap peak RAM. The kernel's internal `flank_sites=2048` handles block boundaries inside the slice.
    3. **Aggregate** only the central ±25 kb of decoded sites per pair:
       - per-pair = mean across sites in the window → one TMRCA value per pair
       - accumulate sum / log-sum / log-sq-sum / min / histogram across all pairs

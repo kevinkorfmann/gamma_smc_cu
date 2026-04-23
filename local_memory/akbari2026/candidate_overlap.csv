@@ -1,4 +1,4 @@
-gene,chr,tmrca_cu_min_rank,tmrca_cu_min_pop,akbari_n_variants,akbari_max_posterior,akbari_n_post_ge_99,akbari_n_post_ge_90,akbari_n_post_ge_50,akbari_top_rsid,akbari_top_pos,akbari_top_S,akbari_top_P_X,akbari_top_FDR
+gene,chr,gamma_smc_cu_min_rank,gamma_smc_cu_min_pop,akbari_n_variants,akbari_max_posterior,akbari_n_post_ge_99,akbari_n_post_ge_90,akbari_n_post_ge_50,akbari_top_rsid,akbari_top_pos,akbari_top_S,akbari_top_P_X,akbari_top_FDR
 GRK2,11,0.0022777836635236,GIH,539,0.9901,3,4,12,rs67501657,67204255,0.0050621734500166,2.117375033655207e-08,0.0099
 BPIFA2,20,0.0092170780803051,GIH,509,0.9901,2,2,13,rs2424995,33164515,0.0230051868141794,1.283260209313189e-10,0.0099
 SLC6A15,12,0.0031241726237754,CHS,1080,0.6443,0,0,3,rs148250918,84949504,0.0191330580921404,4.6578022135766405e-06,0.151

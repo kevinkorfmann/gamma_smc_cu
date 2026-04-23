@@ -7,7 +7,7 @@ then compare the saved .npy files.
 import numpy as np, sys, os, argparse
 REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
 sys.path.insert(0, os.path.join(REPO, "python"))
-import tmrca_cu
+import gamma_smc_cu
 
 d = np.load(os.path.join(REPO, "analysis/genome_wide/cache/parsed/chr22.npz"),
             allow_pickle=True, mmap_mode="r")
@@ -31,7 +31,7 @@ parser.add_argument("--compare", help="compare against this .npy")
 args = parser.parse_args()
 
 print(f"Running infer_blockwise on {len(pairs)} pairs...", flush=True)
-r = tmrca_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
+r = gamma_smc_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
                               pairs=pairs, mean_only=True,
                               auto_estimate_theta=True)
 mean = r["mean"]

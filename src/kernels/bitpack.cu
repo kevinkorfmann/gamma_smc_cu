@@ -1,4 +1,4 @@
-#include "tmrca_cu/bitpack.h"
+#include "gamma_smc_cu/bitpack.h"
 #include <cstdio>
 
 // ============================================================

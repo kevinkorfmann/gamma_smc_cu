@@ -1,4 +1,4 @@
-#include "tmrca_cu/pelt.h"
+#include "gamma_smc_cu/pelt.h"
 #include <cstdio>
 #include <cmath>
 #include <float.h>

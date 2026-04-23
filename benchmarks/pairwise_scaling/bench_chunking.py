@@ -7,7 +7,7 @@ import os
 
 REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
 sys.path.insert(0, os.path.join(REPO, "python"))
-import tmrca_cu
+import gamma_smc_cu
 
 d = np.load(os.path.join(REPO, "analysis/genome_wide/cache/parsed/chr22.npz"),
             allow_pickle=True, mmap_mode="r")
@@ -32,7 +32,7 @@ all_pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
 print(f"{n} haps, {G_pop.shape[1]} sites, {len(all_pairs)} pairs", flush=True)
 
 # Warmup
-tmrca_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
+gamma_smc_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
                           pairs=[(0, 1)], mean_only=True, auto_estimate_theta=True)
 
 n_total = len(all_pairs)
@@ -42,7 +42,7 @@ def bench_python_chunks(label, chunk_size, streams=1):
     t0 = time.time()
     for ci in range(0, n_total, chunk_size):
         chunk = all_pairs[ci:ci + chunk_size]
-        r = tmrca_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
+        r = gamma_smc_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
                                       pairs=chunk, mean_only=True,
                                       auto_estimate_theta=True,
                                       max_streams=streams)
@@ -55,7 +55,7 @@ def bench_python_chunks(label, chunk_size, streams=1):
 def bench_cpp_internal_chunks(label, pair_batch_size, streams=1):
     """C++ internal chunking: single infer_blockwise call, C++ loops over pair batches."""
     t0 = time.time()
-    r = tmrca_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
+    r = gamma_smc_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
                                   pairs=all_pairs, mean_only=True,
                                   auto_estimate_theta=True,
                                   pair_batch_size=pair_batch_size,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot pairwise scaling: tmrca.cu vs gamma_smc vs ASMC on chr22 YRI.
+"""Plot pairwise scaling: gamma_smc_cu vs gamma_smc vs ASMC on chr22 YRI.
 
 Solid lines + filled markers = measured. Dashed + open markers = extrapolated.
 """
@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import os
 
-REPO = "/Users/kevinkorfmann/Projects/tmrca.cu"
+REPO = "/Users/kevinkorfmann/Projects/gamma_smc_cu"
 DATA_DIR = os.path.join(REPO, "benchmarks/pairwise_scaling")
 OUT_DIR = os.path.join(REPO, "docs_local/manuscript/v4.1/figures")
 
@@ -24,12 +24,12 @@ df = pd.read_csv(os.path.join(DATA_DIR, "results.csv"))
 
 fig, ax = plt.subplots(figsize=(6, 4.5))
 
-colors = {"tmrca.cu": "#2ca02c", "gamma_smc": "#1f77b4", "ASMC": "#e67e22"}
-markers = {"tmrca.cu": "s", "gamma_smc": "^", "ASMC": "o"}
-labels = {"tmrca.cu": "gamma_smc_cu (GPU)", "gamma_smc": "gamma_smc (CPU)",
+colors = {"gamma_smc_cu": "#2ca02c", "gamma_smc": "#1f77b4", "ASMC": "#e67e22"}
+markers = {"gamma_smc_cu": "s", "gamma_smc": "^", "ASMC": "o"}
+labels = {"gamma_smc_cu": "gamma_smc_cu (GPU)", "gamma_smc": "gamma_smc (CPU)",
           "ASMC": "ASMC (CPU)"}
 
-for method in ["tmrca.cu", "gamma_smc", "ASMC"]:
+for method in ["gamma_smc_cu", "gamma_smc", "ASMC"]:
     sub = df[df["method"] == method].sort_values("n_pairs")
     if len(sub) == 0:
         continue
@@ -47,8 +47,8 @@ for method in ["tmrca.cu", "gamma_smc", "ASMC"]:
                 alpha=0.5, markerfacecolor="white", markeredgecolor=colors[method],
                 markeredgewidth=1.5)
 
-# Speedup annotations at largest measured tmrca.cu point
-tcu = df[df["method"] == "tmrca.cu"].sort_values("n_pairs")
+# Speedup annotations at largest measured gamma_smc_cu point
+tcu = df[df["method"] == "gamma_smc_cu"].sort_values("n_pairs")
 for method in ["gamma_smc", "ASMC"]:
     other = df[df["method"] == method].sort_values("n_pairs")
     # Find the largest pair count where both have data
@@ -63,7 +63,7 @@ for method in ["gamma_smc", "ASMC"]:
     ax.annotate(f'{speedup:.0f}×',
                 (n_max, t_tcu),
                 textcoords="offset points", xytext=(10, vy),
-                fontsize=9, color=colors["tmrca.cu"], fontweight="bold")
+                fontsize=9, color=colors["gamma_smc_cu"], fontweight="bold")
 
 # Time reference lines
 for t, label in [(60, "1 min"), (3600, "1 hour")]:

@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """Benchmark gamma_smc + ASMC on CPU nodes (no GPU).
 
-Runs on genoa-std-mem for fair CPU comparison against tmrca.cu on B200.
+Runs on genoa-std-mem for fair CPU comparison against gamma_smc_cu on B200.
 """
 import numpy as np, sys, os, csv, gzip, subprocess, tempfile, time
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/gamma_smc_cu"
 sys.path.insert(0, os.path.join(REPO, "python"))
 
 PARSED_DIR = os.path.join(REPO, "analysis/genome_wide/cache/parsed")

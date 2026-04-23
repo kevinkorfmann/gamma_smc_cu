@@ -3,10 +3,10 @@ import pytest
 import sys
 import os
 
-# Add project root to path so we can import tmrca_cu and test references
+# Add project root to path so we can import gamma_smc_cu and test references
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-import tmrca_cu
+import gamma_smc_cu
 from tests.reference.hmm_numpy import NumpyHMM
 
 
@@ -27,7 +27,7 @@ class TestHMMForwardBackward:
         pair = (0, 1)
 
         np_gamma = numpy_hmm.posterior(pair)
-        cuda_gamma = np.array(tmrca_cu.hmm_posterior(
+        cuda_gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, pair, K=32, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho
         ))
@@ -38,7 +38,7 @@ class TestHMMForwardBackward:
                                     uniform_mu, uniform_rho):
         """Posterior marginals must sum to 1 at every site."""
         _, G, positions = small_simulation
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho
         ))
@@ -52,7 +52,7 @@ class TestHMMForwardBackward:
         pair = (0, 1)
 
         np_ll = numpy_hmm.log_likelihood(pair)
-        cuda_ll = tmrca_cu.hmm_log_likelihood(
+        cuda_ll = gamma_smc_cu.hmm_log_likelihood(
             G, positions, pair, K=32, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho
         )
@@ -63,11 +63,11 @@ class TestHMMForwardBackward:
                                                         uniform_mu, uniform_rho):
         """Different pairs should generally produce different posteriors."""
         _, G, positions = small_simulation
-        gamma1 = np.array(tmrca_cu.hmm_posterior(
+        gamma1 = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho
         ))
-        gamma2 = np.array(tmrca_cu.hmm_posterior(
+        gamma2 = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 5), K=32, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho
         ))
@@ -78,7 +78,7 @@ class TestHMMForwardBackward:
                                           uniform_mu, uniform_rho):
         """All posterior values should be non-negative."""
         _, G, positions = small_simulation
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho
         ))

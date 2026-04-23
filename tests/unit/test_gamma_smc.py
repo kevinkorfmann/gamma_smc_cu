@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-import tmrca_cu
+import gamma_smc_cu
 from tests.reference.gamma_smc_numpy import gamma_smc_forward as gamma_smc_numpy
 
 
@@ -25,7 +25,7 @@ class TestGammaSMCForward:
             G, positions, pair, Ne=10000.0, mu=uniform_mu, rho=uniform_rho
         )
 
-        result = tmrca_cu.gamma_smc_forward(
+        result = gamma_smc_cu.gamma_smc_forward(
             G, positions, [pair], Ne=10000.0, mu=uniform_mu, rho=uniform_rho
         )
 
@@ -43,7 +43,7 @@ class TestGammaSMCForward:
         _, G, positions = small_simulation
         pairs = [(0, 1), (0, 5), (1, 2)]
 
-        result = tmrca_cu.gamma_smc_forward(
+        result = gamma_smc_cu.gamma_smc_forward(
             G, positions, pairs, Ne=10000.0, mu=uniform_mu, rho=uniform_rho
         )
         gpu = np.array(result["mean"])  # [S, 3]
@@ -57,7 +57,7 @@ class TestGammaSMCForward:
     def test_mean_positive(self, small_simulation, uniform_mu, uniform_rho):
         """All mean TMRCA values should be positive."""
         _, G, positions = small_simulation
-        result = tmrca_cu.gamma_smc_forward(
+        result = gamma_smc_cu.gamma_smc_forward(
             G, positions, [(0, 1)], Ne=10000.0, mu=uniform_mu, rho=uniform_rho
         )
         assert np.all(np.array(result["mean"]) > 0)
@@ -65,7 +65,7 @@ class TestGammaSMCForward:
     def test_ci_contains_mean(self, small_simulation, uniform_mu, uniform_rho):
         """95% CI should contain the mean at every site."""
         _, G, positions = small_simulation
-        result = tmrca_cu.gamma_smc_forward(
+        result = gamma_smc_cu.gamma_smc_forward(
             G, positions, [(0, 1)], Ne=10000.0, mu=uniform_mu, rho=uniform_rho
         )
         mean = np.array(result["mean"])[:, 0]
@@ -78,7 +78,7 @@ class TestGammaSMCForward:
     def test_lower_nonnegative(self, small_simulation, uniform_mu, uniform_rho):
         """Lower CI bound should be non-negative."""
         _, G, positions = small_simulation
-        result = tmrca_cu.gamma_smc_forward(
+        result = gamma_smc_cu.gamma_smc_forward(
             G, positions, [(0, 1)], Ne=10000.0, mu=uniform_mu, rho=uniform_rho
         )
         assert np.all(np.array(result["lower"]) >= 0)
@@ -86,7 +86,7 @@ class TestGammaSMCForward:
     def test_different_pairs_differ(self, small_simulation, uniform_mu, uniform_rho):
         """Different pairs should produce different results."""
         _, G, positions = small_simulation
-        result = tmrca_cu.gamma_smc_forward(
+        result = gamma_smc_cu.gamma_smc_forward(
             G, positions, [(0, 1), (0, 5)], Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho
         )
@@ -98,11 +98,11 @@ class TestGammaSMCForward:
         _, G, positions = small_simulation
         stride = 4
 
-        full = tmrca_cu.gamma_smc_forward(
+        full = gamma_smc_cu.gamma_smc_forward(
             G, positions, [(0, 1)], Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho, stride=1
         )
-        strided = tmrca_cu.gamma_smc_forward(
+        strided = gamma_smc_cu.gamma_smc_forward(
             G, positions, [(0, 1)], Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho, stride=stride
         )
@@ -119,7 +119,7 @@ class TestGammaSMCForward:
         S = len(positions)
         pairs = [(0, 1), (0, 5), (1, 2)]
 
-        result = tmrca_cu.gamma_smc_forward(
+        result = gamma_smc_cu.gamma_smc_forward(
             G, positions, pairs, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho
         )
@@ -133,11 +133,11 @@ class TestGammaSMCForward:
         _, G, positions = small_simulation
         pairs = [(0, 1), (0, 5)]
 
-        full = tmrca_cu.gamma_smc_forward(
+        full = gamma_smc_cu.gamma_smc_forward(
             G, positions, pairs, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho, mean_only=False
         )
-        mean_only = tmrca_cu.gamma_smc_forward(
+        mean_only = gamma_smc_cu.gamma_smc_forward(
             G, positions, pairs, Ne=10000.0,
             mu=uniform_mu, rho=uniform_rho, mean_only=True
         )

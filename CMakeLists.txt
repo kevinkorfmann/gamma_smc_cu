@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(tmrcacu LANGUAGES CXX CUDA)
+project(gamma_smc_cu LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
@@ -20,7 +20,7 @@ find_package(Python REQUIRED COMPONENTS Interpreter Development)
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # Build as a shared library instead of static to avoid device link issues
-add_library(tmrcacu_kernels SHARED
+add_library(gamma_smc_cu_kernels SHARED
     src/kernels/bitpack.cu
     src/kernels/sfs.cu
     src/kernels/hmm_forward_backward.cu
@@ -34,18 +34,18 @@ add_library(tmrcacu_kernels SHARED
     src/demography.cpp
     src/flow_field.cpp
 )
-target_include_directories(tmrcacu_kernels PUBLIC ${CMAKE_SOURCE_DIR}/include)
-set_target_properties(tmrcacu_kernels PROPERTIES
+target_include_directories(gamma_smc_cu_kernels PUBLIC ${CMAKE_SOURCE_DIR}/include)
+set_target_properties(gamma_smc_cu_kernels PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
     CUDA_RESOLVE_DEVICE_SYMBOLS ON
     POSITION_INDEPENDENT_CODE ON
 )
-target_link_libraries(tmrcacu_kernels PRIVATE cudart)
+target_link_libraries(gamma_smc_cu_kernels PRIVATE cudart)
 
 # Python module
 pybind11_add_module(_core src/bindings.cpp)
-target_link_libraries(_core PRIVATE tmrcacu_kernels)
+target_link_libraries(_core PRIVATE gamma_smc_cu_kernels)
 target_include_directories(_core PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
-# Install the Python module into python/tmrca_cu/
-install(TARGETS _core DESTINATION ${CMAKE_SOURCE_DIR}/python/tmrca_cu)
+# Install the Python module into python/gamma_smc_cu/
+install(TARGETS _core DESTINATION ${CMAKE_SOURCE_DIR}/python/gamma_smc_cu)

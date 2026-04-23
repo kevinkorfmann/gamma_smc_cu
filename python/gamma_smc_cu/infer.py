@@ -1,4 +1,4 @@
-"""Top-level inference helpers for tmrca_cu."""
+"""Top-level inference helpers for gamma_smc_cu."""
 
 from __future__ import annotations
 
@@ -57,14 +57,14 @@ def _estimate_scaled_params(G, positions, mu, rho, Ne):
     from the user-supplied ``rho/mu`` ratio.
 
     We use the per-individual formula (rather than pairwise pi over all
-    n*(n-1)/2 pairs) so that ``tmrca_cu.infer()`` and the gamma_smc
+    n*(n-1)/2 pairs) so that ``gamma_smc_cu.infer()`` and the gamma_smc
     binary see the *same* numeric value for ``scaled_mu`` on every
     input. Empirically the two estimators agree to four decimals on
     HomSap but differ by up to 4% on plant / mosquito models with
     very dense segregating sites — that small difference matters for
     the lowest-rho/mu configs (e.g. ``AraTha African2Epoch_1H18``).
 
-    tmrca.cu's ``FlowContext`` now matches gamma_smc's ``4*Ne``
+    gamma_smc_cu's ``FlowContext`` now matches gamma_smc's ``4*Ne``
     convention for both scaled rates, so we return ``effective_mu`` and
     ``effective_rho`` with the inverses baked in:
     ``4*Ne*eff_mu == pi_hat`` and
@@ -157,7 +157,7 @@ def _gpu_bytes_per_pair_site(mean_only):
 def _query_free_gpu_bytes():
     """Return free GPU memory in bytes for the active CUDA device, or None."""
     try:
-        from tmrca_cu import _core
+        from gamma_smc_cu import _core
         free_bytes, _total = _core.cuda_mem_info()
         return int(free_bytes)
     except Exception:
@@ -256,14 +256,14 @@ def infer(
         plus ``-t rho/mu``). The scaled mutation rate is set to the
         observed per-individual heterozygosity and the scaled
         recombination rate to ``pi_hat * (rho/mu)``; ``Ne`` is only used
-        to invert tmrca.cu's internal per-bp scaling. This consistently outperforms the
+        to invert gamma_smc_cu's internal per-bp scaling. This consistently outperforms the
         naive ``Ne=10000`` assumption on non-HomSap species where the
         data-implied effective Ne differs from the user-supplied one.
         Pass ``False`` to force the kernel to use the raw
         ``(Ne, mu, rho)`` values — useful for demographic
         misspecification studies.
     """
-    from tmrca_cu import _core
+    from gamma_smc_cu import _core
 
     G, positions = _coerce_inputs(G_or_ts, positions)
     G, positions, _ = _filter_segregating(G, positions)
@@ -365,7 +365,7 @@ def infer_blockwise(
         parameters as ``posterior_alpha`` and ``posterior_beta`` arrays.
         Currently supported only with ``max_streams=1``.
     """
-    from tmrca_cu import _core
+    from gamma_smc_cu import _core
 
     # ----- argument validation that doesn't require knowing n_sites -----
     if pairs is None:

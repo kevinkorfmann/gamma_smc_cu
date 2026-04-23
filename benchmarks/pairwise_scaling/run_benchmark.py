@@ -1,11 +1,11 @@
 #!/usr/bin/env python
-"""Benchmark: tmrca.cu vs gamma_smc vs ASMC — measured, not extrapolated.
+"""Benchmark: gamma_smc_cu vs gamma_smc vs ASMC — measured, not extrapolated.
 
 Each method is run at increasing pair counts on chr22 YRI until a 4h
 wall-time budget is approached. Only the final (largest) point is
 extrapolated if it would exceed the budget.
 
-- tmrca.cu: infer_blockwise(), measured at all pair counts.
+- gamma_smc_cu: infer_blockwise(), measured at all pair counts.
 - gamma_smc: VCF input (bgzip+tabix), all-pairs mode. Measured by
   varying the number of haplotypes in the VCF (2, 10, 46, 142, 356).
 - ASMC: batch decode_pairs(), measured at 1, 10, 100, 1000+ pairs.
@@ -22,7 +22,7 @@ import time
 
 import numpy as np
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/gamma_smc_cu"
 sys.path.insert(0, os.path.join(REPO, "python"))
 
 PARSED_DIR = os.path.join(REPO, "analysis/genome_wide/cache/parsed")
@@ -96,16 +96,16 @@ def write_asmc_input(out_root, chr_num, positions, G_sub, n_samples):
             f.write(f"{chr_num}\tSNP_{pos_bp}_{i}\t{cm_positions[i]:.10f}\t{pos_bp}\n")
 
 
-# ── tmrca.cu ──────────────────────────────────────────────────
+# ── gamma_smc_cu ──────────────────────────────────────────────────
 
-def bench_tmrca_cu(G_pop, positions, all_pairs):
-    import tmrca_cu
+def bench_gamma_smc_cu(G_pop, positions, all_pairs):
+    import gamma_smc_cu
     results = []
     pair_counts = [1, 10, 100, 1000, 10000, len(all_pairs)]
     PAIR_CHUNK = 1000
 
     # Warmup
-    tmrca_cu.infer_blockwise(
+    gamma_smc_cu.infer_blockwise(
         G_pop, positions, mu=1.25e-8, rho=1e-8, Ne=10_000,
         pairs=[(0, 1)], mean_only=True, auto_estimate_theta=True)
 
@@ -113,18 +113,18 @@ def bench_tmrca_cu(G_pop, positions, all_pairs):
         pairs = all_pairs[:n]
         t0 = time.time()
         if n <= PAIR_CHUNK:
-            tmrca_cu.infer_blockwise(
+            gamma_smc_cu.infer_blockwise(
                 G_pop, positions, mu=1.25e-8, rho=1e-8, Ne=10_000,
                 pairs=pairs, mean_only=True, auto_estimate_theta=True)
         else:
             for ci in range(0, n, PAIR_CHUNK):
                 chunk = pairs[ci:ci + PAIR_CHUNK]
-                tmrca_cu.infer_blockwise(
+                gamma_smc_cu.infer_blockwise(
                     G_pop, positions, mu=1.25e-8, rho=1e-8, Ne=10_000,
                     pairs=chunk, mean_only=True, auto_estimate_theta=True)
         elapsed = time.time() - t0
-        results.append(("tmrca.cu", n, elapsed, "measured"))
-        print(f"  tmrca.cu  n={n:>6}: {elapsed:.3f}s", flush=True)
+        results.append(("gamma_smc_cu", n, elapsed, "measured"))
+        print(f"  gamma_smc_cu  n={n:>6}: {elapsed:.3f}s", flush=True)
     return results
 
 
@@ -274,8 +274,8 @@ def main():
 
     all_results = []
 
-    print("\n--- tmrca.cu (GPU, infer_blockwise) ---", flush=True)
-    all_results.extend(bench_tmrca_cu(G_pop, positions, all_pairs))
+    print("\n--- gamma_smc_cu (GPU, infer_blockwise) ---", flush=True)
+    all_results.extend(bench_gamma_smc_cu(G_pop, positions, all_pairs))
 
     print("\n--- gamma_smc (CPU, VCF, all-pairs) ---", flush=True)
     try:

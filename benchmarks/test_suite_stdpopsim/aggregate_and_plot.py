@@ -94,9 +94,9 @@ def plot(df):
     y = np.arange(len(df))[::-1]  # top-to-bottom
 
     # ---------- panel (a): accuracy dots with IQR whiskers --------------
-    r_t_med = df["r_tmrca_cu_median"].to_numpy(float)
-    r_t_lo = df["r_tmrca_cu_q25"].to_numpy(float)
-    r_t_hi = df["r_tmrca_cu_q75"].to_numpy(float)
+    r_t_med = df["r_gamma_smc_cu_median"].to_numpy(float)
+    r_t_lo = df["r_gamma_smc_cu_q25"].to_numpy(float)
+    r_t_hi = df["r_gamma_smc_cu_q75"].to_numpy(float)
     r_g_med = df["r_gsmc_median"].to_numpy(float)
     r_g_lo = df["r_gsmc_q25"].to_numpy(float)
     r_g_hi = df["r_gsmc_q75"].to_numpy(float)
@@ -131,7 +131,7 @@ def plot(df):
                      clip_on=False, zorder=4, edgecolors="none")
 
     # ---------- panel (b): wall time dots (log x) -----------------------
-    t_t = df["t_tmrca_cu_total"].to_numpy(float)
+    t_t = df["t_gamma_smc_cu_total"].to_numpy(float)
     t_g = df["t_gsmc_total"].to_numpy(float)
     t_g_c = df["t_gsmc_compute"].to_numpy(float)
 
@@ -166,12 +166,12 @@ def plot(df):
     # ---------- panel (c): accuracy parity scatter -----------------------
     for _, row in df.iterrows():
         c = SPECIES_COLORS.get(row["species"], "#888888")
-        ax_c.scatter(row["r_gsmc_median"], row["r_tmrca_cu_median"],
+        ax_c.scatter(row["r_gsmc_median"], row["r_gamma_smc_cu_median"],
                      color=c, s=22, edgecolors="white", linewidth=0.4,
                      label=row["species"])
     lo = min(
         df["r_gsmc_median"].min(skipna=True),
-        df["r_tmrca_cu_median"].min(skipna=True),
+        df["r_gamma_smc_cu_median"].min(skipna=True),
     ) - 0.05
     lo = max(lo, 0.3)
     ax_c.plot([lo, 1.0], [lo, 1.0], color="#999999", linewidth=0.5, linestyle="--")
@@ -243,10 +243,10 @@ def main():
     n_ok = int((df["status"] == "ok").sum()) if "status" in df else len(df)
     print(f"\nLoaded {n_ok}/{len(df)} successful configs")
     if len(df):
-        r_t = df["r_tmrca_cu_median"].dropna()
+        r_t = df["r_gamma_smc_cu_median"].dropna()
         r_g = df["r_gsmc_median"].dropna()
         sp = df["speedup_total"].dropna()
-        print(f"  r_tmrca_cu median across configs: {r_t.median():.3f}  "
+        print(f"  r_gamma_smc_cu median across configs: {r_t.median():.3f}  "
               f"(min={r_t.min():.3f}, max={r_t.max():.3f})")
         print(f"  r_gsmc     median across configs: {r_g.median():.3f}  "
               f"(min={r_g.min():.3f}, max={r_g.max():.3f})")

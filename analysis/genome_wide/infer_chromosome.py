@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Per-chromosome, per-population TMRCA inference (full-chromosome mode).
 
-Runs tmrca_cu.infer_blockwise() over the full chromosome in pair chunks,
+Runs gamma_smc_cu.infer_blockwise() over the full chromosome in pair chunks,
 accumulating per-gene summary statistics in both linear and log space,
 plus a histogram of per-pair values for offline post-hoc quantile
 computation.
@@ -116,7 +116,7 @@ def compute_gene_site_indices(positions, genes):
 
 
 def run_chromosome(chr_num, populations):
-    import tmrca_cu
+    import gamma_smc_cu
 
     print(f"=== Chromosome {chr_num} ===", flush=True)
     t0 = time.time()
@@ -173,7 +173,7 @@ def run_chromosome(chr_num, populations):
             chunk_pairs = all_pairs[chunk_start:chunk_end]
             n_chunk_pairs = len(chunk_pairs)
 
-            result = tmrca_cu.infer_blockwise(
+            result = gamma_smc_cu.infer_blockwise(
                 G_pop,
                 positions,
                 mu=MU,

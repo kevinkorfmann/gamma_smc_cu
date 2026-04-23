@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <stdexcept>
 
-#include "tmrca_cu/api.h"
+#include "gamma_smc_cu/api.h"
 
 namespace py = pybind11;
 
@@ -3495,7 +3495,7 @@ py::dict py_gamma_smc_flow_cached_fwd(
 // Module definition
 // ============================================================
 PYBIND11_MODULE(_core, m) {
-    m.doc() = "tmrca_cu: GPU-accelerated pairwise coalescence time estimation";
+    m.doc() = "gamma_smc_cu: GPU-accelerated pairwise coalescence time estimation";
 
     m.def("bitpack", &py_bitpack,
           "Bitpack a genotype matrix G[n,S] into uint64 words",

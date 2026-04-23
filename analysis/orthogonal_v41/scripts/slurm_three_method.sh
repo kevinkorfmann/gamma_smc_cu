@@ -20,7 +20,7 @@ export PYTHONPATH="$(pwd)/python:$(pwd)"
 # (built against CUDA 12.8) can find cudaGetDriverEntryPointByVersion. Without
 # this, the bundled pixi libcudart 12.2 wins and torch fails to load.
 NVCUDA_LIB="$(pwd)/${PIXI_ENV}/lib/python3.12/site-packages/nvidia/cuda_runtime/lib"
-export LD_LIBRARY_PATH="${NVCUDA_LIB}:$(pwd)/python/tmrca_cu:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${NVCUDA_LIB}:$(pwd)/python/gamma_smc_cu:${LD_LIBRARY_PATH:-}"
 export CUDA_VISIBLE_DEVICES=0
 
 # Build the (gene, chr, pop, group) task list at runtime so it picks up

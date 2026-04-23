@@ -47,6 +47,12 @@ _scratch/
 # Archives of old results (kept locally, not pushed)
 archive_*/
 
+# Legacy dir (notebooks, old Sphinx docs, pre-v4.1 archive) — local-only
+legacy/
+
+# Private local dir (manuscripts, plans, personal notes) — never pushed
+private/
+
 # Local analysis data (downloaded VCFs, caches, results)
 # Keep top-level analysis scripts tracked, ignore data/cache/results subdirs.
 analysis/genome_wide/data/

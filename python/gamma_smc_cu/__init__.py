@@ -1,5 +1,5 @@
 """
-tmrca_cu: GPU-accelerated pairwise coalescence time estimation.
+gamma_smc_cu: GPU-accelerated pairwise coalescence time estimation.
 """
 
 import os as _os
@@ -10,7 +10,7 @@ _module_dir = _os.path.dirname(_os.path.abspath(__file__))
 if _module_dir not in _sys.path:
     _sys.path.insert(0, _module_dir)
 
-from tmrca_cu._core import (
+from gamma_smc_cu._core import (
     bitpack,
     unpack,
     pairwise_prefix_scan,
@@ -33,14 +33,14 @@ from tmrca_cu._core import (
     FlowContext,
 )
 
-from tmrca_cu.estimator import (
+from gamma_smc_cu.estimator import (
     CoalescenceEstimator,
     TMRCAResult,
     Segment,
 )
 
-from tmrca_cu.multigpu import MultiGPUFlowContext
-from tmrca_cu.infer import infer, infer_blockwise
+from gamma_smc_cu.multigpu import MultiGPUFlowContext
+from gamma_smc_cu.infer import infer, infer_blockwise
 
 __all__ = [
     "bitpack",

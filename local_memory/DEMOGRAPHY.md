@@ -127,7 +127,7 @@ The `demographic.py` module can regenerate Schweiger's flow field from
 scratch using `scipy.special.gammainc` (no arb/GSL/Boost dependencies):
 
 ```python
-from tmrca_cu.demographic import generate_flow_field, write_flow_field
+from gamma_smc_cu.demographic import generate_flow_field, write_flow_field
 
 # Constant-Ne (matches Schweiger's default to <0.01% error, ~5 seconds)
 u, v = generate_flow_field()

@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-import tmrca_cu
+import gamma_smc_cu
 
 
 def build_reference_transition_matrix(r, midpoints, coal_prior):
@@ -37,7 +37,7 @@ class TestTransitions:
 
     @pytest.fixture
     def coal_prior(self):
-        return np.array(tmrca_cu.coalescent_prior(Ne=self.NE, K=self.K))
+        return np.array(gamma_smc_cu.coalescent_prior(Ne=self.NE, K=self.K))
 
     @pytest.fixture
     def time_midpoints(self):
@@ -74,14 +74,14 @@ class TestTransitions:
     def test_coalescent_prior_sums_to_one(self):
         """Coalescent prior q[k] must sum to 1 for various Ne."""
         for Ne in [100, 10_000, 1_000_000]:
-            q = np.array(tmrca_cu.coalescent_prior(Ne=float(Ne), K=self.K))
+            q = np.array(gamma_smc_cu.coalescent_prior(Ne=float(Ne), K=self.K))
             np.testing.assert_allclose(q.sum(), 1.0, rtol=1e-8,
                                        err_msg=f"Prior doesn't sum to 1 for Ne={Ne}")
 
     def test_coalescent_prior_nonnegative(self):
         """All prior entries must be non-negative."""
         for Ne in [100, 10_000, 1_000_000]:
-            q = np.array(tmrca_cu.coalescent_prior(Ne=float(Ne), K=self.K))
+            q = np.array(gamma_smc_cu.coalescent_prior(Ne=float(Ne), K=self.K))
             assert np.all(q >= 0), f"Negative prior entries for Ne={Ne}"
 
     def test_transition_matrix_off_diagonal_structure(self, coal_prior, time_midpoints):

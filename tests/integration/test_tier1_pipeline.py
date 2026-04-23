@@ -12,8 +12,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-import tmrca_cu
-from tmrca_cu.estimator import CoalescenceEstimator
+import gamma_smc_cu
+from gamma_smc_cu.estimator import CoalescenceEstimator
 
 
 class TestSitePi:

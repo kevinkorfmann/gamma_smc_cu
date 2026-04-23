@@ -75,23 +75,23 @@ except Exception as e:
 PY
 echo
 
-# 4. tmrca.cu smoke test on a tiny msprime simulation
+# 4. gamma_smc_cu smoke test on a tiny msprime simulation
 python - <<'PY'
-print("=== tmrca.cu smoke test (single pair, 50kb) ===")
+print("=== gamma_smc_cu smoke test (single pair, 50kb) ===")
 try:
     import msprime
-    import tmrca_cu
+    import gamma_smc_cu
     import numpy as np
     ts = msprime.sim_ancestry(4, sequence_length=50_000, recombination_rate=1e-8,
                                population_size=10000, random_seed=42)
     ts = msprime.sim_mutations(ts, rate=1.25e-8, random_seed=43)
     G = ts.genotype_matrix().T.astype(np.uint8)
     pos = np.array([v.position for v in ts.variants()], dtype=np.float64)
-    r = tmrca_cu.infer(G, pos, mean_only=True, pairs=[(0, 1)])
-    print(f"  tmrca.cu OK: mean shape {r['mean'].shape}, "
+    r = gamma_smc_cu.infer(G, pos, mean_only=True, pairs=[(0, 1)])
+    print(f"  gamma_smc_cu OK: mean shape {r['mean'].shape}, "
           f"min={r['mean'].min():.0f}, max={r['mean'].max():.0f}")
 except Exception as e:
-    print("tmrca.cu FAIL:", e)
+    print("gamma_smc_cu FAIL:", e)
     import traceback; traceback.print_exc()
 PY
 
@@ -102,7 +102,7 @@ echo "============================================================"
 [ -x "${TOOLS_DIR}/selscan/bin/linux/selscan" ] && echo "selscan: OK" || echo "selscan: MISSING"
 python -c "import cxt" 2>/dev/null && echo "cxt: OK" || echo "cxt: MISSING"
 python -c "from asmc import asmc as a; a.ASMC" 2>/dev/null && echo "asmc: OK" || echo "asmc: MISSING"
-python -c "import tmrca_cu; tmrca_cu.infer" 2>/dev/null && echo "tmrca.cu: OK" || echo "tmrca.cu: MISSING"
+python -c "import gamma_smc_cu; gamma_smc_cu.infer" 2>/dev/null && echo "gamma_smc_cu: OK" || echo "gamma_smc_cu: MISSING"
 echo
 echo "Deferred to later phases:"
 echo "  Relate, CLUES (Phase 4)"

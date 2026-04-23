@@ -18,7 +18,7 @@ export PYTHONPATH="$(pwd)/python:$(pwd)"
 echo "=== Aggregating selscan to per-gene tables ==="
 python analysis/orthogonal_v41/scripts/aggregate_selscan_per_gene.py --all
 
-echo "=== Comparing against tmrca.cu candidates ==="
+echo "=== Comparing against gamma_smc_cu candidates ==="
 python analysis/orthogonal_v41/scripts/compare_selscan_vs_tmrca.py
 
 echo "=== Done at $(date) ==="

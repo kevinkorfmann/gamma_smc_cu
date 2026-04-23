@@ -1,4 +1,4 @@
-#include "tmrca_cu/flow_field.h"
+#include "gamma_smc_cu/flow_field.h"
 #include <cmath>
 #include <cstdio>
 #include <cuda_fp16.h>

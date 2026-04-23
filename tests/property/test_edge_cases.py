@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-import tmrca_cu
+import gamma_smc_cu
 
 
 class TestEdgeCases:
@@ -20,7 +20,7 @@ class TestEdgeCases:
         G = np.zeros((n, S), dtype=np.uint8)
         positions = np.arange(S, dtype=np.float64) * 100
 
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=1.25e-8, rho=1e-8
         ))
@@ -29,7 +29,7 @@ class TestEdgeCases:
         np.testing.assert_allclose(gamma.sum(axis=1), 1.0, rtol=1e-3)
 
         # SFS should have zero segregating sites
-        sfs = np.array(tmrca_cu.compute_sfs(G))
+        sfs = np.array(gamma_smc_cu.compute_sfs(G))
         assert sfs[1:].sum() == 0, "Monomorphic matrix should have empty SFS"
 
     def test_single_site(self):
@@ -37,7 +37,7 @@ class TestEdgeCases:
         G = np.array([[0], [1]], dtype=np.uint8)
         positions = np.array([500.0])
 
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=1.25e-8, rho=1e-8
         ))
@@ -50,7 +50,7 @@ class TestEdgeCases:
         G = np.array([[0, 1], [1, 0]], dtype=np.uint8)
         positions = np.array([0.0, 1000.0])
 
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=1.25e-8, rho=1e-8
         ))
@@ -59,7 +59,7 @@ class TestEdgeCases:
         np.testing.assert_allclose(gamma.sum(axis=1), 1.0, rtol=1e-3)
 
         # Log-likelihood should also be finite
-        ll = tmrca_cu.hmm_log_likelihood(
+        ll = gamma_smc_cu.hmm_log_likelihood(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=1.25e-8, rho=1e-8
         )
@@ -72,7 +72,7 @@ class TestEdgeCases:
         G = rng.randint(0, 2, size=(2, S)).astype(np.uint8)
         positions = np.arange(S, dtype=np.float64) * 100
 
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=1.25e-8, rho=1e-8
         ))
@@ -81,13 +81,13 @@ class TestEdgeCases:
         np.testing.assert_allclose(gamma.sum(axis=1), 1.0, rtol=1e-3)
 
         # SFS should work with n=2
-        sfs = np.array(tmrca_cu.compute_sfs(G))
+        sfs = np.array(gamma_smc_cu.compute_sfs(G))
         assert sfs.shape == (3,)  # n+1 = 3 entries
         assert np.all(sfs >= 0)
 
         # Bitpacking round-trip should work
-        packed = tmrca_cu.bitpack(G)
-        unpacked = tmrca_cu.unpack(packed, 2, S)
+        packed = gamma_smc_cu.bitpack(G)
+        unpacked = gamma_smc_cu.unpack(packed, 2, S)
         np.testing.assert_array_equal(G, unpacked)
 
     def test_self_pair_posterior(self):
@@ -100,11 +100,11 @@ class TestEdgeCases:
         G = rng.randint(0, 2, size=(n, S)).astype(np.uint8)
         positions = np.arange(S, dtype=np.float64) * 100
 
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (3, 3), K=32, Ne=10000.0,
             mu=1.25e-8, rho=1e-8
         ))
-        prior = np.array(tmrca_cu.coalescent_prior(Ne=10000.0, K=32))
+        prior = np.array(gamma_smc_cu.coalescent_prior(Ne=10000.0, K=32))
 
         assert np.all(np.isfinite(gamma))
         np.testing.assert_allclose(gamma.sum(axis=1), 1.0, rtol=1e-3)
@@ -112,7 +112,7 @@ class TestEdgeCases:
         # With zero divergence, posterior mean should be less than or equal to
         # prior mean (gap emission favors shorter coalescence times when there
         # are gaps between sites with no observed mutations)
-        t_mid = np.array(tmrca_cu.time_midpoints(K=32, Ne=10000.0))
+        t_mid = np.array(gamma_smc_cu.time_midpoints(K=32, Ne=10000.0))
         prior_mean = np.dot(prior, t_mid)
         post_mean = np.mean(gamma @ t_mid)
         assert post_mean <= prior_mean * 1.1, \

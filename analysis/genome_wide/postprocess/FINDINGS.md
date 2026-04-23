@@ -1,7 +1,7 @@
 # Genome-wide TMRCA scan: post-rerun findings
 
 Post-processing of the 2026-04-11 rerun of the 1000 Genomes
-high-coverage genome-wide TMRCA scan with the new `tmrca.cu`
+high-coverage genome-wide TMRCA scan with the new `gamma_smc_cu`
 pipeline (gamma_smc parity fix, blockwise inference, per-population
 segregating-site filter, auto-theta, log-space per-gene aggregation).
 

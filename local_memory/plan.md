@@ -10,12 +10,12 @@ The result is a **coalescence time field** $T: \text{pairs} \times \text{sites} 
 
 | Context | Name | Notes |
 |---------|------|-------|
-| Canonical name | `tmrca.cu` | Used in conversation, paper, docs |
-| GitHub repository | `kevinkorfmann/tmrca.cu` | GitHub allows dots in repo names |
+| Canonical name | `gamma_smc_cu` | Used in conversation, paper, docs |
+| GitHub repository | `kevinkorfmann/gamma_smc_cu` | GitHub allows dots in repo names |
 | PyPI package | `tmrca-cu` | `pip install tmrca-cu` (PyPI convention: hyphens) |
-| Python import | `tmrca_cu` | `import tmrca_cu` (Python convention: underscores) |
-| CMake project name | `tmrcacu` | No punctuation in build system identifiers |
-| C/CUDA library | `libtmrcacu` | Shared library: `libtmrcacu.so` |
+| Python import | `gamma_smc_cu` | `import gamma_smc_cu` (Python convention: underscores) |
+| CMake project name | `gamma_smc_cu` | No punctuation in build system identifiers |
+| C/CUDA library | `libgamma_smc_cu` | Shared library: `libgamma_smc_cu.so` |
 | Conda package | `tmrca-cu` | Match PyPI name |
 
 ---
@@ -699,7 +699,7 @@ For biobank-scale ($n = 500K$):
 ```python
 # Pseudocode for the full pipeline orchestration
 
-def run_tmrca_cu(G, positions, mu, rho, target_pairs=None, 
+def run_gamma_smc_cu(G, positions, mu, rho, target_pairs=None, 
                  tier=3, m_subsample=20, n_subsamples=5,
                  max_ep_iter=5, damping=0.5, convergence_tol=0.01):
     
@@ -854,14 +854,14 @@ Solution: Two-pass approach:
 ### 5.1 Python API
 
 ```python
-import tmrca_cu
+import gamma_smc_cu
 
 # ============================================
 # Initialize from various input formats
 # ============================================
 
 # From numpy array
-fc = tmrca_cu.CoalescenceEstimator(
+fc = gamma_smc_cu.CoalescenceEstimator(
     genotypes=np.array(..., dtype=np.uint8),  # (n, S) haploid genotype matrix
     positions=np.array(..., dtype=np.float64), # (S,) physical positions in bp
     mu=1.25e-8,               # scalar or array of per-site rates
@@ -870,13 +870,13 @@ fc = tmrca_cu.CoalescenceEstimator(
 )
 
 # From tskit TreeSequence (for validation against msprime simulations)
-fc = tmrca_cu.CoalescenceEstimator.from_tree_sequence(ts, gpu_ids=[0])
+fc = gamma_smc_cu.CoalescenceEstimator.from_tree_sequence(ts, gpu_ids=[0])
 
 # From VCF (streams variants, bitpacks on the fly)
-fc = tmrca_cu.CoalescenceEstimator.from_vcf("chr1.vcf.gz", gpu_ids=[0,1,2,3])
+fc = gamma_smc_cu.CoalescenceEstimator.from_vcf("chr1.vcf.gz", gpu_ids=[0,1,2,3])
 
 # From PLINK bed/bim/fam
-fc = tmrca_cu.CoalescenceEstimator.from_plink("biobank", gpu_ids=range(8))
+fc = gamma_smc_cu.CoalescenceEstimator.from_plink("biobank", gpu_ids=range(8))
 
 # ============================================
 # Tier 1: Instant divergence
@@ -944,12 +944,12 @@ ibd = fc.detect_ibd(pair=(0, 1), tmrca_threshold=100)
 
 ```python
 import msprime
-import tmrca_cu
+import gamma_smc_cu
 import numpy as np
 
 def validate_accuracy():
     """
-    Simulate under known demography, compare tmrca_cu TMRCA estimates
+    Simulate under known demography, compare gamma_smc_cu TMRCA estimates
     to true TMRCA from the tree sequence.
     """
     # Simulate with known demography
@@ -978,8 +978,8 @@ def validate_accuracy():
             tmrca_array[left:right] = t
         true_tmrca[pair] = tmrca_array
     
-    # tmrca_cu estimates
-    fc = tmrca_cu.CoalescenceEstimator.from_tree_sequence(ts, gpu_ids=[0])
+    # gamma_smc_cu estimates
+    fc = gamma_smc_cu.CoalescenceEstimator.from_tree_sequence(ts, gpu_ids=[0])
     result = fc.infer_tmrca(
         pairs=list(true_tmrca.keys()),
         subsample_size=50,
@@ -1018,13 +1018,13 @@ def validate_accuracy():
 ### 6.1 Project Structure
 
 ```
-tmrca_cu/
+gamma_smc_cu/
 ├── CMakeLists.txt                   # Top-level CMake
 ├── setup.py                         # Python package setup (scikit-build or meson)
 ├── pyproject.toml
 │
 ├── include/
-│   └── tmrca_cu/
+│   └── gamma_smc_cu/
 │       ├── types.h                  # Core data structures (§3.0)
 │       ├── bitpack.h                # Bitpacking utilities
 │       ├── hmm.h                    # HMM parameters and functions
@@ -1050,7 +1050,7 @@ tmrca_cu/
 │       └── tskit_bridge.cpp         # tskit TreeSequence interop
 │
 ├── python/
-│   └── tmrca_cu/
+│   └── gamma_smc_cu/
 │       ├── __init__.py
 │       ├── estimator.py             # CoalescenceEstimator class (§5.1)
 │       ├── _bindings.pyx            # Cython or pybind11 bindings
@@ -1172,7 +1172,7 @@ Tasks:
 6. Python binding for Tier 1: `fc.site_pi()` and `fc.pairwise_divergence()`
 7. Test against msprime: verify $\pi(s)$ matches `ts.diversity()`
 
-**Validation:** Per-site $\pi$ from tmrca_cu matches tskit within floating-point tolerance.
+**Validation:** Per-site $\pi$ from gamma_smc_cu matches tskit within floating-point tolerance.
 
 ### Milestone 2: HMM Forward-Backward (Week 2–4)
 
@@ -1332,7 +1332,7 @@ The practical sweet spot is Tier 1 for all pairs (genome-wide $\pi$ and rough TM
 | tsinfer + tsdate | Full ARG → node dating | High | ~10K samples | Tree inference is slow, error propagates |
 | ARGweaver | Full ARG via MCMC | Highest | ~50 samples | MCMC, extremely slow |
 | Relate | Approx. ARG per pair | Medium-High | ~10K samples | Sequential, approximate |
-| **tmrca_cu** | **Pairwise TMRCA via GPU variational SMC** | **High** | **Biobank (500K+)** | **Pairwise only (no full ARG)** |
+| **gamma_smc_cu** | **Pairwise TMRCA via GPU variational SMC** | **High** | **Biobank (500K+)** | **Pairwise only (no full ARG)** |
 
 ### 10.2 What Is Novel
 
@@ -1582,43 +1582,43 @@ class TestBitpacking:
     def test_roundtrip_small(self, small_simulation):
         """Pack and unpack, verify identity."""
         _, G, _ = small_simulation
-        packed = tmrca_cu.bitpack(G)
-        unpacked = tmrca_cu.unpack(packed, G.shape[0], G.shape[1])
+        packed = gamma_smc_cu.bitpack(G)
+        unpacked = gamma_smc_cu.unpack(packed, G.shape[0], G.shape[1])
         np.testing.assert_array_equal(G, unpacked)
 
     def test_non_multiple_of_64(self):
         """Sites count not divisible by 64 — verify padding is zero-filled."""
         G = np.random.randint(0, 2, size=(10, 100), dtype=np.uint8)
-        packed = tmrca_cu.bitpack(G)
-        unpacked = tmrca_cu.unpack(packed, 10, 100)
+        packed = gamma_smc_cu.bitpack(G)
+        unpacked = gamma_smc_cu.unpack(packed, 10, 100)
         np.testing.assert_array_equal(G, unpacked)
 
     def test_all_zeros(self):
         """Monomorphic zero matrix."""
         G = np.zeros((50, 1000), dtype=np.uint8)
-        packed = tmrca_cu.bitpack(G)
-        unpacked = tmrca_cu.unpack(packed, 50, 1000)
+        packed = gamma_smc_cu.bitpack(G)
+        unpacked = gamma_smc_cu.unpack(packed, 50, 1000)
         np.testing.assert_array_equal(G, unpacked)
 
     def test_all_ones(self):
         """Monomorphic one matrix."""
         G = np.ones((50, 1000), dtype=np.uint8)
-        packed = tmrca_cu.bitpack(G)
-        unpacked = tmrca_cu.unpack(packed, 50, 1000)
+        packed = gamma_smc_cu.bitpack(G)
+        unpacked = gamma_smc_cu.unpack(packed, 50, 1000)
         np.testing.assert_array_equal(G, unpacked)
 
     def test_single_site(self):
         """Edge case: S=1."""
         G = np.array([[0], [1], [1], [0]], dtype=np.uint8)
-        packed = tmrca_cu.bitpack(G)
-        unpacked = tmrca_cu.unpack(packed, 4, 1)
+        packed = gamma_smc_cu.bitpack(G)
+        unpacked = gamma_smc_cu.unpack(packed, 4, 1)
         np.testing.assert_array_equal(G, unpacked)
 
     def test_single_haplotype(self):
         """Edge case: n=1."""
         G = np.random.randint(0, 2, size=(1, 500), dtype=np.uint8)
-        packed = tmrca_cu.bitpack(G)
-        unpacked = tmrca_cu.unpack(packed, 1, 500)
+        packed = gamma_smc_cu.bitpack(G)
+        unpacked = gamma_smc_cu.unpack(packed, 1, 500)
         np.testing.assert_array_equal(G, unpacked)
 ```
 
@@ -1637,7 +1637,7 @@ class TestPrefixScan:
             xor = np.bitwise_xor(G[i], G[j]).astype(np.int64)
             expected_prefix = np.cumsum(xor)
             
-            cuda_prefix = tmrca_cu.pairwise_prefix_scan(G, [(i, j)])[0]
+            cuda_prefix = gamma_smc_cu.pairwise_prefix_scan(G, [(i, j)])[0]
             np.testing.assert_array_equal(cuda_prefix, expected_prefix)
 
     def test_windowed_divergence_from_prefix(self, small_simulation):
@@ -1650,20 +1650,20 @@ class TestPrefixScan:
         
         for s in range(W, len(positions) - W):
             expected = prefix[s + W] - prefix[s - W]
-            cuda_div = tmrca_cu.windowed_divergence(G, [(0, 1)], W)[0, s]
+            cuda_div = gamma_smc_cu.windowed_divergence(G, [(0, 1)], W)[0, s]
             assert cuda_div == expected
 
     def test_symmetry(self, small_simulation):
         """prefix_scan(i,j) == prefix_scan(j,i) since XOR is symmetric."""
         _, G, _ = small_simulation
-        p_ij = tmrca_cu.pairwise_prefix_scan(G, [(0, 5)])[0]
-        p_ji = tmrca_cu.pairwise_prefix_scan(G, [(5, 0)])[0]
+        p_ij = gamma_smc_cu.pairwise_prefix_scan(G, [(0, 5)])[0]
+        p_ji = gamma_smc_cu.pairwise_prefix_scan(G, [(5, 0)])[0]
         np.testing.assert_array_equal(p_ij, p_ji)
 
     def test_self_pair_is_zero(self, small_simulation):
         """XOR of haplotype with itself is zero everywhere."""
         _, G, _ = small_simulation
-        prefix = tmrca_cu.pairwise_prefix_scan(G, [(3, 3)])[0]
+        prefix = gamma_smc_cu.pairwise_prefix_scan(G, [(3, 3)])[0]
         np.testing.assert_array_equal(prefix, np.zeros_like(prefix))
 ```
 
@@ -1675,20 +1675,20 @@ class TestSFS:
 
     def test_sfs_matches_tskit(self, small_simulation):
         ts, G, _ = small_simulation
-        cuda_sfs = tmrca_cu.compute_sfs(G)
+        cuda_sfs = gamma_smc_cu.compute_sfs(G)
         tskit_sfs = ts.allele_frequency_spectrum(polarised=True, span_normalise=False)
         np.testing.assert_array_equal(cuda_sfs, tskit_sfs.astype(int))
 
     def test_sfs_sums_to_num_sites(self, small_simulation):
         _, G, _ = small_simulation
-        sfs = tmrca_cu.compute_sfs(G)
+        sfs = gamma_smc_cu.compute_sfs(G)
         # SFS entries 1..n-1 should sum to total segregating sites
         assert sfs[1:-1].sum() == G.shape[1]
 
     def test_sfs_monomorphic_input(self):
         """All-zero matrix should give empty SFS."""
         G = np.zeros((20, 100), dtype=np.uint8)
-        sfs = tmrca_cu.compute_sfs(G)
+        sfs = gamma_smc_cu.compute_sfs(G)
         assert sfs[1:].sum() == 0
 ```
 
@@ -1714,7 +1714,7 @@ class TestHMMForwardBackward:
         pair = (0, 1)
         
         np_alpha = numpy_hmm.forward(pair)  # (S, K)
-        cuda_alpha = tmrca_cu.hmm_forward(G, positions, pair, K=32)
+        cuda_alpha = gamma_smc_cu.hmm_forward(G, positions, pair, K=32)
         
         np.testing.assert_allclose(cuda_alpha, np_alpha, rtol=1e-4, atol=1e-6)
 
@@ -1724,7 +1724,7 @@ class TestHMMForwardBackward:
         pair = (0, 1)
         
         np_beta = numpy_hmm.backward(pair)
-        cuda_beta = tmrca_cu.hmm_backward(G, positions, pair, K=32)
+        cuda_beta = gamma_smc_cu.hmm_backward(G, positions, pair, K=32)
         
         np.testing.assert_allclose(cuda_beta, np_beta, rtol=1e-4, atol=1e-6)
 
@@ -1734,14 +1734,14 @@ class TestHMMForwardBackward:
         pair = (0, 1)
         
         np_gamma = numpy_hmm.posterior(pair)  # (S, K)
-        cuda_gamma = tmrca_cu.hmm_posterior(G, positions, pair, K=32)
+        cuda_gamma = gamma_smc_cu.hmm_posterior(G, positions, pair, K=32)
         
         np.testing.assert_allclose(cuda_gamma, np_gamma, rtol=1e-3, atol=1e-5)
 
     def test_posterior_sums_to_one(self, small_simulation):
         """Posterior marginals must sum to 1 at every site."""
         _, G, positions = small_simulation
-        gamma = tmrca_cu.hmm_posterior(G, positions, (0, 1), K=32)
+        gamma = gamma_smc_cu.hmm_posterior(G, positions, (0, 1), K=32)
         sums = gamma.sum(axis=1)
         np.testing.assert_allclose(sums, 1.0, rtol=1e-4)
 
@@ -1751,7 +1751,7 @@ class TestHMMForwardBackward:
         pair = (0, 1)
         
         np_ll = numpy_hmm.log_likelihood(pair)
-        cuda_ll = tmrca_cu.hmm_log_likelihood(G, positions, pair, K=32)
+        cuda_ll = gamma_smc_cu.hmm_log_likelihood(G, positions, pair, K=32)
         
         np.testing.assert_allclose(cuda_ll, np_ll, rtol=1e-3)
 
@@ -1761,11 +1761,11 @@ class TestHMMForwardBackward:
         pairs = [(0, 1), (2, 3), (0, 10), (5, 15)]
         
         # Run batched
-        batched_gamma = tmrca_cu.hmm_posterior_batched(G, positions, pairs, K=32)
+        batched_gamma = gamma_smc_cu.hmm_posterior_batched(G, positions, pairs, K=32)
         
         # Run individually
         for idx, pair in enumerate(pairs):
-            single_gamma = tmrca_cu.hmm_posterior(G, positions, pair, K=32)
+            single_gamma = gamma_smc_cu.hmm_posterior(G, positions, pair, K=32)
             np.testing.assert_allclose(
                 batched_gamma[idx], single_gamma, rtol=1e-4,
                 err_msg=f"Mismatch for pair {pair}"
@@ -1777,10 +1777,10 @@ class TestHMMForwardBackward:
         G = np.zeros((n, S), dtype=np.uint8)
         positions = np.arange(S, dtype=np.float64) * 100
         
-        gamma = tmrca_cu.hmm_posterior(G, positions, (0, 1), K=32)
+        gamma = gamma_smc_cu.hmm_posterior(G, positions, (0, 1), K=32)
         # With no data, posterior should be close to prior at all sites
         # (transition model spreads prior, but shouldn't deviate far)
-        prior = tmrca_cu.coalescent_prior(Ne=10_000, K=32)
+        prior = gamma_smc_cu.coalescent_prior(Ne=10_000, K=32)
         for s in range(S):
             np.testing.assert_allclose(gamma[s], prior, atol=0.05)
 
@@ -1800,10 +1800,10 @@ class TestHMMForwardBackward:
                 if d < min_diff:
                     min_diff, min_pair = d, (i, j)
         
-        gamma_max = tmrca_cu.hmm_posterior(G, positions, max_pair, K=32)
-        gamma_min = tmrca_cu.hmm_posterior(G, positions, min_pair, K=32)
+        gamma_max = gamma_smc_cu.hmm_posterior(G, positions, max_pair, K=32)
+        gamma_min = gamma_smc_cu.hmm_posterior(G, positions, min_pair, K=32)
         
-        t_mid = tmrca_cu.time_midpoints(K=32)
+        t_mid = gamma_smc_cu.time_midpoints(K=32)
         mean_max = np.mean(gamma_max @ t_mid)
         mean_min = np.mean(gamma_min @ t_mid)
         
@@ -1831,7 +1831,7 @@ class TestHMMNumericalStability:
         G[0, -1] = 1  # single mutation at end
         positions = np.linspace(0, 10_000_000, S)
         
-        gamma = tmrca_cu.hmm_posterior(G, positions, (0, 1), K=32)
+        gamma = gamma_smc_cu.hmm_posterior(G, positions, (0, 1), K=32)
         
         # Must not contain NaN or Inf
         assert np.all(np.isfinite(gamma)), "NaN/Inf in posterior after long monomorphic stretch"
@@ -1848,10 +1848,10 @@ class TestHMMNumericalStability:
         G[0, :] = 1  # haplotype 0 differs from all others at every site
         positions = np.arange(S, dtype=np.float64)
         
-        gamma = tmrca_cu.hmm_posterior(G, positions, (0, 1), K=32)
+        gamma = gamma_smc_cu.hmm_posterior(G, positions, (0, 1), K=32)
         assert np.all(np.isfinite(gamma))
         
-        t_mid = tmrca_cu.time_midpoints(K=32)
+        t_mid = gamma_smc_cu.time_midpoints(K=32)
         mean_tmrca = np.mean(gamma @ t_mid)
         assert mean_tmrca > t_mid[K // 2], "Saturated divergence should give large TMRCA"
 
@@ -1860,8 +1860,8 @@ class TestHMMNumericalStability:
         Verify FP16 stored gamma doesn't deviate too far from FP32 computation.
         """
         _, G, positions = small_simulation
-        gamma_fp32 = tmrca_cu.hmm_posterior(G, positions, (0, 1), K=32, precision="fp32")
-        gamma_fp16 = tmrca_cu.hmm_posterior(G, positions, (0, 1), K=32, precision="fp16")
+        gamma_fp32 = gamma_smc_cu.hmm_posterior(G, positions, (0, 1), K=32, precision="fp32")
+        gamma_fp16 = gamma_smc_cu.hmm_posterior(G, positions, (0, 1), K=32, precision="fp16")
         
         # FP16 has ~3 decimal digits of precision
         np.testing.assert_allclose(gamma_fp16, gamma_fp32, rtol=5e-3, atol=1e-4)
@@ -1872,7 +1872,7 @@ class TestHMMNumericalStability:
         G = np.random.randint(0, 2, size=(n, S), dtype=np.uint8)
         positions = np.arange(S, dtype=np.float64) * 100
         
-        gamma = tmrca_cu.hmm_posterior(G, positions, (0, 1), K=32, Ne=100)
+        gamma = gamma_smc_cu.hmm_posterior(G, positions, (0, 1), K=32, Ne=100)
         assert np.all(np.isfinite(gamma))
 
     def test_very_large_ne(self):
@@ -1881,7 +1881,7 @@ class TestHMMNumericalStability:
         G = np.random.randint(0, 2, size=(n, S), dtype=np.uint8)
         positions = np.arange(S, dtype=np.float64) * 100
         
-        gamma = tmrca_cu.hmm_posterior(G, positions, (0, 1), K=32, Ne=10_000_000)
+        gamma = gamma_smc_cu.hmm_posterior(G, positions, (0, 1), K=32, Ne=10_000_000)
         assert np.all(np.isfinite(gamma))
 ```
 
@@ -1897,7 +1897,7 @@ class TestUltrametricProjection:
         """If input posteriors are delta functions on a valid tree, output is unchanged."""
         K = 32
         m = 6
-        t_mid = tmrca_cu.time_midpoints(K=K)
+        t_mid = gamma_smc_cu.time_midpoints(K=K)
         
         # Construct a known tree: ((0,1):t5, (2,3):t10, ((0,1),(2,3)):t20, (4,5):t15)
         # True pairwise TMRCAs:
@@ -1916,7 +1916,7 @@ class TestUltrametricProjection:
             post[k] = 1.0
             posteriors[pair] = post
         
-        result = tmrca_cu.ultrametric_project(posteriors, m=m, K=K)
+        result = gamma_smc_cu.ultrametric_project(posteriors, m=m, K=K)
         
         for pair in true_t:
             k_true = np.argmin(np.abs(t_mid - true_t[pair]))
@@ -1932,7 +1932,7 @@ class TestUltrametricProjection:
         np_ref = NumpyUltrametric(K=K)
         true_tree, true_posteriors = np_ref.generate_noisy_tree(m=m, noise_level=0.3)
         
-        projected = tmrca_cu.ultrametric_project(true_posteriors, m=m, K=K)
+        projected = gamma_smc_cu.ultrametric_project(true_posteriors, m=m, K=K)
         
         # Projected should be closer to truth than raw posteriors
         error_raw = np_ref.ultrametric_violation(true_posteriors)
@@ -1948,7 +1948,7 @@ class TestUltrametricProjection:
         np_ref = NumpyUltrametric(K=K)
         _, posteriors = np_ref.generate_noisy_tree(m=m, noise_level=0.2, seed=42)
         
-        cuda_result = tmrca_cu.ultrametric_project(posteriors, m=m, K=K)
+        cuda_result = gamma_smc_cu.ultrametric_project(posteriors, m=m, K=K)
         numpy_result = np_ref.project(posteriors, m=m)
         
         for pair in posteriors:
@@ -1981,7 +1981,7 @@ class TestPELT:
             pos += length
             true_breakpoints.append(pos)
         
-        detected = tmrca_cu.pelt_changepoints(signal)
+        detected = gamma_smc_cu.pelt_changepoints(signal)
         
         # Each detected breakpoint should be within 500 bp of a true one
         for bp in detected:
@@ -1991,7 +1991,7 @@ class TestPELT:
     def test_no_changepoints(self):
         """Constant rate signal should produce no changepoints (or very few)."""
         signal = np.random.binomial(1, 0.005, size=50000).astype(np.uint8)
-        detected = tmrca_cu.pelt_changepoints(signal)
+        detected = gamma_smc_cu.pelt_changepoints(signal)
         assert len(detected) <= 2, f"Expected ≤2 spurious changepoints, got {len(detected)}"
 
     def test_matches_numpy_reference(self, small_simulation):
@@ -2001,7 +2001,7 @@ class TestPELT:
         
         np_pelt = NumpyPELT()
         np_breakpoints = np_pelt.detect(xor, positions)
-        cuda_breakpoints = tmrca_cu.pelt_changepoints(xor, positions)
+        cuda_breakpoints = gamma_smc_cu.pelt_changepoints(xor, positions)
         
         np.testing.assert_array_equal(cuda_breakpoints, np_breakpoints)
 ```
@@ -2017,9 +2017,9 @@ class TestPairIndexing:
         """pair_to_index(index_to_pair(p)) == p for all valid p."""
         n_pairs = n * (n - 1) // 2
         for p in range(min(n_pairs, 10000)):  # test first 10K
-            i, j = tmrca_cu.index_to_pair(p)
+            i, j = gamma_smc_cu.index_to_pair(p)
             assert i > j, f"Convention: i > j, got i={i}, j={j}"
-            assert tmrca_cu.pair_to_index(i, j) == p
+            assert gamma_smc_cu.pair_to_index(i, j) == p
 
     @pytest.mark.parametrize("n", [4, 10, 100])
     def test_all_pairs_covered(self, n):
@@ -2027,7 +2027,7 @@ class TestPairIndexing:
         n_pairs = n * (n - 1) // 2
         seen = set()
         for p in range(n_pairs):
-            pair = tmrca_cu.index_to_pair(p)
+            pair = gamma_smc_cu.index_to_pair(p)
             seen.add(pair)
         
         expected = {(i, j) for i in range(n) for j in range(i)}
@@ -2045,7 +2045,7 @@ class TestEmissions:
         mu = 1.25e-8
         t = 10_000.0
         expected = 1.0 - np.exp(-2 * mu * t)
-        computed = tmrca_cu.emission_prob(d=1, t=t, mu=mu)
+        computed = gamma_smc_cu.emission_prob(d=1, t=t, mu=mu)
         np.testing.assert_allclose(computed, expected, rtol=1e-10)
 
     def test_emission_no_mutation_site(self):
@@ -2053,15 +2053,15 @@ class TestEmissions:
         mu = 1.25e-8
         t = 10_000.0
         expected = np.exp(-2 * mu * t)
-        computed = tmrca_cu.emission_prob(d=0, t=t, mu=mu)
+        computed = gamma_smc_cu.emission_prob(d=0, t=t, mu=mu)
         np.testing.assert_allclose(computed, expected, rtol=1e-10)
 
     def test_emissions_sum_to_one(self):
         """P(d=0|t) + P(d=1|t) = 1 for all t."""
         mu = 1.25e-8
         for t in [10, 1000, 100_000, 1_000_000]:
-            p0 = tmrca_cu.emission_prob(d=0, t=t, mu=mu)
-            p1 = tmrca_cu.emission_prob(d=1, t=t, mu=mu)
+            p0 = gamma_smc_cu.emission_prob(d=0, t=t, mu=mu)
+            p1 = gamma_smc_cu.emission_prob(d=1, t=t, mu=mu)
             np.testing.assert_allclose(p0 + p1, 1.0, rtol=1e-12)
 
     def test_gap_emission(self):
@@ -2070,7 +2070,7 @@ class TestEmissions:
         t = 10_000.0
         L = 5000
         expected = np.exp(-2 * mu * t * L)
-        computed = tmrca_cu.gap_emission(t=t, mu=mu, gap_bp=L)
+        computed = gamma_smc_cu.gap_emission(t=t, mu=mu, gap_bp=L)
         np.testing.assert_allclose(computed, expected, rtol=1e-10)
 
 
@@ -2081,11 +2081,11 @@ class TestTransitions:
         """Each row of A(r) must sum to 1."""
         K = 32
         Ne = 10_000
-        coal_prior = tmrca_cu.coalescent_prior(Ne=Ne, K=K)
-        t_mid = tmrca_cu.time_midpoints(K=K)
+        coal_prior = gamma_smc_cu.coalescent_prior(Ne=Ne, K=K)
+        t_mid = gamma_smc_cu.time_midpoints(K=K)
         
         for r in [1e-6, 1e-4, 1e-2, 1.0]:
-            A = tmrca_cu.transition_matrix(r=r, t_mid=t_mid, coal_prior=coal_prior)
+            A = gamma_smc_cu.transition_matrix(r=r, t_mid=t_mid, coal_prior=coal_prior)
             row_sums = A.sum(axis=1)
             np.testing.assert_allclose(row_sums, 1.0, rtol=1e-10,
                 err_msg=f"Row sums not 1 for r={r}")
@@ -2093,17 +2093,17 @@ class TestTransitions:
     def test_no_recombination_is_identity(self):
         """A(r=0) should be the identity matrix."""
         K = 32
-        coal_prior = tmrca_cu.coalescent_prior(Ne=10_000, K=K)
-        t_mid = tmrca_cu.time_midpoints(K=K)
-        A = tmrca_cu.transition_matrix(r=0.0, t_mid=t_mid, coal_prior=coal_prior)
+        coal_prior = gamma_smc_cu.coalescent_prior(Ne=10_000, K=K)
+        t_mid = gamma_smc_cu.time_midpoints(K=K)
+        A = gamma_smc_cu.transition_matrix(r=0.0, t_mid=t_mid, coal_prior=coal_prior)
         np.testing.assert_allclose(A, np.eye(K), atol=1e-10)
 
     def test_large_recombination_approaches_prior(self):
         """A(r→∞) should have all rows equal to coal_prior."""
         K = 32
-        coal_prior = tmrca_cu.coalescent_prior(Ne=10_000, K=K)
-        t_mid = tmrca_cu.time_midpoints(K=K)
-        A = tmrca_cu.transition_matrix(r=100.0, t_mid=t_mid, coal_prior=coal_prior)
+        coal_prior = gamma_smc_cu.coalescent_prior(Ne=10_000, K=K)
+        t_mid = gamma_smc_cu.time_midpoints(K=K)
+        A = gamma_smc_cu.transition_matrix(r=100.0, t_mid=t_mid, coal_prior=coal_prior)
         
         for k in range(K):
             np.testing.assert_allclose(A[k], coal_prior, atol=1e-4,
@@ -2112,7 +2112,7 @@ class TestTransitions:
     def test_coalescent_prior_sums_to_one(self):
         """Coalescent prior q[k] must sum to 1."""
         for Ne in [100, 10_000, 1_000_000]:
-            q = tmrca_cu.coalescent_prior(Ne=Ne, K=32)
+            q = gamma_smc_cu.coalescent_prior(Ne=Ne, K=32)
             np.testing.assert_allclose(q.sum(), 1.0, rtol=1e-8)
 ```
 
@@ -2127,7 +2127,7 @@ class TestTier1Pipeline:
     def test_pi_matches_tskit(self, small_simulation, uniform_mu):
         ts, G, positions = small_simulation
         
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu)
         pi = fc.site_pi()
         
         # Compare against tskit diversity
@@ -2139,7 +2139,7 @@ class TestTier1Pipeline:
 
     def test_tier1_output_shape(self, small_simulation, uniform_mu):
         _, G, positions = small_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu)
         pi = fc.site_pi()
         assert pi.shape == (len(positions),)
         assert np.all(pi >= 0)
@@ -2150,7 +2150,7 @@ class TestTier2Pipeline:
 
     def test_segments_cover_genome(self, small_simulation, uniform_mu, uniform_rho):
         _, G, positions = small_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         segments = fc.segment_tmrca(pairs=[(0, 1)])
         
         segs = segments[(0, 1)]
@@ -2163,7 +2163,7 @@ class TestTier2Pipeline:
 
     def test_segment_tmrca_positive(self, small_simulation, uniform_mu, uniform_rho):
         _, G, positions = small_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         segments = fc.segment_tmrca(pairs=[(0, 1)])
         
         for seg in segments[(0, 1)]:
@@ -2175,7 +2175,7 @@ class TestTier3Pipeline:
 
     def test_posterior_output_structure(self, small_simulation, uniform_mu, uniform_rho):
         _, G, positions = small_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         result = fc.infer_tmrca(pairs=[(0, 1), (2, 3)], max_iterations=2)
         
         assert result.tmrca_mean.shape == (2, len(positions))
@@ -2187,7 +2187,7 @@ class TestTier3Pipeline:
 
     def test_credible_intervals_contain_mean(self, small_simulation, uniform_mu, uniform_rho):
         _, G, positions = small_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         result = fc.infer_tmrca(pairs=[(0, 1)], max_iterations=3)
         
         assert np.all(result.tmrca_lower[0] <= result.tmrca_mean[0])
@@ -2203,7 +2203,7 @@ class TestEPConvergence:
     def test_convergence_flag(self, medium_simulation, uniform_mu, uniform_rho):
         """EP should converge within max_iterations on well-behaved data."""
         _, G, positions = medium_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         result = fc.infer_tmrca(
             pairs="subsample", subsample_size=20,
             max_iterations=10, convergence_tol=0.01,
@@ -2215,7 +2215,7 @@ class TestEPConvergence:
                                                 uniform_mu, uniform_rho):
         """More EP iterations should reduce error against ground truth."""
         ts, G, positions = small_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         
         errors = []
         for n_iter in [0, 1, 3, 5]:
@@ -2234,7 +2234,7 @@ class TestEPConvergence:
     def test_damping_prevents_oscillation(self, small_simulation, uniform_mu, uniform_rho):
         """With damping=0.5, max_delta should decrease monotonically (roughly)."""
         _, G, positions = small_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         result = fc.infer_tmrca(
             pairs="subsample", subsample_size=10,
             max_iterations=10, damping=0.5,
@@ -2261,12 +2261,12 @@ class TestSiteBlocking:
         pair = (0, 1)
         
         # Full sequence in one block
-        gamma_full = tmrca_cu.hmm_posterior(
+        gamma_full = gamma_smc_cu.hmm_posterior(
             G, positions, pair, K=32, site_block_size=len(positions)
         )
         
         # Split into small blocks
-        gamma_blocked = tmrca_cu.hmm_posterior(
+        gamma_blocked = gamma_smc_cu.hmm_posterior(
             G, positions, pair, K=32, site_block_size=256
         )
         
@@ -2284,11 +2284,11 @@ class TestIOFormats:
         ts, G, positions = small_simulation
         
         # From numpy
-        fc_numpy = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc_numpy = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         pi_numpy = fc_numpy.site_pi()
         
         # From tree sequence
-        fc_ts = tmrca_cu.CoalescenceEstimator.from_tree_sequence(ts)
+        fc_ts = gamma_smc_cu.CoalescenceEstimator.from_tree_sequence(ts)
         pi_ts = fc_ts.site_pi()
         
         np.testing.assert_allclose(pi_numpy, pi_ts, rtol=1e-10)
@@ -2301,7 +2301,7 @@ class TestIOFormats:
         with open(vcf_path, "w") as f:
             ts.write_vcf(f)
         
-        fc = tmrca_cu.CoalescenceEstimator.from_vcf(str(vcf_path), mu=uniform_mu, rho=uniform_rho)
+        fc = gamma_smc_cu.CoalescenceEstimator.from_vcf(str(vcf_path), mu=uniform_mu, rho=uniform_rho)
         pi = fc.site_pi()
         
         assert pi.shape[0] == ts.num_sites
@@ -2341,7 +2341,7 @@ class TestAccuracyMsprime:
         )
         ts = msprime.sim_mutations(ts, rate=1.25e-8, random_seed=43)
         
-        fc = tmrca_cu.CoalescenceEstimator.from_tree_sequence(ts)
+        fc = gamma_smc_cu.CoalescenceEstimator.from_tree_sequence(ts)
         result = fc.infer_tmrca(pairs=[(0, 1), (0, 10), (5, 15)], max_iterations=5)
         
         for idx, pair in enumerate([(0, 1), (0, 10), (5, 15)]):
@@ -2361,7 +2361,7 @@ class TestAccuracyMsprime:
         Tests posterior calibration (not just point estimate accuracy).
         """
         ts, G, positions = large_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
         
         test_pairs = [(0, 1), (0, 50), (10, 100)]
         result = fc.infer_tmrca(pairs=test_pairs, max_iterations=5, subsample_size=50)
@@ -2400,7 +2400,7 @@ class TestAccuracyMsprime:
         )
         ts = msprime.sim_mutations(ts, rate=1.25e-8, random_seed=43)
         
-        fc = tmrca_cu.CoalescenceEstimator.from_tree_sequence(ts)
+        fc = gamma_smc_cu.CoalescenceEstimator.from_tree_sequence(ts)
         estimated_ne = fc.estimate_demography()
         
         # Check Ne at key timepoints
@@ -2427,13 +2427,13 @@ class TestInvariants:
         """
         _, G, positions = small_simulation
         
-        fc1 = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc1 = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         pi1 = fc1.site_pi()
         
         # Permute samples
         perm = np.random.permutation(G.shape[0])
         G_perm = G[perm]
-        fc2 = tmrca_cu.CoalescenceEstimator(G_perm, positions, mu=uniform_mu, rho=uniform_rho)
+        fc2 = gamma_smc_cu.CoalescenceEstimator(G_perm, positions, mu=uniform_mu, rho=uniform_rho)
         pi2 = fc2.site_pi()
         
         np.testing.assert_allclose(pi1, pi2, rtol=1e-10)
@@ -2441,7 +2441,7 @@ class TestInvariants:
     def test_tmrca_symmetry(self, small_simulation, uniform_mu, uniform_rho):
         """T(i,j) == T(j,i) for all pairs."""
         _, G, positions = small_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         
         result_ij = fc.infer_tmrca(pairs=[(0, 5)], max_iterations=2)
         result_ji = fc.infer_tmrca(pairs=[(5, 0)], max_iterations=2)
@@ -2451,13 +2451,13 @@ class TestInvariants:
     def test_posterior_normalization(self, small_simulation, uniform_mu, uniform_rho):
         """Posterior marginals sum to 1 at every site for every pair."""
         _, G, positions = small_simulation
-        gamma = tmrca_cu.hmm_posterior(G, positions, (0, 1), K=32)
+        gamma = gamma_smc_cu.hmm_posterior(G, positions, (0, 1), K=32)
         np.testing.assert_allclose(gamma.sum(axis=1), 1.0, rtol=1e-4)
 
     def test_tmrca_positivity(self, small_simulation, uniform_mu, uniform_rho):
         """All TMRCA estimates must be strictly positive."""
         _, G, positions = small_simulation
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=uniform_mu, rho=uniform_rho)
         result = fc.infer_tmrca(pairs=[(0, 1), (2, 3)], max_iterations=2)
         assert np.all(result.tmrca_mean > 0)
         assert np.all(result.tmrca_lower > 0)
@@ -2469,7 +2469,7 @@ class TestInvariants:
         G[1, :] = G[0, :]  # identical
         positions = np.arange(1000, dtype=np.float64) * 100
         
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8)
         div = fc.pairwise_divergence(pairs=[(0, 1)], window_sizes=[100])
         np.testing.assert_array_equal(div, 0)
 
@@ -2477,8 +2477,8 @@ class TestInvariants:
         """Doubling μ should approximately halve estimated TMRCA (Tier 1)."""
         _, G, positions = small_simulation
         
-        fc1 = tmrca_cu.CoalescenceEstimator(G, positions, mu=1e-8, rho=uniform_rho)
-        fc2 = tmrca_cu.CoalescenceEstimator(G, positions, mu=2e-8, rho=uniform_rho)
+        fc1 = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1e-8, rho=uniform_rho)
+        fc2 = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=2e-8, rho=uniform_rho)
         
         div1 = fc1.pairwise_divergence(pairs=[(0, 1)], window_sizes=[500])
         div2 = fc2.pairwise_divergence(pairs=[(0, 1)], window_sizes=[500])
@@ -2496,7 +2496,7 @@ class TestEdgeCases:
     def test_single_site(self):
         G = np.array([[0], [1]], dtype=np.uint8)
         positions = np.array([500.0])
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8)
         pi = fc.site_pi()
         assert pi.shape == (1,)
 
@@ -2504,7 +2504,7 @@ class TestEdgeCases:
         """Minimum sample size: n=2."""
         G = np.random.randint(0, 2, size=(2, 1000), dtype=np.uint8)
         positions = np.arange(1000, dtype=np.float64) * 100
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
         result = fc.infer_tmrca(pairs=[(0, 1)], max_iterations=2)
         assert result.tmrca_mean.shape == (1, 1000)
 
@@ -2512,7 +2512,7 @@ class TestEdgeCases:
         """All-zero genotypes: no segregating sites in practice, but should not crash."""
         G = np.zeros((20, 500), dtype=np.uint8)
         positions = np.arange(500, dtype=np.float64) * 100
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8)
         pi = fc.site_pi()
         np.testing.assert_array_equal(pi, 0)
 
@@ -2524,7 +2524,7 @@ class TestEdgeCases:
             G[s % n, s] = 1  # each site is a singleton on a different haplotype
         positions = np.arange(S, dtype=np.float64) * 1000
         
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
         result = fc.infer_tmrca(pairs=[(0, 1)], max_iterations=2)
         assert np.all(np.isfinite(result.tmrca_mean))
 
@@ -2532,7 +2532,7 @@ class TestEdgeCases:
         """Positions spanning an entire chromosome (~250 Mb)."""
         G = np.random.randint(0, 2, size=(10, 100), dtype=np.uint8)
         positions = np.sort(np.random.uniform(0, 250_000_000, size=100))
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
         pi = fc.site_pi()
         assert np.all(np.isfinite(pi))
 ```
@@ -2565,7 +2565,7 @@ class TestRegressionGolden:
         positions = golden_data["positions"]
         expected_pi = golden_data["pi"]
         
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8)
         pi = fc.site_pi()
         
         np.testing.assert_allclose(pi, expected_pi, rtol=1e-6,
@@ -2576,7 +2576,7 @@ class TestRegressionGolden:
         positions = golden_data["positions"]
         expected_mean = golden_posteriors["tmrca_mean"]
         
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
         result = fc.infer_tmrca(pairs=[(0, 1)], max_iterations=5, subsample_size=10)
         
         np.testing.assert_allclose(result.tmrca_mean[0], expected_mean, rtol=1e-3,
@@ -2600,7 +2600,7 @@ class TestPerformance:
         G = np.random.randint(0, 2, size=(n, S), dtype=np.uint8)
         positions = np.arange(S, dtype=np.float64)
         
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8)
         
         result = benchmark(fc.site_pi)
         
@@ -2616,7 +2616,7 @@ class TestPerformance:
         positions = np.arange(S, dtype=np.float64) * 100
         pairs = [(i, j) for i in range(20) for j in range(i)]  # 190 pairs
         
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
         
         result = benchmark(lambda: fc.infer_tmrca(pairs=pairs, max_iterations=1))
         
@@ -2633,14 +2633,14 @@ class TestPerformance:
         G = np.random.randint(0, 2, size=(n, S), dtype=np.uint8)
         positions = np.arange(S, dtype=np.float64) * 100
         
-        fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
+        fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
         
         # Record GPU memory before
-        mem_before = tmrca_cu.gpu_memory_used()
+        mem_before = gamma_smc_cu.gpu_memory_used()
         
         result = fc.infer_tmrca(pairs=[(0, 1)], max_iterations=1)
         
-        mem_after = tmrca_cu.gpu_memory_used()
+        mem_after = gamma_smc_cu.gpu_memory_used()
         mem_used_gb = (mem_after - mem_before) / 1e9
         
         # Should use less than 20 GB for this problem size
@@ -2659,7 +2659,7 @@ class TestPerformance:
         for S in site_counts:
             G = np.random.randint(0, 2, size=(n, S), dtype=np.uint8)
             positions = np.arange(S, dtype=np.float64) * 100
-            fc = tmrca_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
+            fc = gamma_smc_cu.CoalescenceEstimator(G, positions, mu=1.25e-8, rho=1e-8)
             
             start = time.perf_counter()
             fc.infer_tmrca(pairs=[(0, 1)], max_iterations=1)
@@ -2721,15 +2721,15 @@ pytest benchmarks/ -v
 
 ---
 
-## Appendix C: Plotting (`python/tmrca_cu/plotting.py`)
+## Appendix C: Plotting (`python/gamma_smc_cu/plotting.py`)
 
 Minimal, Nature-style publication figures for coalescence time fields. Design principles: high data-ink ratio, no chartjunk, colorblind-safe, Helvetica/Arial, 300 DPI, thin spines, no top/right axes, lowercase bold panel labels.
 
-This file lives at `python/tmrca_cu/plotting.py` and is the only visualization dependency in the package.
+This file lives at `python/gamma_smc_cu/plotting.py` and is the only visualization dependency in the package.
 
 ```python
 """
-tmrca.cu — Minimal Nature-style plotting.
+gamma_smc_cu — Minimal Nature-style plotting.
 
 Produces publication-ready figures for coalescence time fields.
 Design: clean, minimal, high data-ink ratio. No chartjunk.
@@ -2977,14 +2977,14 @@ def plot_tmrca_landscape(
     return fig
 ```
 
-### C.1 Usage with `tmrca.cu` Output
+### C.1 Usage with `gamma_smc_cu` Output
 
 ```python
-import tmrca_cu
-from tmrca_cu.plotting import plot_tmrca_landscape
+import gamma_smc_cu
+from gamma_smc_cu.plotting import plot_tmrca_landscape
 
 # Run inference
-fc = tmrca_cu.CoalescenceEstimator.from_tree_sequence(ts, gpu_ids=[0])
+fc = gamma_smc_cu.CoalescenceEstimator.from_tree_sequence(ts, gpu_ids=[0])
 result = fc.infer_tmrca(pairs=[(0, 1)], max_iterations=5, subsample_size=50)
 
 # Plot
@@ -3006,7 +3006,7 @@ fig = plot_tmrca_landscape(
 
 ```python
 # Generate demo figure from simulated data (no GPU required):
-python -m tmrca_cu.plotting
+python -m gamma_smc_cu.plotting
 ```
 
 This produces a 4-panel figure:

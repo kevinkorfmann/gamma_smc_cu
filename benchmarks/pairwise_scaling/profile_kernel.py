@@ -3,7 +3,7 @@
 import numpy as np, sys, os, time
 REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
 sys.path.insert(0, os.path.join(REPO, "python"))
-import tmrca_cu
+import gamma_smc_cu
 
 d = np.load(os.path.join(REPO, "analysis/genome_wide/cache/parsed/chr22.npz"),
             allow_pickle=True, mmap_mode="r")
@@ -21,7 +21,7 @@ n = G_pop.shape[0]
 print(f"{n} haps, {G_pop.shape[1]} sites", flush=True)
 
 # Warmup
-tmrca_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
+gamma_smc_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
                           pairs=[(0,1)], mean_only=True, auto_estimate_theta=True)
 
 # Measure at different pair counts to separate kernel scaling from D2H scaling
@@ -38,7 +38,7 @@ for np_ in [10, 50, 100, 500, 1000, 5000, 10000, 30000, 63190]:
         break
     pairs = all_pairs[:np_]
     t0 = time.time()
-    r = tmrca_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
+    r = gamma_smc_cu.infer_blockwise(G_pop, pos, mu=1.25e-8, rho=1e-8, Ne=10000,
                                   pairs=pairs, mean_only=True,
                                   auto_estimate_theta=True,
                                   pair_batch_size=np_)

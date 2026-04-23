@@ -26,7 +26,7 @@ PIXI_ENV=".pixi/envs/default"
 export PATH="$(pwd)/${PIXI_ENV}/bin:${PATH}"
 export CONDA_PREFIX="$(pwd)/${PIXI_ENV}"
 export PYTHONPATH="$(pwd)/python:$(pwd)"
-export LD_LIBRARY_PATH="$(pwd)/python/tmrca_cu:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$(pwd)/python/gamma_smc_cu:${LD_LIBRARY_PATH:-}"
 export CUDA_VISIBLE_DEVICES=0
 
 # --- task dispatch table ---

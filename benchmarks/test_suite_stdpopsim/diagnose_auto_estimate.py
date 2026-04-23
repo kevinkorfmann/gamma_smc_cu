@@ -30,7 +30,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "python"))
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
-from tmrca_cu import _core  # noqa: E402
+from gamma_smc_cu import _core  # noqa: E402
 
 FF = resolve_flow_field_path(HERE)
 GSMC = resolve_gamma_smc_bin(HERE)
@@ -172,7 +172,7 @@ def benchmark(species_id, model_id, pop):
     r_tmrca = np.nanmedian(rows_tmrca)
     print(f"\n  tmrca.cu (our current benchmark) median r_log: {r_tmrca:.4f}")
 
-    results = {"tmrca_cu": r_tmrca}
+    results = {"gamma_smc_cu": r_tmrca}
 
     for mode in ("explicit", "auto_m", "auto_mt"):
         try:
@@ -222,7 +222,7 @@ def main():
         theta_auto = r.get("gsmc_auto_m_theta")
         theta_auto_s = f"{theta_auto:.3e}" if theta_auto else "---"
         print(f"{r['species']:<8} {r['model'][:30]:<30}  "
-              f"{r['tmrca_cu']:>7.4f}  "
+              f"{r['gamma_smc_cu']:>7.4f}  "
               f"{r['gsmc_explicit']:>7.4f} "
               f"{r['gsmc_auto_m']:>7.4f} "
               f"{r['gsmc_auto_mt']:>8.4f}  "

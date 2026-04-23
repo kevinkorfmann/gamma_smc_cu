@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """Run ASMC at one (gene, population) window and append to the existing
-three_method NPZ alongside the cxt + tmrca.cu results.
+three_method NPZ alongside the cxt + gamma_smc_cu results.
 
 ASMC needs three input files in a per-task directory:
   <root>.hap.gz  : haplotype matrix in PLINK .hap format

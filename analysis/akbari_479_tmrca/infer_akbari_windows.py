@@ -2,7 +2,7 @@
 """Per-chromosome, per-population TMRCA at Akbari 2026 lead variants.
 
 Instead of decoding the full chromosome, iterate over lead variants and pass
-tmrca_cu.infer_blockwise() a G-slice [lead - SLICE_HALF_BP, lead + SLICE_HALF_BP]
+gamma_smc_cu.infer_blockwise() a G-slice [lead - SLICE_HALF_BP, lead + SLICE_HALF_BP]
 per variant. The blockwise API's ``flank_sites`` padding handles HMM boundaries,
 so as long as the slice is much wider than the aggregation window (+/- AGG_HALF_BP
 around the lead) the per-pair TMRCA estimates inside the aggregation window match
@@ -102,7 +102,7 @@ def make_pairs(n_haps):
 
 
 def chromosome_scaled_params(G_pop, positions, mu, rho, Ne):
-    """Mimic tmrca_cu.infer._estimate_scaled_params on the FULL chromosome.
+    """Mimic gamma_smc_cu.infer._estimate_scaled_params on the FULL chromosome.
 
     Per-variant slicing cannot call auto_estimate_theta=True inside the kernel,
     because a slice sitting on a sweep has suppressed heterozygosity that would
@@ -125,7 +125,7 @@ def chromosome_scaled_params(G_pop, positions, mu, rho, Ne):
 
 
 def run_chromosome(chr_num, populations):
-    import tmrca_cu
+    import gamma_smc_cu
 
     print(f"=== Chromosome {chr_num} ===", flush=True)
     t_chr = time.time()
@@ -198,7 +198,7 @@ def run_chromosome(chr_num, populations):
                 chunk_pairs = all_pairs[ci * PAIR_CHUNK:(ci + 1) * PAIR_CHUNK]
                 n_chunk_pairs = len(chunk_pairs)
 
-                result = tmrca_cu.infer_blockwise(
+                result = gamma_smc_cu.infer_blockwise(
                     G_slice, pos_slice,
                     mu=eff_mu, rho=eff_rho, Ne=NE,
                     pairs=chunk_pairs,

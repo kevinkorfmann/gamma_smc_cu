@@ -22,10 +22,10 @@ def make_test_data(n=20, length=1_000_000, Ne=10_000, mu=1.25e-8, rho=1e-8, seed
 
 def test_flow_fb_runs():
     """Basic smoke test: flow FB runs without error."""
-    import tmrca_cu
+    import gamma_smc_cu
     G, pos, ts = make_test_data(n=10, length=500_000, seed=1)
     pairs = [(0, 1), (2, 3)]
-    result = tmrca_cu.gamma_smc_flow_fb(G, pos, pairs, Ne=10_000)
+    result = gamma_smc_cu.gamma_smc_flow_fb(G, pos, pairs, Ne=10_000)
     assert 'mean' in result
     assert 'lower' in result
     assert 'upper' in result
@@ -37,10 +37,10 @@ def test_flow_fb_runs():
 
 def test_flow_fb_mean_only():
     """Test mean-only mode."""
-    import tmrca_cu
+    import gamma_smc_cu
     G, pos, ts = make_test_data(n=10, length=500_000, seed=2)
     pairs = [(0, 1)]
-    result = tmrca_cu.gamma_smc_flow_fb(G, pos, pairs, Ne=10_000, mean_only=True)
+    result = gamma_smc_cu.gamma_smc_flow_fb(G, pos, pairs, Ne=10_000, mean_only=True)
     assert 'mean' in result
     assert 'lower' not in result
 
@@ -48,7 +48,7 @@ def test_flow_fb_mean_only():
 def test_flow_fb_vs_true_tmrca():
     """Compare flow FB posteriors to true coalescence times from simulation."""
     import msprime
-    import tmrca_cu
+    import gamma_smc_cu
 
     Ne = 10_000
     mu = 1.25e-8
@@ -72,7 +72,7 @@ def test_flow_fb_vs_true_tmrca():
             true_tmrca[s_idx, p_idx] = tree.tmrca(i, j)
 
     # GPU flow FB
-    result = tmrca_cu.gamma_smc_flow_fb(
+    result = gamma_smc_cu.gamma_smc_flow_fb(
         G, pos, pairs, Ne=Ne, mu=mu, rho=rho, mean_only=True)
     gpu_mean = result['mean']
 
@@ -89,7 +89,7 @@ def test_flow_fb_vs_true_tmrca():
 def test_flow_fb_vs_moment_match():
     """Flow FB should outperform moment-matching forward-only."""
     import msprime
-    import tmrca_cu
+    import gamma_smc_cu
 
     Ne = 10_000
     mu = 1.25e-8
@@ -112,11 +112,11 @@ def test_flow_fb_vs_moment_match():
             true_tmrca[s_idx, p_idx] = tree.tmrca(i, j)
 
     # Flow FB
-    flow_result = tmrca_cu.gamma_smc_flow_fb(
+    flow_result = gamma_smc_cu.gamma_smc_flow_fb(
         G, pos, pairs, Ne=Ne, mu=mu, rho=rho, mean_only=True)
 
     # Moment-matching forward only
-    mm_result = tmrca_cu.gamma_smc_forward(
+    mm_result = gamma_smc_cu.gamma_smc_forward(
         G, pos, pairs, Ne=Ne, mu=mu, rho=rho, mean_only=True)
 
     flow_rs = []

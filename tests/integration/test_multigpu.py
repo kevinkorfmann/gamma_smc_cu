@@ -12,8 +12,8 @@ Skips automatically if fewer than 2 GPUs are available.
 import numpy as np
 import pytest
 
-import tmrca_cu._core as _core
-from tmrca_cu.multigpu import MultiGPUFlowContext
+import gamma_smc_cu._core as _core
+from gamma_smc_cu.multigpu import MultiGPUFlowContext
 
 FLOW_FIELD_PATH = "/sietch_colab/kkor/gamma_smc/resources/default_flow_field.txt"
 

@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-import tmrca_cu
+import gamma_smc_cu
 
 
 class TestHMMNumericalStability:
@@ -26,7 +26,7 @@ class TestHMMNumericalStability:
         G[0, -1] = 1  # single mutation at end
         positions = np.linspace(0, 10_000_000, S)
 
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=1.25e-8, rho=1e-8
         ))
@@ -47,7 +47,7 @@ class TestHMMNumericalStability:
         G[0, :] = 1  # haplotype 0 differs from all others at every site
         positions = np.arange(S, dtype=np.float64)
 
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=1.25e-8, rho=1e-8
         ))
@@ -56,7 +56,7 @@ class TestHMMNumericalStability:
 
         # Posterior mean TMRCA should be large: past the midpoint of
         # the time grid.
-        prior = np.array(tmrca_cu.coalescent_prior(Ne=10000.0, K=32))
+        prior = np.array(gamma_smc_cu.coalescent_prior(Ne=10000.0, K=32))
         K = 32
         # The posterior-weighted average time bin index should be
         # larger than what the prior alone would give.
@@ -74,7 +74,7 @@ class TestHMMNumericalStability:
         G = rng.randint(0, 2, size=(n, S)).astype(np.uint8)
         positions = np.arange(S, dtype=np.float64) * 100
 
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=100.0,
             mu=1.25e-8, rho=1e-8
         ))
@@ -89,7 +89,7 @@ class TestHMMNumericalStability:
         G = rng.randint(0, 2, size=(n, S)).astype(np.uint8)
         positions = np.arange(S, dtype=np.float64) * 100
 
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10_000_000.0,
             mu=1.25e-8, rho=1e-8
         ))
@@ -110,12 +110,12 @@ class TestHMMNumericalStability:
         G[1, :] = G[0, :]  # identical
         positions = np.arange(S, dtype=np.float64) * 100
 
-        gamma = np.array(tmrca_cu.hmm_posterior(
+        gamma = np.array(gamma_smc_cu.hmm_posterior(
             G, positions, (0, 1), K=32, Ne=10000.0,
             mu=1.25e-8, rho=1e-8
         ))
-        t_mid = np.array(tmrca_cu.time_midpoints(K=32, Ne=10000.0))
-        prior = np.array(tmrca_cu.coalescent_prior(Ne=10000.0, K=32))
+        t_mid = np.array(gamma_smc_cu.time_midpoints(K=32, Ne=10000.0))
+        prior = np.array(gamma_smc_cu.coalescent_prior(Ne=10000.0, K=32))
 
         assert np.all(np.isfinite(gamma)), \
             "NaN/Inf in posterior for identical haplotypes"

@@ -34,7 +34,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "python"))
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
-from tmrca_cu import _core  # noqa: E402
+from gamma_smc_cu import _core  # noqa: E402
 
 FF = resolve_flow_field_path(HERE)
 GSMC = resolve_gamma_smc_bin(HERE)

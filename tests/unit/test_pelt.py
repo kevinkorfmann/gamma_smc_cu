@@ -321,13 +321,13 @@ class TestNumpyPELT:
 # ---------------------------------------------------------------------------
 
 try:
-    import tmrca_cu
+    import gamma_smc_cu
     HAS_CUDA = True
 except ImportError:
     HAS_CUDA = False
 
 
-@pytest.mark.skipif(not HAS_CUDA, reason="tmrca_cu CUDA module not available")
+@pytest.mark.skipif(not HAS_CUDA, reason="gamma_smc_cu CUDA module not available")
 class TestPELTGPU:
     """Tests that compare GPU PELT output against the numpy reference."""
 
@@ -350,7 +350,7 @@ class TestPELTGPU:
             prefix[i] = prefix[i - 1] + int(xor[i])
 
         # GPU
-        result = tmrca_cu.pelt_changepoint(
+        result = gamma_smc_cu.pelt_changepoint(
             prefix.reshape(1, S), positions, 1, mu, penalty
         )
         n_seg_gpu = result['n_segments'][0]
@@ -384,7 +384,7 @@ class TestPELTGPU:
         for i in range(1, S):
             prefix[i] = prefix[i - 1] + int(xor[i])
 
-        result = tmrca_cu.pelt_changepoint(
+        result = gamma_smc_cu.pelt_changepoint(
             prefix.reshape(1, S), positions, 1, mu, penalty
         )
         n_seg = result['n_segments'][0]

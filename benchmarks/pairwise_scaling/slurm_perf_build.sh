@@ -28,6 +28,6 @@ rm -rf build
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=80 \
     -DCMAKE_CUDA_HOST_COMPILER="$CUDAHOSTCXX" 2>&1 | tail -10
 cmake --build build -j8 2>&1 | tail -10
-cp build/_core*.so python/tmrca_cu/
-cp build/libtmrcacu_kernels.so python/tmrca_cu/
+cp build/_core*.so python/gamma_smc_cu/
+cp build/libgamma_smc_cu_kernels.so python/gamma_smc_cu/
 echo "=== Build done ==="

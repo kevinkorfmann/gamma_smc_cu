@@ -37,8 +37,8 @@ sys.path.insert(0, PY_MOD)
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
 # Imported after sys.path edit so the local tmrca.cu build is found.
-from tmrca_cu import _core  # noqa: E402
-from tmrca_cu.infer import _estimate_scaled_params  # noqa: E402
+from gamma_smc_cu import _core  # noqa: E402
+from gamma_smc_cu.infer import _estimate_scaled_params  # noqa: E402
 
 
 # --- helpers (copied from benchmarks/bench_demographics.py) --------------
@@ -116,7 +116,7 @@ def run_schweiger(vcf_path, nh, mu_d, rho_d, ne_d):
     Schweiger and Durbin 2023), and with ``-t (rho/mu)`` so the scaled
     recombination rate is derived from the same data-driven base via
     the user-supplied ratio. This is the same parameterization that
-    ``tmrca_cu.infer(auto_estimate_theta=True)`` uses, so the two
+    ``gamma_smc_cu.infer(auto_estimate_theta=True)`` uses, so the two
     methods compete on equal footing.
 
     wall_compute = just the gamma_smc subprocess itself (no VCF/bgzip/zstd).
@@ -235,7 +235,7 @@ def run(cfg):
         # Replace (mu, rho) with the data-driven auto-estimate that matches
         # gamma_smc's auto_mt mode -- the scaled mutation rate becomes the
         # observed pairwise heterozygosity and the scaled recombination rate
-        # becomes pi_hat * (rho/mu). See tmrca_cu.infer._estimate_scaled_params.
+        # becomes pi_hat * (rho/mu). See gamma_smc_cu.infer._estimate_scaled_params.
         # Ne is still used to invert the kernel's internal per-bp scaling.
         kernel_mu, kernel_rho = _estimate_scaled_params(G, pos, mu, rho, ne)
         print(
@@ -258,9 +258,9 @@ def run(cfg):
             tmrca_times.append(dt)
             if rep == 0:
                 tmrca_mean = out
-        t_tmrca_cu_compute = float(min(tmrca_times))
-        t_tmrca_cu_total = t_tmrca_cu_compute  # no I/O wrapping
-        print(f"  tmrca.cu: {t_tmrca_cu_compute:.3f}s (min of {len(tmrca_times)})", flush=True)
+        t_gamma_smc_cu_compute = float(min(tmrca_times))
+        t_gamma_smc_cu_total = t_gamma_smc_cu_compute  # no I/O wrapping
+        print(f"  tmrca.cu: {t_gamma_smc_cu_compute:.3f}s (min of {len(tmrca_times)})", flush=True)
 
         # ------ gamma_smc ----------------------------------------------------
         print("  gamma_smc: running ...", flush=True)
@@ -310,8 +310,8 @@ def run(cfg):
     e_t = _qstats(rmse_tmrca)
     e_g = _qstats(rmse_gsmc)
 
-    speedup_total = (t_gsmc_total / t_tmrca_cu_total) if t_tmrca_cu_total > 0 else None
-    speedup_compute = (t_gsmc_compute / t_tmrca_cu_compute) if t_tmrca_cu_compute > 0 else None
+    speedup_total = (t_gsmc_total / t_gamma_smc_cu_total) if t_gamma_smc_cu_total > 0 else None
+    speedup_compute = (t_gsmc_compute / t_gamma_smc_cu_compute) if t_gamma_smc_cu_compute > 0 else None
 
     result = {
         "config_idx": cfg["config_idx"],
@@ -326,19 +326,19 @@ def run(cfg):
         "rho": rho,
         "rho_source": cfg.get("rho_source", "model"),
         "t_sim": round(t_sim, 3),
-        "t_tmrca_cu_total": round(t_tmrca_cu_total, 4),
-        "t_tmrca_cu_compute": round(t_tmrca_cu_compute, 4),
+        "t_gamma_smc_cu_total": round(t_gamma_smc_cu_total, 4),
+        "t_gamma_smc_cu_compute": round(t_gamma_smc_cu_compute, 4),
         "t_gsmc_total": round(t_gsmc_total, 4),
         "t_gsmc_compute": round(t_gsmc_compute, 4),
         "speedup_total": round(speedup_total, 2) if speedup_total else None,
         "speedup_compute": round(speedup_compute, 2) if speedup_compute else None,
-        "r_tmrca_cu_median": r_t["median"],
-        "r_tmrca_cu_q25": r_t["q25"],
-        "r_tmrca_cu_q75": r_t["q75"],
+        "r_gamma_smc_cu_median": r_t["median"],
+        "r_gamma_smc_cu_q25": r_t["q25"],
+        "r_gamma_smc_cu_q75": r_t["q75"],
         "r_gsmc_median": r_g["median"],
         "r_gsmc_q25": r_g["q25"],
         "r_gsmc_q75": r_g["q75"],
-        "rmse_tmrca_cu_median": e_t["median"],
+        "rmse_gamma_smc_cu_median": e_t["median"],
         "rmse_gsmc_median": e_g["median"],
         "n_pairs_evaluated_tmrca": r_t["n"],
         "n_pairs_evaluated_gsmc": r_g["n"],
@@ -397,7 +397,7 @@ def main():
         json.dump(result, f, indent=2)
     print(f"wrote {out_path}")
     print(
-        f"  r_tmrca_cu={result['r_tmrca_cu_median']:.3f} "
+        f"  r_gamma_smc_cu={result['r_gamma_smc_cu_median']:.3f} "
         f"r_gsmc={result['r_gsmc_median']:.3f} "
         f"speedup_total={result['speedup_total']}x"
     )

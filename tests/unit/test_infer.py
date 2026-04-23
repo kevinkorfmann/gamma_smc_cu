@@ -1,11 +1,11 @@
-"""Unit tests for tmrca_cu.infer() top-level API."""
+"""Unit tests for gamma_smc_cu.infer() top-level API."""
 
 import numpy as np
 import pytest
 import msprime
 
-import tmrca_cu
-from tmrca_cu.infer import _estimate_scaled_params
+import gamma_smc_cu
+from gamma_smc_cu.infer import _estimate_scaled_params
 
 
 @pytest.fixture(scope="module")
@@ -25,12 +25,12 @@ def genotype_data(ts):
 
 class TestInferTreeSequence:
     def test_returns_dict(self, ts):
-        result = tmrca_cu.infer(ts)
+        result = gamma_smc_cu.infer(ts)
         assert isinstance(result, dict)
         assert "mean" in result
 
     def test_shape_all_pairs(self, ts):
-        result = tmrca_cu.infer(ts)
+        result = gamma_smc_cu.infer(ts)
         n = ts.num_samples
         S = ts.num_sites
         n_pairs = n * (n - 1) // 2
@@ -38,24 +38,24 @@ class TestInferTreeSequence:
 
     def test_shape_specific_pairs(self, ts):
         pairs = [(0, 1), (2, 3)]
-        result = tmrca_cu.infer(ts, pairs=pairs)
+        result = gamma_smc_cu.infer(ts, pairs=pairs)
         assert result["mean"].shape[1] == 2
 
     def test_returns_pairs(self, ts):
         pairs = [(0, 1), (5, 3)]
-        result = tmrca_cu.infer(ts, pairs=pairs)
+        result = gamma_smc_cu.infer(ts, pairs=pairs)
         assert result["pairs"] == pairs
 
     def test_returns_positions(self, ts):
-        result = tmrca_cu.infer(ts, pairs=[(0, 1)])
+        result = gamma_smc_cu.infer(ts, pairs=[(0, 1)])
         assert len(result["positions"]) == ts.num_sites
 
     def test_values_positive(self, ts):
-        result = tmrca_cu.infer(ts, pairs=[(0, 1)])
+        result = gamma_smc_cu.infer(ts, pairs=[(0, 1)])
         assert np.all(result["mean"] > 0)
 
     def test_with_ci(self, ts):
-        result = tmrca_cu.infer(ts, pairs=[(0, 1)], mean_only=False)
+        result = gamma_smc_cu.infer(ts, pairs=[(0, 1)], mean_only=False)
         assert "lower" in result
         assert "upper" in result
         assert np.all(result["lower"] <= result["mean"])
@@ -65,7 +65,7 @@ class TestInferTreeSequence:
 class TestInferGenotypeMatrix:
     def test_returns_dict(self, genotype_data):
         G, pos = genotype_data
-        result = tmrca_cu.infer(G, pos)
+        result = gamma_smc_cu.infer(G, pos)
         assert isinstance(result, dict)
         assert "mean" in result
 
@@ -74,17 +74,17 @@ class TestInferGenotypeMatrix:
         n = G.shape[0]
         S = G.shape[1]
         n_pairs = n * (n - 1) // 2
-        result = tmrca_cu.infer(G, pos)
+        result = gamma_smc_cu.infer(G, pos)
         assert result["mean"].shape == (S, n_pairs)
 
     def test_specific_pairs(self, genotype_data):
         G, pos = genotype_data
-        result = tmrca_cu.infer(G, pos, pairs=[(0, 1)])
+        result = gamma_smc_cu.infer(G, pos, pairs=[(0, 1)])
         assert result["mean"].shape[1] == 1
 
     def test_custom_params(self, genotype_data):
         G, pos = genotype_data
-        result = tmrca_cu.infer(G, pos, mu=1e-8, rho=1e-8, Ne=5000,
+        result = gamma_smc_cu.infer(G, pos, mu=1e-8, rho=1e-8, Ne=5000,
                                  pairs=[(0, 1)])
         assert result["mean"].shape[1] == 1
         assert np.all(result["mean"] > 0)
@@ -92,7 +92,7 @@ class TestInferGenotypeMatrix:
     def test_rejects_mismatched_positions(self, genotype_data):
         G, pos = genotype_data
         with pytest.raises(ValueError, match="positions length"):
-            tmrca_cu.infer(G, pos[:-1], pairs=[(0, 1)])
+            gamma_smc_cu.infer(G, pos[:-1], pairs=[(0, 1)])
 
 
 class TestAutoEstimateTheta:
@@ -145,7 +145,7 @@ class TestAutoEstimateTheta:
 
 
 class TestInferSegregatingFilter:
-    """tmrca_cu.infer() must drop monomorphic-in-subset sites before decoding,
+    """gamma_smc_cu.infer() must drop monomorphic-in-subset sites before decoding,
     matching the original gamma_smc reference implementation (Schweiger &
     Durbin, 2023). Without the filter, the HMM kernel applies extra
     moment-match transition steps at non-informative sites, which is
@@ -169,7 +169,7 @@ class TestInferSegregatingFilter:
         G_padded, pos_padded = self._pad_with_monomorphic(G, pos)
         assert G_padded.shape[1] == G.shape[1] + 2
 
-        result = tmrca_cu.infer(G_padded, pos_padded, pairs=[(0, 1)])
+        result = gamma_smc_cu.infer(G_padded, pos_padded, pairs=[(0, 1)])
 
         # Filtered result must not contain the two synthetic monomorphic sites.
         assert result["mean"].shape[0] == G.shape[1]
@@ -183,8 +183,8 @@ class TestInferSegregatingFilter:
         G_padded, pos_padded = self._pad_with_monomorphic(G, pos)
         pairs = [(0, 1), (2, 3)]
 
-        r_orig = tmrca_cu.infer(G, pos, pairs=pairs)
-        r_padded = tmrca_cu.infer(G_padded, pos_padded, pairs=pairs)
+        r_orig = gamma_smc_cu.infer(G, pos, pairs=pairs)
+        r_padded = gamma_smc_cu.infer(G_padded, pos_padded, pairs=pairs)
 
         np.testing.assert_array_equal(r_orig["mean"], r_padded["mean"])
         np.testing.assert_array_equal(r_orig["positions"], r_padded["positions"])
@@ -192,7 +192,7 @@ class TestInferSegregatingFilter:
     def test_segregating_input_is_noop(self, ts):
         """Simulated tree sequences only carry segregating sites, so the
         filter must be invisible — same shape as before the patch."""
-        result = tmrca_cu.infer(ts, pairs=[(0, 1)])
+        result = gamma_smc_cu.infer(ts, pairs=[(0, 1)])
         assert result["mean"].shape[0] == ts.num_sites
         assert len(result["positions"]) == ts.num_sites
 
@@ -201,11 +201,11 @@ class TestInferSegregatingFilter:
         G_padded, pos_padded = self._pad_with_monomorphic(G, pos)
         pairs = [(0, 1), (2, 3)]
 
-        r_orig = tmrca_cu.infer_blockwise(
+        r_orig = gamma_smc_cu.infer_blockwise(
             G, pos, pairs=pairs,
             core_block_sites=G.shape[1], flank_sites=0,
         )
-        r_padded = tmrca_cu.infer_blockwise(
+        r_padded = gamma_smc_cu.infer_blockwise(
             G_padded, pos_padded, pairs=pairs,
             core_block_sites=G.shape[1], flank_sites=0,
         )
@@ -217,14 +217,14 @@ class TestInferConsistency:
     def test_ts_and_matrix_agree(self, ts, genotype_data):
         G, pos = genotype_data
         pairs = [(0, 1), (2, 3), (4, 5)]
-        r_ts = tmrca_cu.infer(ts, pairs=pairs)
-        r_mat = tmrca_cu.infer(G, pos, pairs=pairs)
+        r_ts = gamma_smc_cu.infer(ts, pairs=pairs)
+        r_mat = gamma_smc_cu.infer(G, pos, pairs=pairs)
         np.testing.assert_allclose(r_ts["mean"], r_mat["mean"],
                                     rtol=1e-5, atol=1e-6)
 
     def test_correlates_with_truth(self, ts):
         pair = (0, 1)
-        result = tmrca_cu.infer(ts, pairs=[pair])
+        result = gamma_smc_cu.infer(ts, pairs=[pair])
         est = result["mean"][:, 0]
         pos = result["positions"]
 
@@ -243,20 +243,20 @@ class TestInferConsistency:
 
 class TestInferEdgeCases:
     def test_single_pair(self, ts):
-        result = tmrca_cu.infer(ts, pairs=[(0, 1)])
+        result = gamma_smc_cu.infer(ts, pairs=[(0, 1)])
         assert result["mean"].shape[1] == 1
 
     def test_empty_pairs(self, ts):
-        result = tmrca_cu.infer(ts, pairs=[])
+        result = gamma_smc_cu.infer(ts, pairs=[])
         assert result["mean"].shape[1] == 0
 
 
 class TestInferModes:
-    """All three output modes for tmrca_cu.infer()."""
+    """All three output modes for gamma_smc_cu.infer()."""
 
     def test_mean_only(self, ts):
         pairs = [(0, 1), (2, 3)]
-        result = tmrca_cu.infer(ts, pairs=pairs, mean_only=True)
+        result = gamma_smc_cu.infer(ts, pairs=pairs, mean_only=True)
         assert set(result.keys()) >= {"mean", "pairs", "positions"}
         assert "lower" not in result
         assert "upper" not in result
@@ -268,7 +268,7 @@ class TestInferModes:
 
     def test_with_ci(self, ts):
         pairs = [(0, 1), (2, 3)]
-        result = tmrca_cu.infer(ts, pairs=pairs, mean_only=False)
+        result = gamma_smc_cu.infer(ts, pairs=pairs, mean_only=False)
         assert {"mean", "lower", "upper"} <= set(result.keys())
         assert "posterior_alpha" not in result
         for key in ("lower", "mean", "upper"):
@@ -279,7 +279,7 @@ class TestInferModes:
 
     def test_with_posterior_mean_only(self, ts):
         pairs = [(0, 1), (2, 3)]
-        result = tmrca_cu.infer(
+        result = gamma_smc_cu.infer(
             ts, pairs=pairs, mean_only=True, return_posterior=True
         )
         assert {"mean", "posterior_alpha", "posterior_beta"} <= set(result.keys())
@@ -297,7 +297,7 @@ class TestInferModes:
 
     def test_with_posterior_and_ci(self, ts):
         pairs = [(0, 1), (2, 3)]
-        result = tmrca_cu.infer(
+        result = gamma_smc_cu.infer(
             ts, pairs=pairs, mean_only=False, return_posterior=True
         )
         expected = {"mean", "lower", "upper", "posterior_alpha", "posterior_beta"}
@@ -312,8 +312,8 @@ class TestInferModes:
 
     def test_posterior_does_not_change_mean(self, ts):
         pairs = [(0, 1), (2, 3)]
-        baseline = tmrca_cu.infer(ts, pairs=pairs, mean_only=True)
-        with_post = tmrca_cu.infer(
+        baseline = gamma_smc_cu.infer(ts, pairs=pairs, mean_only=True)
+        with_post = gamma_smc_cu.infer(
             ts, pairs=pairs, mean_only=True, return_posterior=True
         )
         np.testing.assert_array_equal(baseline["mean"], with_post["mean"])
@@ -323,7 +323,7 @@ class TestInferBlockwise:
     def test_requires_explicit_pairs(self, genotype_data):
         G, pos = genotype_data
         with pytest.raises(ValueError, match="explicit pairs"):
-            tmrca_cu.infer_blockwise(
+            gamma_smc_cu.infer_blockwise(
                 G,
                 pos,
                 flow_field_path="dummy-flow-field.txt",
@@ -332,7 +332,7 @@ class TestInferBlockwise:
     def test_rejects_invalid_pair_batch_size(self, genotype_data):
         G, pos = genotype_data
         with pytest.raises(ValueError, match="pair_batch_size"):
-            tmrca_cu.infer_blockwise(
+            gamma_smc_cu.infer_blockwise(
                 G,
                 pos,
                 pairs=[(0, 1)],
@@ -343,7 +343,7 @@ class TestInferBlockwise:
     def test_rejects_invalid_max_streams(self, genotype_data):
         G, pos = genotype_data
         with pytest.raises(ValueError, match="max_streams"):
-            tmrca_cu.infer_blockwise(
+            gamma_smc_cu.infer_blockwise(
                 G,
                 pos,
                 pairs=[(0, 1)],
@@ -392,9 +392,9 @@ class TestInferBlockwise:
                     "blocks": np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32),
                 }
 
-        monkeypatch.setattr(tmrca_cu._core, "FlowContext", FakeFlowContext)
+        monkeypatch.setattr(gamma_smc_cu._core, "FlowContext", FakeFlowContext)
 
-        result = tmrca_cu.infer_blockwise(
+        result = gamma_smc_cu.infer_blockwise(
             G,
             pos,
             pairs=pairs,
@@ -425,8 +425,8 @@ class TestInferBlockwise:
         G, pos = genotype_data
         pairs = [(0, 1), (2, 3)]
 
-        full = tmrca_cu.infer(G, pos, pairs=pairs)
-        blockwise = tmrca_cu.infer_blockwise(
+        full = gamma_smc_cu.infer(G, pos, pairs=pairs)
+        blockwise = gamma_smc_cu.infer_blockwise(
             G,
             pos,
             pairs=pairs,
@@ -444,7 +444,7 @@ class TestInferBlockwise:
     def test_rejects_zero_flank_with_multi_block(self, genotype_data):
         G, pos = genotype_data
         with pytest.raises(ValueError, match="flank_sites=0"):
-            tmrca_cu.infer_blockwise(
+            gamma_smc_cu.infer_blockwise(
                 G,
                 pos,
                 pairs=[(0, 1)],
@@ -456,7 +456,7 @@ class TestInferBlockwise:
     def test_rejects_non_int_core_block_sites(self, genotype_data):
         G, pos = genotype_data
         with pytest.raises(TypeError, match="core_block_sites"):
-            tmrca_cu.infer_blockwise(
+            gamma_smc_cu.infer_blockwise(
                 G,
                 pos,
                 pairs=[(0, 1)],
@@ -471,7 +471,7 @@ class TestInferBlockwise:
 
         # Pretend there's plenty of GPU memory.
         monkeypatch.setattr(
-            tmrca_cu._core, "cuda_mem_info", lambda: (32 * 10**9, 40 * 10**9)
+            gamma_smc_cu._core, "cuda_mem_info", lambda: (32 * 10**9, 40 * 10**9)
         )
 
         class FakeFlowContext:
@@ -485,9 +485,9 @@ class TestInferBlockwise:
                     "blocks": np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32),
                 }
 
-        monkeypatch.setattr(tmrca_cu._core, "FlowContext", FakeFlowContext)
+        monkeypatch.setattr(gamma_smc_cu._core, "FlowContext", FakeFlowContext)
 
-        tmrca_cu.infer_blockwise(
+        gamma_smc_cu.infer_blockwise(
             G,
             pos,
             pairs=pairs,
@@ -506,7 +506,7 @@ class TestInferBlockwise:
 
         # Pretend almost no GPU memory.
         monkeypatch.setattr(
-            tmrca_cu._core, "cuda_mem_info", lambda: (1024, 1024)
+            gamma_smc_cu._core, "cuda_mem_info", lambda: (1024, 1024)
         )
 
         class FakeFlowContext:
@@ -519,10 +519,10 @@ class TestInferBlockwise:
                     "blocks": np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32),
                 }
 
-        monkeypatch.setattr(tmrca_cu._core, "FlowContext", FakeFlowContext)
+        monkeypatch.setattr(gamma_smc_cu._core, "FlowContext", FakeFlowContext)
 
         with pytest.warns(UserWarning, match="GPU memory"):
-            tmrca_cu.infer_blockwise(
+            gamma_smc_cu.infer_blockwise(
                 G,
                 pos,
                 pairs=pairs,
@@ -537,7 +537,7 @@ class TestInferBlockwise:
         captured = {}
 
         monkeypatch.setattr(
-            tmrca_cu._core, "cuda_mem_info", lambda: (32 * 10**9, 40 * 10**9)
+            gamma_smc_cu._core, "cuda_mem_info", lambda: (32 * 10**9, 40 * 10**9)
         )
 
         class FakeFlowContext:
@@ -551,9 +551,9 @@ class TestInferBlockwise:
                     "blocks": np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32),
                 }
 
-        monkeypatch.setattr(tmrca_cu._core, "FlowContext", FakeFlowContext)
+        monkeypatch.setattr(gamma_smc_cu._core, "FlowContext", FakeFlowContext)
 
-        tmrca_cu.infer_blockwise(
+        gamma_smc_cu.infer_blockwise(
             G,
             pos,
             pairs=pairs,
@@ -569,7 +569,7 @@ class TestInferBlockwise:
         def boom():
             raise RuntimeError("no cuda")
 
-        monkeypatch.setattr(tmrca_cu._core, "cuda_mem_info", boom)
+        monkeypatch.setattr(gamma_smc_cu._core, "cuda_mem_info", boom)
 
         class FakeFlowContext:
             def __init__(self, *_args, **_kwargs):
@@ -581,10 +581,10 @@ class TestInferBlockwise:
                     "blocks": np.array([[0, len(pos), 0, len(pos)]], dtype=np.int32),
                 }
 
-        monkeypatch.setattr(tmrca_cu._core, "FlowContext", FakeFlowContext)
+        monkeypatch.setattr(gamma_smc_cu._core, "FlowContext", FakeFlowContext)
 
         with pytest.warns(UserWarning, match="could not query GPU"):
-            tmrca_cu.infer_blockwise(
+            gamma_smc_cu.infer_blockwise(
                 G,
                 pos,
                 pairs=pairs,
@@ -595,7 +595,7 @@ class TestInferBlockwise:
     def test_blockwise_mean_only(self, genotype_data):
         G, pos = genotype_data
         pairs = [(0, 1), (2, 3)]
-        result = tmrca_cu.infer_blockwise(
+        result = gamma_smc_cu.infer_blockwise(
             G, pos, pairs=pairs,
             core_block_sites=G.shape[1], flank_sites=0,
         )
@@ -607,7 +607,7 @@ class TestInferBlockwise:
     def test_blockwise_with_ci(self, genotype_data):
         G, pos = genotype_data
         pairs = [(0, 1), (2, 3)]
-        result = tmrca_cu.infer_blockwise(
+        result = gamma_smc_cu.infer_blockwise(
             G, pos, pairs=pairs,
             core_block_sites=G.shape[1], flank_sites=0,
             mean_only=False,
@@ -621,7 +621,7 @@ class TestInferBlockwise:
     def test_blockwise_with_posterior_mean_only(self, genotype_data):
         G, pos = genotype_data
         pairs = [(0, 1), (2, 3)]
-        result = tmrca_cu.infer_blockwise(
+        result = gamma_smc_cu.infer_blockwise(
             G, pos, pairs=pairs,
             core_block_sites=G.shape[1], flank_sites=0,
             return_posterior=True,
@@ -636,7 +636,7 @@ class TestInferBlockwise:
     def test_blockwise_with_posterior_and_ci(self, genotype_data):
         G, pos = genotype_data
         pairs = [(0, 1), (2, 3)]
-        result = tmrca_cu.infer_blockwise(
+        result = gamma_smc_cu.infer_blockwise(
             G, pos, pairs=pairs,
             core_block_sites=G.shape[1], flank_sites=0,
             mean_only=False,
@@ -652,8 +652,8 @@ class TestInferBlockwise:
         """Reconstructing posterior_mean from (alpha, beta) must match infer()'s mean."""
         G, pos = genotype_data
         pairs = [(0, 1), (2, 3)]
-        full = tmrca_cu.infer(G, pos, pairs=pairs)
-        blk = tmrca_cu.infer_blockwise(
+        full = gamma_smc_cu.infer(G, pos, pairs=pairs)
+        blk = gamma_smc_cu.infer_blockwise(
             G, pos, pairs=pairs,
             core_block_sites=G.shape[1], flank_sites=0,
             return_posterior=True,
@@ -666,7 +666,7 @@ class TestInferBlockwise:
     def test_blockwise_posterior_rejects_multi_stream(self, genotype_data):
         G, pos = genotype_data
         with pytest.raises(ValueError, match="return_posterior"):
-            tmrca_cu.infer_blockwise(
+            gamma_smc_cu.infer_blockwise(
                 G, pos, pairs=[(0, 1)],
                 flow_field_path="dummy-flow-field.txt",
                 core_block_sites=G.shape[1], flank_sites=0,
@@ -678,7 +678,7 @@ class TestInferBlockwise:
         G, pos = genotype_data
         pairs = [(0, 1), (2, 3), (4, 5)]
 
-        single_stream = tmrca_cu.infer_blockwise(
+        single_stream = gamma_smc_cu.infer_blockwise(
             G,
             pos,
             pairs=pairs,
@@ -687,7 +687,7 @@ class TestInferBlockwise:
             pair_batch_size=2,
             max_streams=1,
         )
-        streamed = tmrca_cu.infer_blockwise(
+        streamed = gamma_smc_cu.infer_blockwise(
             G,
             pos,
             pairs=pairs,

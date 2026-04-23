@@ -6,7 +6,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 import msprime
-import tmrca_cu
+import gamma_smc_cu
 
 
 def extract_true_tmrca_at_sites(ts, pair, positions):
@@ -79,7 +79,7 @@ class TestAccuracyMsprime:
             true_tmrca = extract_true_tmrca_at_sites(ts, pair, positions)
 
             # Run HMM posterior
-            gamma = np.array(tmrca_cu.hmm_posterior(
+            gamma = np.array(gamma_smc_cu.hmm_posterior(
                 G, positions, pair, K=32, Ne=10000.0,
                 mu=1.25e-8, rho=1e-8
             ))
@@ -121,7 +121,7 @@ class TestAccuracyMsprime:
             true_tmrca = extract_true_tmrca_at_sites(ts, pair, positions)
             true_means.append(np.mean(true_tmrca))
 
-            gamma = np.array(tmrca_cu.hmm_posterior(
+            gamma = np.array(gamma_smc_cu.hmm_posterior(
                 G, positions, pair, K=K, Ne=Ne,
                 mu=1.25e-8, rho=1e-8
             ))
@@ -144,7 +144,7 @@ class TestAccuracyMsprime:
         _, G, positions = msprime_data
 
         for pair in [(0, 1), (5, 15)]:
-            gamma = np.array(tmrca_cu.hmm_posterior(
+            gamma = np.array(gamma_smc_cu.hmm_posterior(
                 G, positions, pair, K=32, Ne=10000.0,
                 mu=1.25e-8, rho=1e-8
             ))

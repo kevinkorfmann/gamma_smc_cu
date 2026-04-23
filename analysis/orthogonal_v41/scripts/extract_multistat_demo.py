@@ -86,12 +86,12 @@ for gene, chr_num, focal_pop, group in GENES:
     ctrl_npz = os.path.join(TM_DIR, f"{gene}_YRI_control.npz")
     if os.path.exists(focal_npz):
         fd = np.load(focal_npz, allow_pickle=True)
-        for k in ["tmrca_cu_mean", "tmrca_cu_positions"]:
+        for k in ["gamma_smc_cu_mean", "gamma_smc_cu_positions"]:
             if k in fd.files:
                 out[f"{prefix}_focal_{k}"] = fd[k]
     if os.path.exists(ctrl_npz):
         cd = np.load(ctrl_npz, allow_pickle=True)
-        for k in ["tmrca_cu_mean", "tmrca_cu_positions"]:
+        for k in ["gamma_smc_cu_mean", "gamma_smc_cu_positions"]:
             if k in cd.files:
                 out[f"{prefix}_ctrl_{k}"] = cd[k]
 

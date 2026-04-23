@@ -3,8 +3,8 @@ Diagnose why `tmrca.cu`'s cached forward-backward is worse than the original
 `gamma_smc` binary on species with small mu/rho (CanFam, BosTau).
 
 Runs on the SAME simulated data for each config:
-  1. `tmrca_cu._core.gamma_smc_flow_cached_fb` -- the cached FB used in the paper
-  2. `tmrca_cu._core.gamma_smc_flow_fb`        -- the iterative (non-cached) FB
+  1. `gamma_smc_cu._core.gamma_smc_flow_cached_fb` -- the cached FB used in the paper
+  2. `gamma_smc_cu._core.gamma_smc_flow_fb`        -- the iterative (non-cached) FB
   3. the gamma_smc binary
 
 Computes Pearson r_log vs msprime truth for each method, printed per pair.
@@ -30,7 +30,7 @@ REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 sys.path.insert(0, os.path.join(REPO, "python"))
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
 
-from tmrca_cu import _core  # noqa: E402
+from gamma_smc_cu import _core  # noqa: E402
 
 FF = resolve_flow_field_path(HERE)
 GSMC = resolve_gamma_smc_bin(HERE)

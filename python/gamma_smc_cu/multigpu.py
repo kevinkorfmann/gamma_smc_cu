@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 import sys, os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from tmrca_cu import _core
+from gamma_smc_cu import _core
 
 
 class MultiGPUFlowContext:

@@ -1,10 +1,10 @@
-# tmrca.cu — Usage Guide
+# gamma_smc_cu — Usage Guide
 
 ## Quick start
 
 ```python
 import numpy as np
-from tmrca_cu import FlowContext
+from gamma_smc_cu import FlowContext
 
 # G: haploid genotype matrix (n_haplotypes × n_sites), dtype uint8
 # positions: physical positions in bp, dtype float64
@@ -77,7 +77,7 @@ If you need a custom flow field (e.g., different grid resolution or for
 methodological research), the `demographic.py` module can regenerate it:
 
 ```python
-from tmrca_cu.demographic import generate_flow_field, write_flow_field
+from gamma_smc_cu.demographic import generate_flow_field, write_flow_field
 
 # Reproduce Schweiger's default flow field (validated to <0.01% error)
 u, v = generate_flow_field()  # ~5 seconds
@@ -115,7 +115,7 @@ shape error from the flow field.
 For large datasets, distribute work across multiple GPUs:
 
 ```python
-from tmrca_cu import FlowContext
+from gamma_smc_cu import FlowContext
 from concurrent.futures import ThreadPoolExecutor
 
 contexts = []
@@ -135,7 +135,7 @@ with ThreadPoolExecutor(max_workers=3) as pool:
 Or use the convenience wrapper:
 
 ```python
-from tmrca_cu.multigpu import MultiGPUFlowContext
+from gamma_smc_cu.multigpu import MultiGPUFlowContext
 
 ctx = MultiGPUFlowContext(G, positions, Ne, mu, rho, ff_path)
 result = ctx.run_fb(pairs)  # automatically distributed

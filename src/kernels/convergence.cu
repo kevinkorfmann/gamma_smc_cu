@@ -1,4 +1,4 @@
-#include "tmrca_cu/ultrametric.h"
+#include "gamma_smc_cu/ultrametric.h"
 #include <cfloat>
 #include <cstdio>
 #include <cmath>

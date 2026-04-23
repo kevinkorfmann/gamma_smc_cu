@@ -12,7 +12,7 @@ Row-side panels:
 Top panels:
   - superpopulation colour strip with labels.
 
-Inputs : results/chr{N}/{POP}.csv   (tmrca.cu per-variant geom_mean)
+Inputs : results/chr{N}/{POP}.csv   (gamma_smc_cu per-variant geom_mean)
 Outputs: figure_heatmap.{png,pdf},   heatmap_matrix_kya.csv, heatmap_row_order.csv
 """
 from __future__ import annotations

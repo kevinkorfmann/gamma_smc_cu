@@ -1,4 +1,4 @@
-# tmrca.cu — TODO
+# gamma_smc_cu — TODO
 
 ## Figures
 - [ ] Restyle fig6_demographics to Nature style (currently plain matplotlib, others are Nature-formatted)

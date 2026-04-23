@@ -46,8 +46,8 @@ echo "Main build done."
 export PYTHONPATH="${MAIN_DIR}/python:${MAIN_DIR}"
 export LD_LIBRARY_PATH="${NVCUDA_LIB}:${MAIN_DIR}/build:${PIXI_ENV}/lib:${LD_LIBRARY_PATH:-}"
 # Copy .so to the python package dir
-cp build/_core*.so python/tmrca_cu/
-cp build/libtmrcacu_kernels.so python/tmrca_cu/
+cp build/_core*.so python/gamma_smc_cu/
+cp build/libgamma_smc_cu_kernels.so python/gamma_smc_cu/
 
 python ${REPO}/benchmarks/pairwise_scaling/test_bit_identity.py --save ${OUT}_main.npy
 cd $REPO
@@ -59,13 +59,13 @@ rm -rf build
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES=80 \
     -DCMAKE_CUDA_HOST_COMPILER="${CUDAHOSTCXX}" 2>&1 | tail -3
 cmake --build build -j8 2>&1 | tail -5
-cp build/_core*.so python/tmrca_cu/
-cp build/libtmrcacu_kernels.so python/tmrca_cu/
+cp build/_core*.so python/gamma_smc_cu/
+cp build/libgamma_smc_cu_kernels.so python/gamma_smc_cu/
 
 echo "Perf build done."
 
 export PYTHONPATH="${REPO}/python:${REPO}"
-export LD_LIBRARY_PATH="${NVCUDA_LIB}:${REPO}/python/tmrca_cu:${PIXI_ENV}/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${NVCUDA_LIB}:${REPO}/python/gamma_smc_cu:${PIXI_ENV}/lib:${LD_LIBRARY_PATH:-}"
 python benchmarks/pairwise_scaling/test_bit_identity.py --save ${OUT}_perf.npy --compare ${OUT}_main.npy
 
 # ── Cleanup ──

@@ -1,4 +1,4 @@
-#include "tmrca_cu/hmm.h"
+#include "gamma_smc_cu/hmm.h"
 #include <cmath>
 
 // Compute coalescent prior q[k] under constant population size Ne.

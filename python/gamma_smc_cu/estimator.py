@@ -11,7 +11,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Optional, Union, List, Tuple
 
-import tmrca_cu._core as _core
+import gamma_smc_cu._core as _core
 
 
 @dataclass
@@ -114,7 +114,7 @@ class CoalescenceEstimator:
     """
     GPU-accelerated pairwise coalescence time estimator.
 
-    Wraps the tmrca_cu._core CUDA functions into a pipeline supporting:
+    Wraps the gamma_smc_cu._core CUDA functions into a pipeline supporting:
       - Tier 1: instant divergence statistics (site pi, windowed divergence)
       - Tier 3: full HMM forward-backward TMRCA inference
     """

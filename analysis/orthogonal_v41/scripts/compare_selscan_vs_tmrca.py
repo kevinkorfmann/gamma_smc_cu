@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""Compare selscan iHS/nSL gene-level ranks against tmrca.cu TMRCA ranks for
+"""Compare selscan iHS/nSL gene-level ranks against gamma_smc_cu TMRCA ranks for
 the v4.1 candidate set (5 novel + 5 positive controls + 5 neutral controls).
 
 For each (gene, focal_pop) pair we report:
-  - tmrca.cu rank percentile (geom_mean primary stat from genome_wide_ranks.csv)
+  - gamma_smc_cu rank percentile (geom_mean primary stat from genome_wide_ranks.csv)
   - selscan max |iHS_norm| rank percentile in the focal pop
   - selscan frac_ihs_extreme rank percentile
   - selscan max |nSL_norm| rank percentile
@@ -61,7 +61,7 @@ CANDIDATES = [
 def main():
     os.makedirs(OUT_FIG_DIR, exist_ok=True)
 
-    # Load tmrca.cu ranks
+    # Load gamma_smc_cu ranks
     tmrca = pd.read_csv(TMRCA_RANKS)
     tmrca_lookup = {(row["gene_name"], row["chr"]): row for _, row in tmrca.iterrows()}
 
@@ -75,11 +75,11 @@ def main():
 
     rows = []
     for gene, chr_num, pop, group, color in CANDIDATES:
-        # tmrca.cu rank
+        # gamma_smc_cu rank
         key = (gene, chr_num)
         t = tmrca_lookup.get(key)
         if t is None:
-            print(f"  WARN: {gene} chr{chr_num} not in tmrca.cu ranks", flush=True)
+            print(f"  WARN: {gene} chr{chr_num} not in gamma_smc_cu ranks", flush=True)
             tmrca_rank = np.nan
         else:
             tmrca_rank = float(t.get(f"{pop}_rank", np.nan))
@@ -145,7 +145,7 @@ def main():
         ax.set_yscale("log")
         ax.axhline(0.05, color="gray", lw=0.6, ls=":")
         ax.axvline(0.05, color="gray", lw=0.6, ls=":")
-        ax.set_xlabel("tmrca.cu rank (geom mean)")
+        ax.set_xlabel("gamma_smc_cu rank (geom mean)")
         ax.set_ylabel(f"selscan {title} max |Z| rank")
         ax.set_title(title, loc="left", fontweight="normal")
         for s in ("top", "right"):

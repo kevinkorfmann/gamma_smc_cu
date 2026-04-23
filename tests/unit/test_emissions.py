@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-import tmrca_cu
+import gamma_smc_cu
 
 
 class TestEmissions:
@@ -34,7 +34,7 @@ class TestEmissions:
         # Build a single-site genotype with a mutation and check that the
         # posterior shifts to larger times when we observe more mutations.
         K = 32
-        prior = np.array(tmrca_cu.coalescent_prior(Ne=10000.0, K=K))
+        prior = np.array(gamma_smc_cu.coalescent_prior(Ne=10000.0, K=K))
 
         # Compute emission probabilities for d=1 at each time midpoint
         # using the reference formula
@@ -90,7 +90,7 @@ class TestEmissions:
         G0 = np.zeros((4, S), dtype=np.uint8)
         positions = np.arange(S, dtype=np.float64) * 1000
 
-        gamma_no_mut = np.array(tmrca_cu.hmm_posterior(
+        gamma_no_mut = np.array(gamma_smc_cu.hmm_posterior(
             G0, positions, (0, 1), K=K, Ne=Ne,
             mu=uniform_mu, rho=uniform_rho
         ))
@@ -98,7 +98,7 @@ class TestEmissions:
         # Single mutation at midpoint
         G1 = np.zeros((4, S), dtype=np.uint8)
         G1[0, S // 2] = 1
-        gamma_one_mut = np.array(tmrca_cu.hmm_posterior(
+        gamma_one_mut = np.array(gamma_smc_cu.hmm_posterior(
             G1, positions, (0, 1), K=K, Ne=Ne,
             mu=uniform_mu, rho=uniform_rho
         ))

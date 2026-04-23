@@ -55,9 +55,9 @@ def simulate(n_samples):
     return G.astype(np.uint8), positions.astype(np.float64)
 
 
-def bench_tmrca_cu(G, positions, n_samples):
+def bench_gamma_smc_cu(G, positions, n_samples):
     """Time tmrca.cu on all pairs."""
-    import tmrca_cu
+    import gamma_smc_cu
 
     n_haps = G.shape[0]
     n_pairs = n_haps * (n_haps - 1) // 2
@@ -65,11 +65,11 @@ def bench_tmrca_cu(G, positions, n_samples):
           flush=True)
 
     # Warmup
-    tmrca_cu.infer(G, positions, mu=MU, rho=RHO, Ne=10_000,
+    gamma_smc_cu.infer(G, positions, mu=MU, rho=RHO, Ne=10_000,
                    pairs=[(0, 1)], mean_only=True, auto_estimate_theta=True)
 
     t0 = time.time()
-    tmrca_cu.infer(G, positions, mu=MU, rho=RHO, Ne=10_000,
+    gamma_smc_cu.infer(G, positions, mu=MU, rho=RHO, Ne=10_000,
                    mean_only=True, auto_estimate_theta=True)
     elapsed = time.time() - t0
     print(f"  tmrca.cu: {elapsed:.2f}s for {n_pairs} pairs", flush=True)
@@ -123,7 +123,7 @@ def main():
 
         # tmrca.cu (actual timing)
         try:
-            tcu_time, _ = bench_tmrca_cu(G, positions, n_samples)
+            tcu_time, _ = bench_gamma_smc_cu(G, positions, n_samples)
         except Exception as e:
             print(f"  tmrca.cu FAILED at N={n_samples}: {e}", flush=True)
             tcu_time = float("nan")
@@ -136,7 +136,7 @@ def main():
             "n_haplotypes": n_haps,
             "n_pairs": n_pairs,
             "n_sites": G.shape[1],
-            "tmrca_cu_seconds": tcu_time,
+            "gamma_smc_cu_seconds": tcu_time,
             "gamma_smc_seconds": gsmc_time,
             "speedup": gsmc_time / tcu_time if tcu_time > 0 else float("nan"),
         })
