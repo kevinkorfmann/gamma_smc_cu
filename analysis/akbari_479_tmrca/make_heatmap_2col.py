@@ -25,7 +25,7 @@ SUPERPOP = mh.SUPERPOP
 SUPERPOP_OF = mh.SUPERPOP_OF
 SUPERPOP_COLOR = mh.SUPERPOP_COLOR
 
-N_COLS = 4   # number of columns in the layout
+N_COLS = 3   # number of columns in the layout
 
 
 def label_for(row):
