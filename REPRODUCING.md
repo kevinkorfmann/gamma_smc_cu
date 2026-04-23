@@ -408,3 +408,47 @@ Akbari publishes positions on GRCh37.
 
 **Grand total:** ~1 day if everything runs in parallel, ~4-5 days if
 strictly serial (Relate stage is the long pole).
+
+---
+
+## Data assets backing specific tables and figures
+
+Tables and figures in the published manuscript are not annotated in-text with their source CSVs (to keep the caption prose clean). The mapping is:
+
+### Manuscript `main.tex` — Table S2 / "165-locus stage-5 landscape"
+- **Raw per-gene metadata** (all columns described in the Table S2 paragraph): `private/manuscript/v4.1/tables/stage5_loci_with_stats.csv`.
+- Longtable formatter: `private/manuscript/v4.1/tables/gen_tables.py`.
+- Regenerate via `verify/build_stage5_table.py`.
+- Underlying counts validated by `verify/19_candidate_cascade.py`, `verify/20_stage5_aggregate_stats.py`, `verify/21_fdr.py`.
+
+### Manuscript `si.tex` — Table S3 / "H12 / H2-H1 / XP-EHH"
+- **Ten-row canonical CSV**: `private/manuscript/v4.1/tables/s3_canonical.csv`.
+- **Raw per-gene genome-wide H12 ±500 kb + H2/H1** (CDX / CHS / GIH): on betty, `analysis/orthogonal_v41/h12_500kb_v2/chr*_{pop}.csv`.
+- **XP-EHH per-gene means**: on betty, `analysis/orthogonal_v41/xpehh_s3.csv`.
+- Compute scripts committed under `private/manuscript/v4.1/verify/`: `run_h12_500kb_task.py`, `slurm_h12_500kb.sh` (66-task array), `run_xpehh_s3.py`, `slurm_xpehh_s3.sh`.
+- Aggregation: `private/manuscript/v4.1/verify/aggregate_s3.py`.
+- Local check: `private/manuscript/v4.1/verify/41_table_s3_from_scratch.py`.
+
+### Manuscript `si.tex` — Table S6 / "Candidate-selection cascade sensitivity"
+- **Raw cascade sensitivity sweep**: `local_memory/prior_sweep_audit/cascade_sensitivity.csv`.
+
+### Manuscript `si.tex` — Fig S1 / "Population-scale decoding speed"
+- **Raw timings CSV**: `benchmarks/pairwise_scaling/results.csv` (all three methods: tmrca.cu / gamma_smc / ASMC on chr22 YRI, 63,190 pairs).
+- Bench logs: `benchmarks/pairwise_scaling/final_bench_*.log`, `cpu_bench_*.log`.
+- Plot script: `benchmarks/pairwise_scaling/plot_benchmarks.py`.
+
+### Manuscript `main.tex` — Fig 3 / "Landscape panels for GRK2 + 4 exemplars"
+- Per-gene NPZ: `private/manuscript/v4.1/figures/data/{GENE}_{POP}_novel.npz` and `{GENE}_YRI_control.npz`.
+- Per-gene JSON summary (variants, max_fst, anchor SNP): `private/manuscript/v4.1/figures/data/{GENE}_{POP}.json`.
+- Per-locus CLUES2 results: `private/manuscript/v4.1/figures/data/{gene}_result_*.txt`.
+- H12 track for ±500 kb computation (used in panel c): `private/manuscript/v4.1/figures/data/multistat_demo.npz`.
+
+### Run the verification suite
+
+From inside `private/manuscript/v4.1/`:
+
+```bash
+python verify/run_all.py
+```
+
+40 scripts run, ~3 min total. Every numeric claim in main.tex, si.tex, and committed tables maps to one of these checks.

@@ -1,73 +1,77 @@
+"""Pytest config for `tests/betty/` — reproducibility tests that run
+gamma_smc_cu against the real 1000G cache on betty.
+
+These tests are skipped on any machine that isn't betty. Run on betty
+with:
+
+    ssh betty
+    cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+    pixi run pytest tests/betty/ -v
+
+To override the skip (e.g., to run locally with your own cache path):
+
+    export GAMMA_SMC_CU_CACHE_DIR=/path/to/parsed
+    export GAMMA_SMC_CU_RESULTS_DIR=/path/to/results
+    export GAMMA_SMC_CU_SAMPLES_TXT=/path/to/samples.txt
+    pixi run pytest tests/betty/ -v
+"""
+import os
+from pathlib import Path
+
 import pytest
-import numpy as np
-import msprime
+
+
+DEFAULT_CACHE = Path("/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide/cache/parsed")
+DEFAULT_RESULTS = Path("/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide/results")
+DEFAULT_SAMPLES = Path("/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide/data/samples.txt")
+
+
+def _path_or_skip(env: str, default: Path, kind: str) -> Path:
+    p = Path(os.environ.get(env, default))
+    if not p.exists():
+        pytest.skip(f"{kind} not available (expected {p}; override via env var {env})")
+    return p
 
 
 @pytest.fixture(scope="session")
-def small_simulation():
-    """
-    Small tree sequence for fast unit tests.
-    n=20 haplotypes, 100 kb, constant Ne=10000.
-    """
-    ts = msprime.sim_ancestry(
-        samples=10,  # 10 diploid = 20 haploid
-        sequence_length=100_000,
-        recombination_rate=1e-8,
-        population_size=10_000,
-        random_seed=42,
-    )
-    ts = msprime.sim_mutations(ts, rate=1.25e-8, random_seed=43)
-    G = ts.genotype_matrix().T.astype(np.uint8)  # (n_haplotypes, n_sites)
-    positions = np.array([v.position for v in ts.variants()])
-    return ts, G, positions
+def cache_dir() -> Path:
+    """Chromosome NPZ cache (GRCh38, bitpacked G + positions + sample_ids)."""
+    return _path_or_skip("GAMMA_SMC_CU_CACHE_DIR", DEFAULT_CACHE, "1000G chr NPZ cache")
 
 
 @pytest.fixture(scope="session")
-def medium_simulation():
+def results_dir() -> Path:
+    """Genome-wide scan outputs: results/chr{N}/{POP}.csv and .npz."""
+    return _path_or_skip("GAMMA_SMC_CU_RESULTS_DIR", DEFAULT_RESULTS, "production results dir")
+
+
+@pytest.fixture(scope="session")
+def samples_txt() -> Path:
+    """Sample->population map from 1000G."""
+    return _path_or_skip("GAMMA_SMC_CU_SAMPLES_TXT", DEFAULT_SAMPLES, "samples.txt")
+
+
+@pytest.fixture(scope="session")
+def pop_map(samples_txt):
+    """Map sample_id -> population code (first superpop field)."""
+    m = {}
+    with open(samples_txt) as f:
+        for line in f:
+            parts = line.strip().split("\t")
+            if len(parts) >= 2:
+                m[parts[0]] = parts[1]
+    return m
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-skip betty tests if running off-cluster (cache dir missing).
+
+    Use `-m betty` to force-include them; `-m 'not betty'` is default-ish.
     """
-    Medium tree sequence for integration tests.
-    n=200 haplotypes, 1 Mb, bottleneck demography.
-    """
-    demography = msprime.Demography()
-    demography.add_population(initial_size=10_000)
-    demography.add_population_parameters_change(time=5000, initial_size=1000)
-    demography.add_population_parameters_change(time=6000, initial_size=50_000)
-
-    ts = msprime.sim_ancestry(
-        samples=100,
-        sequence_length=1_000_000,
-        recombination_rate=1e-8,
-        demography=demography,
-        random_seed=44,
-    )
-    ts = msprime.sim_mutations(ts, rate=1.25e-8, random_seed=45)
-    G = ts.genotype_matrix().T
-    positions = np.array([v.position for v in ts.variants()])
-    return ts, G, positions
-
-
-@pytest.fixture
-def true_pairwise_tmrca(small_simulation):
-    """
-    Extract true pairwise TMRCA from tree sequence for a set of test pairs.
-    """
-    ts = small_simulation[0]
-    pairs = [(0, 1), (0, 5), (1, 2), (0, 19)]
-    result = {}
-    for i, j in pairs:
-        tmrca = np.zeros(int(ts.sequence_length))
-        for tree in ts.trees():
-            left, right = int(tree.interval.left), int(tree.interval.right)
-            tmrca[left:right] = tree.tmrca(i, j)
-        result[(i, j)] = tmrca
-    return result
-
-
-@pytest.fixture
-def uniform_mu():
-    return 1.25e-8
-
-
-@pytest.fixture
-def uniform_rho():
-    return 1e-8
+    if not DEFAULT_CACHE.exists() and "GAMMA_SMC_CU_CACHE_DIR" not in os.environ:
+        skip_betty = pytest.mark.skip(
+            reason="betty reproducibility tests: no 1000G cache on this host"
+        )
+        for item in items:
+            if "betty" in item.keywords:
+                item.add_marker(skip_betty)
