@@ -360,10 +360,10 @@ CUDA kernels is ~3 min on an A100.
 
 ## Legacy / audit artifacts
 
-- `private/manuscript/v4.1/audit/BUG_HUNT_FINDINGS_2026_04_23.md` —
+- `private/manuscript/legacy/audit_2026_04_23/BUG_HUNT_FINDINGS_2026_04_23.md` —
   record of the Akbari GRCh37/GRCh38 coordinate bug (fixed) and other
   bug-hunt findings.
-- `private/manuscript/v4.1/audit/FIG5_AKBARI_ANNOTATION_2026_04_23.md` —
+- `private/manuscript/legacy/audit_2026_04_23/FIG5_AKBARI_ANNOTATION_2026_04_23.md` —
   details of the Akbari tick-bar addition to Fig:grk2 and Fig:landscape.
 - `legacy/` — archived pre-v4.1 material (docs website, demo notebooks,
   pre-Akbari-liftover code).
