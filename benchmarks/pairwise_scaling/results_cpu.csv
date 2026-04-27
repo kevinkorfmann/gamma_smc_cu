@@ -1,0 +1,12 @@
+method,n_pairs,seconds,type
+ASMC,1,1.9852,measured
+ASMC,10,20.0838,measured
+ASMC,100,199.9047,measured
+ASMC,1000,2001.0956,measured
+ASMC,10000,20010.9559,extrapolated
+ASMC,63190,126449.2304,extrapolated
+gamma_smc,1,5.2693,measured
+gamma_smc,45,5.5161,measured
+gamma_smc,1035,13.7026,measured
+gamma_smc,10011,100.6625,measured
+gamma_smc,63190,770.0415,measured
