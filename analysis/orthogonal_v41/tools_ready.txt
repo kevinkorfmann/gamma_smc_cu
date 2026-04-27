@@ -1,0 +1,11 @@
+Phase 0 minimal status (run on epyc-5-3 at Sat Apr 11 16:05:29 EDT 2026)
+============================================================
+selscan: OK
+cxt: OK
+asmc: OK
+tmrca.cu: OK
+
+Deferred to later phases:
+  Relate, CLUES (Phase 4)
+  Genetic maps (Phase 2)
+  ASMC decoding quantities (computed in Phase 1 task itself)
