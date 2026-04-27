@@ -38,6 +38,8 @@ manuscript/*.fls
 # Editor
 .DS_Store
 .claude/
+.vscode/
+.cache/
 texput.log
 *.swp
 *.swo
@@ -73,6 +75,40 @@ analysis/orthogonal_v41/grk2_demo.npz
 analysis/orthogonal_v41/multistat_demo.npz
 analysis/orthogonal_v41/selscan_genelevel/
 analysis/orthogonal_v41/three_method/
+
+# Full per-chromosome H12 results (22M, regenerated on betty); keep ±500 kb subset
+analysis/orthogonal_v41/h12/
+analysis/orthogonal_v41/h12_500kb_v2/
+analysis/orthogonal_v41/logs/
+
+# Reproducibility intermediates (regenerated on betty); keep summary CSVs
+analysis/genome_wide/reproducibility/results/
+analysis/genome_wide/reproducibility/logs/
+
+# Akbari pre-liftover buggy run
+analysis/akbari_479_tmrca/results_grch37_buggy/
+
+# Stdpopsim benchmark intermediates / vendored gamma_smc build
+benchmarks/test_suite_stdpopsim/logs/
+benchmarks/test_suite_stdpopsim/gamma_smc/
+benchmarks/test_suite_stdpopsim/results/
+benchmarks/pairwise_scaling/*.log
+
+# Stale post-rename copies of the pre-gamma_smc_cu package
+python/tmrca_cu/
+include/tmrca_cu/
+
+# Reference downloads / local data dumps (regenerated/downloaded on demand)
+references/
+data/
+1kGP_*.tbi
+1kGP_*.vcf.gz*
+default_flow_field.txt
+private_verify_s3.py
+
+# Backup files
+*.bak
+*.bak_*
 
 # Relate outputs (regenerated on betty)
 analysis/relate_clues/trees/
