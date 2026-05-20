@@ -1,6 +1,6 @@
 # CUDA optimizations
 
-This page documents the GPU-side decisions in `tmrca.cu`. The
+This page documents the GPU-side decisions in `gamma_smc_cu`. The
 [algorithm](algorithm.md) page covers what we compute; this one covers how the
 implementation makes that computation fit on a GPU and run at hardware roofline.
 
@@ -179,7 +179,7 @@ the kernel can decode arbitrarily long sequences regardless of `n_pairs`.
 
 ## Persistent `FlowContext`
 
-`FlowContext` is the C++ class behind `tmrca_cu._core.FlowContext`. It owns,
+`FlowContext` is the C++ class behind `gamma_smc_cu._core.FlowContext`. It owns,
 on the GPU, for the lifetime of the Python object:
 
 - the bitpacked genotype matrix `d_packed_`,
@@ -216,7 +216,7 @@ per-block scratch (a few hundred MB). `max_streams=1` is the default; opt into
 
 ## Multi-GPU
 
-`MultiGPUFlowContext` (in `python/tmrca_cu/multigpu.py`) builds one
+`MultiGPUFlowContext` (in `python/gamma_smc_cu/multigpu.py`) builds one
 `FlowContext` per visible GPU and partitions a pair list across them. Each GPU
 runs an independent forward-backward; the host reassembles the per-GPU output
 slabs into the final `(n_sites, n_pairs)` array. This is embarrassingly
@@ -249,9 +249,9 @@ cohort regime.
 
 | concern                          | file                                       |
 |----------------------------------|--------------------------------------------|
-| flow-field grid + load           | `include/tmrca_cu/flow_field.h`, `src/flow_field.cpp` |
+| flow-field grid + load           | `include/gamma_smc_cu/flow_field.h`, `src/flow_field.cpp` |
 | forward / backward / cached / fp16 / texture / blockwise kernels | `src/kernels/gamma_smc_flow.cu` |
 | bitpack / unpack / pairwise XOR  | `src/kernels/bitpack.cu`                   |
 | `FlowContext` C++ class          | `src/bindings.cpp` (around line 2390)      |
-| Python wrappers                  | `python/tmrca_cu/infer.py`                 |
-| multi-GPU dispatcher             | `python/tmrca_cu/multigpu.py`              |
+| Python wrappers                  | `python/gamma_smc_cu/infer.py`                 |
+| multi-GPU dispatcher             | `python/gamma_smc_cu/multigpu.py`              |

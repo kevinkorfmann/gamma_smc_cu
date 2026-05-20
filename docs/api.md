@@ -1,15 +1,15 @@
 # API reference
 
-The two top-level entry points are `tmrca_cu.infer()` and
-`tmrca_cu.infer_blockwise()`. Both wrap the same C++ `FlowContext` machinery —
+The two top-level entry points are `gamma_smc_cu.infer()` and
+`gamma_smc_cu.infer_blockwise()`. Both wrap the same C++ `FlowContext` machinery —
 `infer()` runs forward-backward over the full sequence, `infer_blockwise()`
 runs it in padded site blocks. See [Algorithm](algorithm.md) for what they
 compute and [Blockwise FB](blockwise.md) for when to use which.
 
-## `tmrca_cu.infer`
+## `gamma_smc_cu.infer`
 
 ```python
-tmrca_cu.infer(
+gamma_smc_cu.infer(
     G_or_ts,
     positions=None,
     mu=1.25e-8,
@@ -91,10 +91,10 @@ A `dict` with keys:
 | `positions`        | `(n_sites,)`         | `float64` | always                         |
 | `pairs`            | `list[(int, int)]`   |           | always                         |
 
-## `tmrca_cu.infer_blockwise`
+## `gamma_smc_cu.infer_blockwise`
 
 ```python
-tmrca_cu.infer_blockwise(
+gamma_smc_cu.infer_blockwise(
     G_or_ts,
     positions=None,
     mu=1.25e-8,
@@ -177,10 +177,10 @@ windows used:
 The `blocks` array stores `(core_start, core_stop, padded_start, padded_stop)`
 for every block — useful for debugging or for stitching custom outputs.
 
-## `tmrca_cu._core.cuda_mem_info`
+## `gamma_smc_cu._core.cuda_mem_info`
 
 ```python
-free_bytes, total_bytes = tmrca_cu._core.cuda_mem_info()
+free_bytes, total_bytes = gamma_smc_cu._core.cuda_mem_info()
 ```
 
 Returns the free and total bytes on the active CUDA device. Wraps
@@ -194,7 +194,7 @@ them only if you need to amortize context construction across many `run_*`
 calls on the same data, or if you want fine-grained control over chunking.
 
 ```python
-ctx = tmrca_cu.FlowContext(
+ctx = gamma_smc_cu.FlowContext(
     G,                                  # uint8 (n_haps, n_sites)
     positions,                          # float64 (n_sites,)
     Ne=10000.0,
@@ -229,7 +229,7 @@ double-precision on host); subsequent calls reuse all GPU state.
 ## Multi-GPU
 
 ```python
-from tmrca_cu import MultiGPUFlowContext
+from gamma_smc_cu import MultiGPUFlowContext
 
 mgc = MultiGPUFlowContext(G, positions, Ne=10000, mu=1.25e-8, rho=1e-8)
 result = mgc.run_fb(pairs)

@@ -1,6 +1,6 @@
-"""Sphinx config for tmrca.cu docs."""
+"""Sphinx config for gamma_smc_cu docs."""
 
-project = "tmrca.cu"
+project = "gamma_smc_cu"
 author = "Kevin Korfmann"
 copyright = "2026, Kevin Korfmann"
 
@@ -21,7 +21,7 @@ templates_path = ["_templates"]
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "furo"
-html_title = "tmrca.cu"
+html_title = "gamma_smc_cu"
 html_static_path = ["_static"]
 
 html_theme_options = {

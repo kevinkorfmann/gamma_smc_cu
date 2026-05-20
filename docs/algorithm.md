@@ -1,6 +1,6 @@
 # Algorithm
 
-`tmrca.cu` is a CUDA implementation of **Gamma-SMC** (Schweiger and Durbin, 2023),
+`gamma_smc_cu` is a CUDA implementation of **Gamma-SMC** (Schweiger and Durbin, 2023),
 a moment-matched HMM for pairwise time-to-most-recent-common-ancestor (TMRCA)
 inference under the Sequentially Markov Coalescent. This page explains what the
 HMM is, what the forward-backward decoding actually computes, and the
@@ -167,13 +167,13 @@ and the only thing the kernel touches per site is:
 - one bit from the bitpacked genotype matrix.
 
 The memory wall sits at the genotype data and the per-site forward buffer.
-[CUDA optimizations](cuda.md) walks through how `tmrca.cu` reduces the
+[CUDA optimizations](cuda.md) walks through how `gamma_smc_cu` reduces the
 memory traffic so the kernel becomes compute-bound.
 
 ## What `infer()` returns
 
 ```python
-result = tmrca_cu.infer(
+result = gamma_smc_cu.infer(
     G, positions, pairs=pairs,
     mean_only=False,           # → adds 'lower', 'upper'
     return_posterior=True,     # → adds 'posterior_alpha', 'posterior_beta'

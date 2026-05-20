@@ -1,6 +1,6 @@
 # Blockwise FB
 
-`tmrca_cu.infer_blockwise()` is a memory-bounded variant of the standard
+`gamma_smc_cu.infer_blockwise()` is a memory-bounded variant of the standard
 forward-backward decoder. It produces **the same output** as
 {func}`infer` (byte-identical, when configured correctly) but its peak GPU
 memory is bounded by one block instead of the full sequence × pairs forward
@@ -94,7 +94,7 @@ big block end-to-end and is numerically identical to `infer()`.
 The default invocation is
 
 ```python
-result = tmrca_cu.infer_blockwise(G, positions, pairs=pairs)
+result = gamma_smc_cu.infer_blockwise(G, positions, pairs=pairs)
 ```
 
 with:

@@ -1,13 +1,13 @@
 # stdpopsim test suite
 
-A cross-species benchmark that measures `tmrca.cu` against the reference
+A cross-species benchmark that measures `gamma_smc_cu` against the reference
 `gamma_smc` binary (Schweiger and Durbin, 2023) on a hand-picked set of
 [`stdpopsim`](https://popsim-consortium.github.io/stdpopsim-docs/) demographic
 models. Each config simulates 5 Mb × 20 haplotypes (190 pairs), runs both
 methods on the same phased data, and reports accuracy (Pearson *r* of log
 TMRCA vs the msprime truth) and wall-clock time.
 
-`tmrca.cu` achieves **parity with gamma_smc on accuracy** across the
+`gamma_smc_cu` achieves **parity with gamma_smc on accuracy** across the
 full suite while delivering **25×–190× end-to-end speedups**. Both
 implementations decode the same Gamma-SMC HMM from the same flow field;
 when both use data-driven scaled rates the posteriors agree to within
@@ -76,7 +76,7 @@ Each task:
    using it as the kernel's effective scaled mutation rate, with the
    scaled recombination rate set to *π × (ρ/μ)* — see the
    "Parameter estimation" section below,
-3. warms up `tmrca_cu._core.gamma_smc_flow_cached_fb` and times three
+3. warms up `gamma_smc_cu._core.gamma_smc_flow_cached_fb` and times three
    reps (taking the min),
 4. invokes the `gamma_smc` binary via a bgzipped VCF, parses the
    zstd-compressed output, reports both end-to-end wall time and the
@@ -124,7 +124,7 @@ where the data-implied scaled mutation rate is **81×** the value
 derived from textbook constants — feeding either method that wrong
 constant collapses accuracy from ~0.75 to ~0.10.
 
-Both `gamma_smc` and `tmrca_cu.infer()` now learn the scaled rates
+Both `gamma_smc` and `gamma_smc_cu.infer()` now learn the scaled rates
 from the data:
 
 - **`gamma_smc`** (Schweiger and Durbin, 2023): invoked without `-m`
@@ -132,8 +132,8 @@ from the data:
   `data_processor.calculate_heterozygosity()` and uses observed
   pairwise *π* as the scaled mutation rate, then derives the scaled
   recombination rate from the user-supplied *ρ/μ* ratio.
-- **`tmrca_cu.infer(auto_estimate_theta=True)`** (default on,
-  `python/tmrca_cu/infer.py:_estimate_scaled_params`): the wrapper
+- **`gamma_smc_cu.infer(auto_estimate_theta=True)`** (default on,
+  `python/gamma_smc_cu/infer.py:_estimate_scaled_params`): the wrapper
   computes pairwise *π* from the genotype matrix and overrides the
   kernel's internal `4·N_e·μ` and `2·N_e·ρ` scaling so the kernel sees
   `scaled_mu = π̂` and `scaled_rho = π̂ × (ρ/μ)`. The user-supplied
@@ -151,12 +151,12 @@ auto-estimation mode, so the comparison is on equal footing.
 
 14 of 15 configs successful; 5 Mb × 20 haplotypes (190 pairs) per
 config. **Both methods run with data-driven scaled-rate estimation**
-(`tmrca_cu.infer(auto_estimate_theta=True)` for tmrca.cu, `-t (ρ/μ)`
+(`gamma_smc_cu.infer(auto_estimate_theta=True)` for gamma_smc_cu, `-t (ρ/μ)`
 without `-m` for gamma_smc (Schweiger and Durbin, 2023)).
 
 ### Headline numbers
 
-| metric                                 | tmrca.cu            | gamma_smc (Schweiger and Durbin, 2023) |
+| metric                                 | gamma_smc_cu            | gamma_smc (Schweiger and Durbin, 2023) |
 | -------------------------------------- | ------------------- | -------------------------------------- |
 | Median *r* of log TMRCA across configs | 0.876               | 0.874                                  |
 | Median Δ*r* (absolute)                 | 0.002               | —                                      |
@@ -164,7 +164,7 @@ without `-m` for gamma_smc (Schweiger and Durbin, 2023)).
 | Median wall-time speedup               | **132×**            | —                                      |
 | Range of wall-time speedup             | 12× – 197×          | —                                      |
 
-**Accuracy is at parity.** Median *r* differs by 0.002; tmrca.cu
+**Accuracy is at parity.** Median *r* differs by 0.002; gamma_smc_cu
 matches or exceeds gamma_smc on 13 of 14 configs (see panel **c** of
 the figure); the algorithms agree to within 0.01–0.04 on every config.
 This is the expected outcome — both implementations decode the same
@@ -172,7 +172,7 @@ Gamma-SMC HMM from the same flow field, so when they are handed the
 same scaled parameters they reach the same posterior up to numerical
 precision and minor implementation differences.
 
-**The real win is speed.** tmrca.cu produces those same posteriors
+**The real win is speed.** gamma_smc_cu produces those same posteriors
 **12×–197× faster end-to-end** on every config in the suite, with a
 median speedup of 132×. On the largest configs (~200 k segregating
 sites for AnoGam and DroMel) the kernel runs in 310–720 ms vs
@@ -185,7 +185,7 @@ Configs are sorted by species. *r* columns report the **median across
 190 pairs**; all wall times are total end-to-end (including VCF +
 bgzip + zstd I/O overhead for gamma_smc).
 
-| species | model                                              | pop                | sites   | tmrca.cu *r* | gamma_smc *r* | Δ *r*  | tmrca.cu (s) | gamma_smc (s) | speedup |
+| species | model                                              | pop                | sites   | gamma_smc_cu *r* | gamma_smc *r* | Δ *r*  | gamma_smc_cu (s) | gamma_smc (s) | speedup |
 | ------- | -------------------------------------------------- | ------------------ | ------- | ------------ | ------------- | ------ | ------------ | ------------- | ------- |
 | AnoGam  | GabonAg1000G_1A17                                  | GAS                | 199,043 | 0.770        | 0.737         | +0.034 | 0.310        | 8.02          | 26×     |
 | AraTha  | African2Epoch_1H18                                 | SouthMiddleAtlas   | 123,586 | 0.935        | 0.935         | +0.000 | 0.215        | 7.81          | 36×     |
@@ -202,9 +202,9 @@ bgzip + zstd I/O overhead for gamma_smc).
 | PanTro  | BonoboGhost_4K19                                   | western            |  24,939 | 0.888        | 0.887         | +0.001 | 0.047        | 6.89          | 146×    |
 | PonAbe  | TwoSpecies_2L11                                    | Bornean            |  28,173 | 0.917        | 0.917         | +0.000 | 0.058        | 6.60          | 115×    |
 
-Δ*r* = `tmrca.cu − gamma_smc`. Positive on 10/14 configs, zero on
+Δ*r* = `gamma_smc_cu − gamma_smc`. Positive on 10/14 configs, zero on
 3/14, negative on 1/14 (BosTau, Δ*r* = −0.001). The largest gap is
-+0.036 on DroMel African3Epoch, where tmrca.cu outperforms gamma_smc.
++0.036 on DroMel African3Epoch, where gamma_smc_cu outperforms gamma_smc.
 
 One configuration is excluded:
 
@@ -217,20 +217,20 @@ One configuration is excluded:
 
 ### Figure
 
-![tmrca.cu vs gamma_smc across stdpopsim configs](_static/test_suite_stdpopsim.png)
+![gamma_smc_cu vs gamma_smc across stdpopsim configs](_static/test_suite_stdpopsim.png)
 
 Panels:
 
 - **a** — accuracy per config: median *r* of log TMRCA with IQR whiskers
-  across 190 pairs. Blue = `tmrca.cu`, orange = `gamma_smc (Schweiger
+  across 190 pairs. Blue = `gamma_smc_cu`, orange = `gamma_smc (Schweiger
   and Durbin, 2023)`. Dotted connectors group the two dots for each
   config.
-- **b** — end-to-end wall time per config on a log x-axis. `tmrca.cu`
+- **b** — end-to-end wall time per config on a log x-axis. `gamma_smc_cu`
   sits at 33–723 ms; `gamma_smc` sits at 6.3–8.4 s (of which 6.2–7.3 s
   is pure compute, shown as the hollow orange squares).
 - **c** — accuracy parity scatter. Points colored by species; diagonal
   is the 1:1 line. With both methods running on data-driven scaled
-  rates, every config sits on or above the diagonal — tmrca.cu matches
+  rates, every config sits on or above the diagonal — gamma_smc_cu matches
   or exceeds gamma_smc accuracy on all 14 configs.
 - **d** — speed parity scatter, log-log, with 1:1, 10×, 100× and 1000×
   reference lines. All points sit between the 10× and 1000× lines,
@@ -241,15 +241,15 @@ Panels:
 - **Accuracy is at parity or better.** Both implementations decode the
   same Gamma-SMC HMM from the same flow field. When both are handed
   data-driven scaled rates, they reach essentially the same posterior
-  (median Δ*r* = +0.002 across 14 configs; tmrca.cu matches or exceeds
+  (median Δ*r* = +0.002 across 14 configs; gamma_smc_cu matches or exceeds
   gamma_smc on 13/14 configs). The only config where gamma_smc
   marginally wins is BosTau (Δ*r* = −0.001).
 - **Speed scales with number of segregating sites, not with
-  demographic model.** tmrca.cu goes from 33 ms (HomSap, ~18 k sites)
+  demographic model.** gamma_smc_cu goes from 33 ms (HomSap, ~18 k sites)
   to 723 ms (DroMel, ~200 k sites), a ~22× slowdown for a ~11× site-
   count increase. gamma_smc wall time is dominated by a ~6–7 s fixed
   cost (VCF parse + flow-field load + per-bp iteration) plus a small
-  linear term in sites — its compute floor is ~190× the tmrca.cu floor.
+  linear term in sites — its compute floor is ~190× the gamma_smc_cu floor.
 - **The 132× headline speedup is conservative.** It is computed from
   end-to-end wall time, which includes gamma_smc's VCF + bgzip + zstd
   I/O overhead. The pure-compute speedup (hollow squares in panel b)
@@ -258,7 +258,7 @@ Panels:
   collapse on bottlenecked or non-human species: feeding the textbook
   `4·10000·μ` to either tool gives an *r* as low as 0.10 on AnoGam
   and 0.40 on CanFam. The default `auto_estimate_theta=True` in
-  `tmrca_cu.infer()` removes this pitfall. Pass
+  `gamma_smc_cu.infer()` removes this pitfall. Pass
   `auto_estimate_theta=False` to fall back to textbook-constants
   behavior for demographic misspecification studies.
 
@@ -280,14 +280,14 @@ theta estimators diverge by up to 2.3% on AnoGam because they handle
 non-binary genotypes differently, which inflates the apparent accuracy
 gap.
 
-**Theta estimation.** With filtered inputs, `tmrca_cu.infer()`'s
+**Theta estimation.** With filtered inputs, `gamma_smc_cu.infer()`'s
 per-individual heterozygosity estimator (`_estimate_scaled_params`)
 and gamma_smc's internal `calculate_heterozygosity()` agree to four
-decimal places (ratio = 1.0004 on AnoGam). Running tmrca.cu with
+decimal places (ratio = 1.0004 on AnoGam). Running gamma_smc_cu with
 gamma_smc's exact reported *π̂* produces identical accuracy, confirming
 theta estimation is not a source of divergence.
 
-**Numerical precision.** tmrca.cu runs the forward-backward recursion
+**Numerical precision.** gamma_smc_cu runs the forward-backward recursion
 in float32 on the GPU; gamma_smc uses float64 on the CPU. On
 low-site-count configs (HomSap, ~18 k sites), the precision difference
 is negligible (|Δ*r*| < 0.004). On high-site-count configs (AnoGam,

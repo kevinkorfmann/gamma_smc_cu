@@ -69,8 +69,8 @@ At genome-wide scale, the full 1000G pairwise scan across 22 autosomes
 ## Install
 
 ```bash
-git clone https://github.com/kevinkorfmann/tmrca.cu
-cd tmrca.cu
+git clone https://github.com/kevinkorfmann/gamma_smc_cu
+cd gamma_smc_cu
 pixi install && pixi run build
 ```
 

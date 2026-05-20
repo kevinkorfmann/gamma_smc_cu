@@ -1,18 +1,18 @@
-# tmrca.cu
+# gamma_smc_cu
 
 GPU-accelerated pairwise coalescence-time inference. A CUDA implementation of the
 Gamma-SMC HMM (Schweiger and Durbin, 2023) that decodes pairwise TMRCA at every
 segregating site for hundreds-of-thousands of pairs in a single GPU pass.
 
-tmrca.cu is **at parity with the reference gamma_smc binary on accuracy**
+gamma_smc_cu is **at parity with the reference gamma_smc binary on accuracy**
 across a [15-config stdpopsim cross-species benchmark](test_suite.md) while
 delivering **25×–190× end-to-end speedups**.
 
 ```python
-import tmrca_cu
+import gamma_smc_cu
 
-result = tmrca_cu.infer(ts)                              # from a tree sequence
-result = tmrca_cu.infer(G, positions, mu=1.25e-8)        # from a genotype matrix
+result = gamma_smc_cu.infer(ts)                              # from a tree sequence
+result = gamma_smc_cu.infer(G, positions, mu=1.25e-8)        # from a genotype matrix
 result["mean"]    # (n_sites, n_pairs) float32 — posterior mean TMRCA in generations
 result["pairs"]   # list of (i, j) haplotype index pairs
 ```
@@ -20,8 +20,8 @@ result["pairs"]   # list of (i, j) haplotype index pairs
 ## Install
 
 ```bash
-git clone https://github.com/kevinkorfmann/tmrca.cu
-cd tmrca.cu
+git clone https://github.com/kevinkorfmann/gamma_smc_cu
+cd gamma_smc_cu
 pixi install
 pixi run build
 ```
@@ -30,19 +30,19 @@ Requires an NVIDIA GPU with compute capability ≥ 8.0 (A40 / A100 / H100 / B200
 
 ## Run
 
-The one-line API is `tmrca_cu.infer(...)`. It accepts either a `tskit.TreeSequence`
+The one-line API is `gamma_smc_cu.infer(...)`. It accepts either a `tskit.TreeSequence`
 or a phased genotype matrix `G` of shape `(n_haplotypes, n_sites)` plus a 1D
 position array.
 
 ```python
 import numpy as np
-import tmrca_cu
+import gamma_smc_cu
 
 # Phased haplotypes: 0/1, shape (n_haps, n_sites), dtype uint8
 G = np.load("haps.npy").astype(np.uint8)
 positions = np.load("positions.npy").astype(np.float64)  # bp coordinates
 
-result = tmrca_cu.infer(
+result = gamma_smc_cu.infer(
     G, positions,
     mu=1.25e-8,         # per-site per-generation mutation rate
     rho=1e-8,           # per-site per-generation recombination rate
@@ -67,7 +67,7 @@ runs the same forward-backward in **padded site blocks** so peak GPU memory is
 bounded by one block instead of the full sequence × pairs forward buffer:
 
 ```python
-result = tmrca_cu.infer_blockwise(
+result = gamma_smc_cu.infer_blockwise(
     G, positions,
     pairs=pairs,
     # All defaults are auto-tuning friendly:
@@ -94,7 +94,7 @@ the auto-sizer chooses block dimensions from `cudaMemGetInfo`.
 - [Blockwise FB](blockwise.md) — how `infer_blockwise()` decomposes the site
   axis, why flanks are needed, the auto-sizer math, when to use it.
 - [stdpopsim test suite](test_suite.md) — cross-species benchmark of
-  `tmrca.cu` vs the reference `gamma_smc` binary, how to rerun it on a SLURM
+  `gamma_smc_cu` vs the reference `gamma_smc` binary, how to rerun it on a SLURM
   cluster, and the latest per-config results.
 - [API reference](api.md) — Python entry points and their parameters.
 

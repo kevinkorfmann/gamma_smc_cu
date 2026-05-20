@@ -20,8 +20,8 @@ Approximate end-to-end wall clock: **~1 day of cluster compute**
 ## Stage 0. Environment
 
 ```bash
-git clone https://github.com/kevinkorfmann/tmrca.cu
-cd tmrca.cu
+git clone https://github.com/kevinkorfmann/gamma_smc_cu
+cd gamma_smc_cu
 pixi install          # resolves conda env (~5 min on first run)
 pixi run build        # CUDA + pybind11 build (~3 min)
 pixi run pytest tests/statistical/  # 34 paper-stats unit tests, <1 s
@@ -381,8 +381,8 @@ pattern for any slice-based analysis. See
 
 **"Pipeline mentions `tmrca_cu` import"** — historical: the Python
 package was renamed to `gamma_smc_cu` on 2026-04-23. Re-`pixi install`
-should pick up the new package; old scripts in `legacy/` may still
-reference `tmrca_cu`.
+should pick up the new package; any local pre-rename scripts will need
+the import updated.
 
 **"Akbari coordinates don't match GRK2 gene body on GRCh38"** — make sure
 you've run `lift_akbari_positions.py` before `infer_akbari_windows.py`;
@@ -433,7 +433,7 @@ Tables and figures in the published manuscript are not annotated in-text with th
 - **Raw cascade sensitivity sweep**: `local_memory/prior_sweep_audit/cascade_sensitivity.csv`.
 
 ### Manuscript `si.tex` — Fig S1 / "Population-scale decoding speed"
-- **Raw timings CSV**: `benchmarks/pairwise_scaling/results.csv` (all three methods: tmrca.cu / gamma_smc / ASMC on chr22 YRI, 63,190 pairs).
+- **Raw timings CSV**: `benchmarks/pairwise_scaling/results.csv` (all three methods: gamma_smc_cu / gamma_smc / ASMC on chr22 YRI, 63,190 pairs).
 - Bench logs: `benchmarks/pairwise_scaling/final_bench_*.log`, `cpu_bench_*.log`.
 - Plot script: `benchmarks/pairwise_scaling/plot_benchmarks.py`.
 

@@ -1,7 +1,7 @@
 """Generate the docs example figures.
 
 Runs a small reproducible msprime simulation and shows what each of the
-three tmrca_cu.infer() modes produces:
+three gamma_smc_cu.infer() modes produces:
 
   examples_mean.png      -- mean_only=True
   examples_ci.png        -- mean_only=False
@@ -21,7 +21,7 @@ from matplotlib.colors import LogNorm
 from scipy.stats import gamma
 
 import msprime
-import tmrca_cu
+import gamma_smc_cu
 
 # Reproducibility / cosmetic constants. The 2 Mb / 8 samples panel gives
 # each pair ~3-4k segregating sites, which is enough for the per-site Gamma
@@ -221,21 +221,21 @@ def main():
     pairs = [PAIR]
 
     print("running infer(mean_only=True) ...", flush=True)
-    r1 = tmrca_cu.infer(
+    r1 = gamma_smc_cu.infer(
         G, positions, pairs=pairs, Ne=NE, mu=MUT_RATE, rho=RECOMB_RATE,
         flow_field_path=args.flow_field, mean_only=True,
     )
     plot_mean(out_dir, pos_mb, truth, r1["mean"][:, 0])
 
     print("running infer(mean_only=False) ...", flush=True)
-    r2 = tmrca_cu.infer(
+    r2 = gamma_smc_cu.infer(
         G, positions, pairs=pairs, Ne=NE, mu=MUT_RATE, rho=RECOMB_RATE,
         flow_field_path=args.flow_field, mean_only=False,
     )
     plot_ci(out_dir, pos_mb, truth, r2["mean"][:, 0], r2["lower"][:, 0], r2["upper"][:, 0])
 
     print("running infer(return_posterior=True) ...", flush=True)
-    r3 = tmrca_cu.infer(
+    r3 = gamma_smc_cu.infer(
         G, positions, pairs=pairs, Ne=NE, mu=MUT_RATE, rho=RECOMB_RATE,
         flow_field_path=args.flow_field, return_posterior=True,
     )

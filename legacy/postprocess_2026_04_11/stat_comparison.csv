@@ -1,6 +1,0 @@
-stat,n_genes,controls_found,below_10pct,below_5pct,below_1pct
-geom_mean,19119,14,8,8,7
-p5,19119,14,9,8,6
-p10,19119,14,8,8,6
-min,19119,14,11,10,3
-frac_below_1000,19119,14,9,9,7

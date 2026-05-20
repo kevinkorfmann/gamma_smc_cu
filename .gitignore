@@ -55,6 +55,10 @@ legacy/
 # Private local dir (manuscripts, plans, personal notes) — never pushed
 private/
 
+# Local-only working dirs (audits, scratch notes, downloaded supplements)
+local_memory/
+local_docs/
+
 # Local analysis data (downloaded VCFs, caches, results)
 # Keep top-level analysis scripts tracked, ignore data/cache/results subdirs.
 analysis/genome_wide/data/

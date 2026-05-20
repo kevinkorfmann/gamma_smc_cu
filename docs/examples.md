@@ -1,7 +1,7 @@
 # Examples
 
 End-to-end illustrations of the three output modes that
-{func}`tmrca_cu.infer` supports. The examples use a tiny reproducible
+{func}`gamma_smc_cu.infer` supports. The examples use a tiny reproducible
 msprime simulation (8 samples × 500 kb, seed 42) and decode a single
 pair so the figures stay readable. The full source for the figures lives
 at `docs/_scripts/make_examples.py`.
@@ -11,7 +11,7 @@ at `docs/_scripts/make_examples.py`.
 ```python
 import numpy as np
 import msprime
-import tmrca_cu
+import gamma_smc_cu
 
 NE        = 10_000.0
 MUT_RATE  = 1.25e-8
@@ -35,7 +35,7 @@ The default. Returns the per-site posterior mean TMRCA in generations,
 nothing else. Cheapest in both wall time and output size.
 
 ```python
-result = tmrca_cu.infer(
+result = gamma_smc_cu.infer(
     G, positions,
     pairs=[PAIR],
     Ne=NE, mu=MUT_RATE, rho=RECOMB,
@@ -57,7 +57,7 @@ writes three arrays per site instead of one, and the host-side memcpy
 moves 3× the bytes.
 
 ```python
-result = tmrca_cu.infer(
+result = gamma_smc_cu.infer(
     G, positions,
     pairs=[PAIR],
     Ne=NE, mu=MUT_RATE, rho=RECOMB,
@@ -89,7 +89,7 @@ or anything else `scipy.stats.gamma` supports.
 ```python
 from scipy.stats import gamma
 
-result = tmrca_cu.infer(
+result = gamma_smc_cu.infer(
     G, positions,
     pairs=[PAIR],
     Ne=NE, mu=MUT_RATE, rho=RECOMB,
@@ -153,7 +153,7 @@ chromosome.
 | Cohort-scale, output bytes are precious                            | `mean_only=True` (or use [`infer_blockwise()`](blockwise.md)) |
 
 `return_posterior=True` is also available on
-{func}`tmrca_cu.infer_blockwise`, but in v1 only with `max_streams=1`
+{func}`gamma_smc_cu.infer_blockwise`, but in v1 only with `max_streams=1`
 (see [Blockwise FB](blockwise.md) for the reason).
 
 ## Reproducing these figures
