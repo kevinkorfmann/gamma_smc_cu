@@ -128,3 +128,9 @@ analysis/relate_clues/neutral_picks.csv
 notebooks/
 
 docs_local/
+
+# claude-mem memory-context export — internal session notes, not for public repo
+AGENTS.md
+
+# Bulk per-population iHS / window archives (1+ GB) — too large for GitHub
+analysis/jv18_genomewide/

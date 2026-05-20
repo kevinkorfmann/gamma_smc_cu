@@ -1,0 +1,11 @@
+{
+  "gene": "TREM2",
+  "pop": "IBS",
+  "n_sites_aligned": 6596,
+  "r_gscu_asmc": 0.9284676642779389,
+  "r_gscu_cxt": 0.9308412646971822,
+  "r_asmc_cxt": 0.8978511073543209,
+  "p_gscu_asmc": 0.0,
+  "p_gscu_cxt": 0.0,
+  "p_asmc_cxt": 0.0
+}

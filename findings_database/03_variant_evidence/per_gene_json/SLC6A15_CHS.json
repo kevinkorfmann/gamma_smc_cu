@@ -1,0 +1,21 @@
+{
+  "gene": "SLC6A15",
+  "chr": 12,
+  "pop": "CHS",
+  "super": "EAS",
+  "midpoint": 84886560,
+  "gstart": 84859491,
+  "gend": 84913629,
+  "win_lo": 84386560,
+  "win_hi": 85386560,
+  "n_variants": 22022,
+  "n_enriched": 3540,
+  "n_depleted": 18482,
+  "depleted_to_enriched_ratio": 5.22090395480226,
+  "max_fst": 0.6037037601748726,
+  "mean_top10_fst": 0.5492551739470732,
+  "most_diff_variant_pos": 84849501,
+  "most_diff_variant_focal_af": 0.006134969325153374,
+  "most_diff_variant_other_af": 0.6146350783339702,
+  "most_diff_variant_diff": -0.6085001090088169
+}

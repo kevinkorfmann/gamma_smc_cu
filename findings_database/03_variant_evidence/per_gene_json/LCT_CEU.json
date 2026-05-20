@@ -1,0 +1,21 @@
+{
+  "gene": "LCT",
+  "chr": 2,
+  "pop": "CEU",
+  "super": "EUR",
+  "midpoint": 135812517,
+  "gstart": 135787850,
+  "gend": 135837184,
+  "win_lo": 135312517,
+  "win_hi": 136312517,
+  "n_variants": 20957,
+  "n_enriched": 1538,
+  "n_depleted": 19419,
+  "depleted_to_enriched_ratio": 12.626137841352406,
+  "max_fst": 0.6387265806877875,
+  "mean_top10_fst": 0.6212106723542398,
+  "most_diff_variant_pos": 135860235,
+  "most_diff_variant_focal_af": 0.7932960893854749,
+  "most_diff_variant_other_af": 0.11093810821331257,
+  "most_diff_variant_diff": 0.6823579811721623
+}

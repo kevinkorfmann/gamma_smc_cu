@@ -1,0 +1,21 @@
+{
+  "gene": "IFIH1",
+  "chr": 2,
+  "pop": "IBS",
+  "super": "EUR",
+  "midpoint": 162292879,
+  "gstart": 162267074,
+  "gend": 162318684,
+  "win_lo": 161792879,
+  "win_hi": 162792879,
+  "n_variants": 20318,
+  "n_enriched": 2131,
+  "n_depleted": 18187,
+  "depleted_to_enriched_ratio": 8.534490849366495,
+  "max_fst": 0.5126984386185723,
+  "mean_top10_fst": 0.4084974772568938,
+  "most_diff_variant_pos": 162482016,
+  "most_diff_variant_focal_af": 0.7866242038216561,
+  "most_diff_variant_other_af": 0.1989100817438692,
+  "most_diff_variant_diff": 0.5877141220777868
+}

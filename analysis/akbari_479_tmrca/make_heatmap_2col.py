@@ -184,11 +184,8 @@ def plot():
         cbar.ax.yaxis.set_ticks(mn, minor=True)
     cbar.set_label("TMRCA (kyr)", fontsize=7, labelpad=4)
 
-    fig.suptitle(
-        f"gamma_smc_cu coalescent dates at {n_total} Akbari 2026 lead variants "
-        f"(\u00b125 kb), split left-right by ascending min TMRCA",
-        fontsize=9.5, x=0.03, y=0.99, ha="left", va="top", fontweight="normal",
-    )
+    # Top-line suptitle removed (small/illegible per reviewer; manuscript caption carries the
+    # same information at full size).
 
     png = os.path.join(BASE, f"figure_heatmap_{N_COLS}col.png")
     pdf = os.path.join(BASE, f"figure_heatmap_{N_COLS}col.pdf")

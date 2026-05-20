@@ -1,0 +1,6 @@
+# Genome-wide TMRCA scan — top-line constants used in the manuscript
+protein_coding_genes_total	19119
+sd_flagged_genes	1296
+sd_flagged_pct	6.7786
+populations_total	26
+superpopulations	AFR,EUR,EAS,SAS,AMR

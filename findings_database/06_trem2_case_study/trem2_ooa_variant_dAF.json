@@ -1,0 +1,23 @@
+{
+  "chrom": 6,
+  "pos": 41166068,
+  "position": 41166068,
+  "ref": "G",
+  "alt": "A",
+  "ancestral_allele": "A",
+  "derived_allele": "G",
+  "af_ancestral_A_afr": 0.9311,
+  "af_ancestral_A_non_afr": 0.4794,
+  "af_derived_G_afr": 0.0689,
+  "af_derived_G_non_afr": 0.5206,
+  "af_afr": 0.0689,
+  "af_non_afr": 0.5206,
+  "af_AFR": 0.0689,
+  "af_nonAFR": 0.5206,
+  "delta_af": 0.4517,
+  "n_afr_haps": 1786,
+  "n_non_afr_haps": 4618,
+  "n_afr_samples": 893,
+  "n_non_afr_samples": 2309,
+  "_polarity_note": "Per Ensembl, A is ancestral and G is derived at rs7748777 (chr6:41166068, GRCh38). af_afr/af_non_afr now refer to the DERIVED G allele frequency; the explicit af_ancestral_*/af_derived_* fields are also exposed for unambiguous downstream use. delta_af is |freq_derived_non_afr - freq_derived_afr| = 0.4517 (matches manuscript |ΔAF|=0.45)."
+}

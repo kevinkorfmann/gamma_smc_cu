@@ -1,0 +1,37 @@
+{
+  "focal_chr": "chr6",
+  "focal_pos": 41470132,
+  "focal_allele_ref": "C",
+  "focal_allele_alt": "T",
+  "sweep_allele": "ALT",
+  "window_bp": 25000,
+  "distances": {
+    "IBS_IBS": 0.03033941556910588,
+    "JPT_JPT": 0.038179710312222,
+    "IBS_JPT": 0.037266437985696656,
+    "IBS_nonIBS": 0.030424877741732435,
+    "IBS_nonAFR": 0.04251977920883165
+  },
+  "ratios_point": {
+    "IBS_JPT": 1.2283175956640526,
+    "IBS_nonIBS": 1.0028168694427186,
+    "IBS_nonAFR": 1.4014699496099994
+  },
+  "bootstrap_95ci": {
+    "r_IBS_JPT_mean": 1.235672951932016,
+    "r_IBS_JPT_ci_low": 1.172933066110987,
+    "r_IBS_JPT_ci_high": 1.301038634293889,
+    "r_IBS_nonIBS_mean": 1.0083075718960672,
+    "r_IBS_nonIBS_ci_low": 0.9516389692904833,
+    "r_IBS_nonIBS_ci_high": 1.062655876978055,
+    "r_IBS_nonAFR_mean": 1.413653796536558,
+    "r_IBS_nonAFR_ci_low": 1.3462371809868519,
+    "r_IBS_nonAFR_ci_high": 1.4884496132405893
+  },
+  "n_bootstrap": 500,
+  "sweep_freq_by_pop": {
+    "IBS": 0.8184713375796179,
+    "JPT": 0.9567307692307693
+  },
+  "note": "FOCAL_POS = most-differentiated variant from variant_evidence/TREM2_IBS.json"
+}

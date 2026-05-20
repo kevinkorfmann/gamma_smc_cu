@@ -1,0 +1,21 @@
+{
+  "gene": "KITLG",
+  "chr": 12,
+  "pop": "MXL",
+  "super": "AMR",
+  "midpoint": 88536822,
+  "gstart": 88492793,
+  "gend": 88580851,
+  "win_lo": 88036822,
+  "win_hi": 89036822,
+  "n_variants": 19476,
+  "n_enriched": 1956,
+  "n_depleted": 17520,
+  "depleted_to_enriched_ratio": 8.957055214723926,
+  "max_fst": 0.30209309587282857,
+  "mean_top10_fst": 0.2670493946687794,
+  "most_diff_variant_pos": 88561692,
+  "most_diff_variant_focal_af": 0.9020618556701031,
+  "most_diff_variant_other_af": 0.5186209439528023,
+  "most_diff_variant_diff": 0.38344091171730077
+}

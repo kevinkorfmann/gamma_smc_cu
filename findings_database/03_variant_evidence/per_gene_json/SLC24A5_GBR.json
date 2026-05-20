@@ -1,0 +1,21 @@
+{
+  "gene": "SLC24A5",
+  "chr": 15,
+  "pop": "GBR",
+  "super": "EUR",
+  "midpoint": 48131831,
+  "gstart": 48120990,
+  "gend": 48142672,
+  "win_lo": 47631831,
+  "win_hi": 48631831,
+  "n_variants": 20966,
+  "n_enriched": 1867,
+  "n_depleted": 19099,
+  "depleted_to_enriched_ratio": 10.229780396357793,
+  "max_fst": 0.7060541171890209,
+  "mean_top10_fst": 0.5988462323960327,
+  "most_diff_variant_pos": 48193729,
+  "most_diff_variant_focal_af": 1.0,
+  "most_diff_variant_other_af": 0.29388867263526663,
+  "most_diff_variant_diff": 0.7061113273647334
+}

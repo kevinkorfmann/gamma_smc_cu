@@ -1,0 +1,21 @@
+{
+  "gene": "CCDC92",
+  "chr": 12,
+  "pop": "CDX",
+  "super": "EAS",
+  "midpoint": 123945745,
+  "gstart": 123918660,
+  "gend": 123972831,
+  "win_lo": 123445745,
+  "win_hi": 124445745,
+  "n_variants": 25949,
+  "n_enriched": 3483,
+  "n_depleted": 22466,
+  "depleted_to_enriched_ratio": 6.450186620729256,
+  "max_fst": 0.5347715990140983,
+  "mean_top10_fst": 0.4846837512939963,
+  "most_diff_variant_pos": 123959862,
+  "most_diff_variant_focal_af": 0.9247311827956989,
+  "most_diff_variant_other_af": 0.3419946503630111,
+  "most_diff_variant_diff": 0.5827365324326879
+}

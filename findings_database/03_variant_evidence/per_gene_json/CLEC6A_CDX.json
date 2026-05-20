@@ -1,0 +1,21 @@
+{
+  "gene": "CLEC6A",
+  "chr": 12,
+  "pop": "CDX",
+  "super": "EAS",
+  "midpoint": 8467146,
+  "gstart": 8455962,
+  "gend": 8478330,
+  "win_lo": 7967146,
+  "win_hi": 8967146,
+  "n_variants": 28105,
+  "n_enriched": 4090,
+  "n_depleted": 24015,
+  "depleted_to_enriched_ratio": 5.871638141809291,
+  "max_fst": 0.4572902732658131,
+  "mean_top10_fst": 0.39339012396359,
+  "most_diff_variant_pos": 8271038,
+  "most_diff_variant_focal_af": 0.24731182795698925,
+  "most_diff_variant_other_af": 0.7413068398930073,
+  "most_diff_variant_diff": -0.493995011936018
+}

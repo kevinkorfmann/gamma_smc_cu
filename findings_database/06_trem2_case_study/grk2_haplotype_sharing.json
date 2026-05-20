@@ -1,0 +1,50 @@
+{
+  "focal_chr": "chr11",
+  "focal_pos": 67407126,
+  "window_bp": 25000,
+  "n_snvs_in_window": 1067,
+  "ref": "G",
+  "alt": "A",
+  "sweep_allele": "REF",
+  "sweep_allele_freq": {
+    "SAS": 0.9509151414309485,
+    "EUR": 0.9186413902053713,
+    "AFR": 0.16517357222844345,
+    "EAS": 0.6256410256410256,
+    "AMR": 0.5795918367346938
+  },
+  "distances": {
+    "SAS_SAS": 0.0035602096706588236,
+    "EUR_EUR": 0.0046934767558504805,
+    "AFR_AFR": 0.004930086232474463,
+    "SAS_EUR": 0.004279803186504217,
+    "SAS_AFR": 0.0043311621368322395,
+    "EUR_AFR": 0.0049584817244611055,
+    "SAS_nonSAS": 0.03162192429272632,
+    "EUR_nonEUR": 0.034411606809765155,
+    "SAS_nonAFR": 0.034648500468603564
+  },
+  "ratios_point": {
+    "SAS_EUR_over_SAS": 1.2021211058932468,
+    "SAS_nonSAS_over_SAS": 8.882039884711235,
+    "SAS_nonAFR_over_SAS": 9.732151663469807
+  },
+  "bootstrap_95ci": {
+    "r_SAS_EUR_over_SAS_mean": 1.2184277702907536,
+    "r_SAS_EUR_over_SAS_ci_low": 1.106286333170116,
+    "r_SAS_EUR_over_SAS_ci_high": 1.3520999948720487,
+    "r_SAS_nonSAS_over_SAS_mean": 8.645925631032936,
+    "r_SAS_nonSAS_over_SAS_ci_low": 7.410426414620598,
+    "r_SAS_nonSAS_over_SAS_ci_high": 10.032734228681395,
+    "r_SAS_nonAFR_over_SAS_mean": 9.412724272679238,
+    "r_SAS_nonAFR_over_SAS_ci_low": 8.237159759741957,
+    "r_SAS_nonAFR_over_SAS_ci_high": 10.631220625873308
+  },
+  "n_bootstrap": 500,
+  "amr_per_pop_sweep_freq": {
+    "PUR": 0.7086330935251799,
+    "CLM": 0.678030303030303,
+    "MXL": 0.6134020618556701,
+    "PEL": 0.29918032786885246
+  }
+}

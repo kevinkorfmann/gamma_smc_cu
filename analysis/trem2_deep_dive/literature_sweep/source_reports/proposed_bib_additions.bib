@@ -1,0 +1,323 @@
+% =====================================================================
+% Proposed bibtex additions for table_s_prior_scans.tex (TREM2 audit)
+%
+% Generated: 2026-04-27 from
+%   analysis/trem2_deep_dive/literature_sweep/ROUND_7_DEEP_AUDIT.md
+%   analysis/trem2_deep_dive/literature_sweep/FINDINGS.md
+%
+% IMPORTANT
+% =========
+% Every entry below is DRAFT. Author + year + journal are extracted from
+% the audit text; DOIs, volume/issue/pages, and exact titles need user
+% verification before merging into private/manuscript/v5/references.bib.
+% Lines tagged "USER VERIFY" in comments mark fields I cannot confirm
+% from the audit alone. Do not run bibtex against this file as-is.
+% =====================================================================
+
+% ---- Row 17 — HaploSweep ----------------------------------------------
+% Audit text: "HaploSweep (Zhang et al. 2024, MBE)"
+% Existing bib has Zhang2023 — DIFFERENT paper.
+@article{Zhang2024haplosweep,
+  author  = {Zhang, ...},                          % USER VERIFY: full author list
+  title   = {HaploSweep: detecting hard and soft sweeps from haplotype structure},  % USER VERIFY exact title
+  journal = {Molecular Biology and Evolution},
+  year    = {2024},
+  doi     = {USER VERIFY},
+  note    = {Audit applied to CHB/CEU/YRI 1000G; 299/344/629 soft + 281/199/152 hard sweeps; no TREM2}
+}
+
+% ---- Row 18 — Flex-Sweep ----------------------------------------------
+% Audit text: "Flex-Sweep (Lauterbur et al. 2023, Mol Biol Evol)"
+@article{Lauterbur2023,
+  author  = {Lauterbur, M.~Elise and others},     % USER VERIFY co-authors
+  title   = {Flex-sweep: a flexible CNN-based method for detecting selective sweeps},  % USER VERIFY title
+  journal = {Molecular Biology and Evolution},
+  year    = {2023},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 19 — SIA ------------------------------------------------------
+% Audit text: "SIA (Hejase, Mo, Campagna, Siepel 2022, MBE)"
+@article{Hejase2022sia,
+  author  = {Hejase, Hussein A. and Mo, Ziyi and Campagna, Leonardo and Siepel, Adam},
+  title   = {A deep-learning approach for inference of selective sweeps from the ancestral recombination graph},  % USER VERIFY exact title
+  journal = {Molecular Biology and Evolution},
+  year    = {2022},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 20 — GRoSS ----------------------------------------------------
+% Audit text: "GRoSS (Refoyo-Martínez et al. 2019, Genome Res)"
+@article{RefoyoMartinez2019,
+  author  = {Refoyo-Mart{\'\i}nez, Alba and others},
+  title   = {Identifying loci under positive natural selection in closely related populations},  % USER VERIFY
+  journal = {Genome Research},
+  year    = {2019},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 21 — iSAFE ----------------------------------------------------
+% Audit text: "iSAFE (Akbari, Vitti, Sabeti et al. 2018, Nat Methods)"
+% NB: this Akbari is Ali Akbari — different person from the 2026 aDNA paper.
+@article{Akbari2018isafe,
+  author  = {Akbari, Ali and Vitti, Joseph J. and ... and Sabeti, Pardis C.},  % USER VERIFY
+  title   = {Identifying the favored mutation in a positive selective sweep},  % USER VERIFY
+  journal = {Nature Methods},
+  year    = {2018},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 22 — FineMAV --------------------------------------------------
+% Audit doc text says "Kozlowski 2022 BMC Bioinform"; FineMAV original is
+% Szpak et al. 2018 *Genome Biology*. ⚠️ FLAGGED — user must clarify which
+% paper row 22 refers to before this entry goes in.
+@article{FineMAV_FLAGGED,
+  note = {USER MUST RESOLVE: original FineMAV is Szpak et al. 2018 Genome Biol;
+          audit cites a 2022 BMC Bioinform paper. Two distinct works.}
+}
+
+% ---- Row 23 — Wu et al. Sci Bull ---------------------------------------
+% Audit: "Wu et al. 2023, Recent positive selection signatures reveal
+%         phenotypic evolution in the Han Chinese population, Sci Bull"
+@article{Wu2023scibull,
+  author  = {Wu, ...},                            % USER VERIFY
+  title   = {Recent positive selection signatures reveal phenotypic evolution in the Han Chinese population},
+  journal = {Science Bulletin},
+  year    = {2023},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 24 — Pybus 1000G Selection Browser ----------------------------
+% Audit: "Pybus et al. 2014 1000 Genomes Selection Browser"
+@article{Pybus2014,
+  author  = {Pybus, Marc and others},             % USER VERIFY
+  title   = {1000 {G}enomes {S}election {B}rowser 1.0},  % USER VERIFY
+  journal = {Nucleic Acids Research},             % USER VERIFY
+  year    = {2014},
+  doi     = {USER VERIFY},
+  note    = {Browser dead R7 (hsb.upf.edu offline); paper still citable}
+}
+
+% ---- Row 27 — Quintana-Murci 2020 Hum Genet ----------------------------
+@article{QuintanaMurci2020,
+  author  = {Quintana-Murci, Lluis},
+  title   = {Evolutionary and Population (Epi)Genetics of Immunity to Infection},  % USER VERIFY
+  journal = {Human Genetics},
+  year    = {2020},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 28 — Quach / Barreiro 2016 Cell -------------------------------
+@article{Quach2016,
+  author  = {Quach, H{\'e}l{\`e}ne and others},
+  title   = {Genetic Adaptation and Neandertal Admixture Shaped the Immune System of Human Populations},  % USER VERIFY
+  journal = {Cell},
+  year    = {2016},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 29 — Deschamps 2016 Cell --------------------------------------
+@article{Deschamps2016,
+  author  = {Deschamps, Matthieu and others},
+  title   = {Genetic Ancestry and Natural Selection Drive Population Differences in Immune Responses to Pathogens},  % USER VERIFY
+  journal = {Cell},                               % USER VERIFY (audit says Cell; could be AJHG)
+  year    = {2016},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 30 — Barreiro & Quintana-Murci 2010 NRG -----------------------
+% Existing BarreiroQuach2008 is a different paper (do NOT reuse).
+@article{Barreiro2010,
+  author  = {Barreiro, Luis B. and Quintana-Murci, Lluis},
+  title   = {From evolutionary genetics to human immunology: how selection shapes host defence genes},  % USER VERIFY
+  journal = {Nature Reviews Genetics},
+  year    = {2010},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 31 — Bentham 2025 MBE -----------------------------------------
+@article{Bentham2025,
+  author  = {Bentham, ...},                       % USER VERIFY
+  title   = {Positive Selection on Mammalian Immune Genes},  % USER VERIFY exact title
+  journal = {Molecular Biology and Evolution},
+  year    = {2025},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 32 — Annu Rev Immunol aDNA 2024 -------------------------------
+% ⚠️ FLAGGED — author/title not pinned in audit doc. User must identify.
+@article{AnnuRevImmunol2024_FLAGGED,
+  note = {USER MUST IDENTIFY: a 2024 Annual Review of Immunology piece
+          on aDNA tracing of human immunity. No first author, exact title,
+          or DOI in the audit doc.}
+}
+
+% ---- Row 33 — Fumagalli & Sironi 2014 Trends Genet ---------------------
+% NB: existing Fumagalli2015 is a different Fumagalli paper.
+@article{FumagalliSironi2014,
+  author  = {Fumagalli, Matteo and Sironi, Manuela},
+  title   = {Human genome variability, natural selection and infectious diseases},  % USER VERIFY
+  journal = {Trends in Genetics},
+  year    = {2014},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 34 — AGVP Gurdasani 2015 Nature -------------------------------
+@article{Gurdasani2015,
+  author  = {Gurdasani, Deepti and others},
+  title   = {The {A}frican {G}enome {V}ariation {P}roject shapes medical genetics in {A}frica},
+  journal = {Nature},
+  year    = {2015},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 35 — Choudhury 2020 Nature ------------------------------------
+@article{Choudhury2020,
+  author  = {Choudhury, Ananyo and others},
+  title   = {High-depth African genomes inform human migration and health},  % USER VERIFY
+  journal = {Nature},
+  year    = {2020},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 36 — Lindo 2018 Sci Adv ---------------------------------------
+@article{Lindo2018,
+  author  = {Lindo, John and others},
+  title   = {The genetic prehistory of the {A}ndean highlands},  % USER VERIFY
+  journal = {Science Advances},
+  year    = {2018},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 37 — Harris 2023 PNAS Bolivia ---------------------------------
+% ⚠️ FLAGGED — bib has Harris2016 (different paper). User confirm Harris 2023
+% PNAS Bolivia paper.
+@article{Harris2023bolivia_FLAGGED,
+  note = {USER VERIFY: a 2023 PNAS paper on Bolivian adaptive evolution.
+          Audit cites it but does not give first-author initials or DOI.}
+}
+
+% ---- Row 38 — Vernot & Akey -------------------------------------------
+% ⚠️ Two papers (2014 Science, 2016 Science). User pick.
+@article{VernotAkey2014_FLAGGED,
+  note = {USER PICK: Vernot & Akey 2014 Science (resurrecting Neandertal lineages)
+          OR Vernot et al. 2016 Science (excavating Neandertal/Denisovan DNA from Melanesian genomes).
+          Audit cites "2014/2016" without disambiguating.}
+}
+
+% ---- Row 39 — Racimo --------------------------------------------------
+% ⚠️ Two candidates (Racimo 2017 Genetics genome-wide adaptive intro, or
+%    Racimo et al. 2018). User pick.
+@article{Racimo_FLAGGED,
+  note = {USER PICK: Racimo 2017 Genetics OR Racimo et al. 2018.
+          Audit text "Racimo 2017/2018" insufficient.}
+}
+
+% ---- Row 40 — Browning Sprime 2018 ------------------------------------
+@article{Browning2018sprime,
+  author  = {Browning, Sharon R. and Browning, Brian L. and Zhou, Ying and Tucci, Serena and Akey, Joshua M.},  % USER VERIFY
+  title   = {Analysis of human sequence data reveals two pulses of archaic {D}enisovan admixture},  % USER VERIFY
+  journal = {Cell},
+  year    = {2018},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 41 — Skov 2020 Iceland ---------------------------------------
+@article{Skov2020,
+  author  = {Skov, Laurits and others},
+  title   = {The nature of {N}eanderthal introgression revealed by 27,566 {I}celandic genomes},  % USER VERIFY
+  journal = {Nature},
+  year    = {2020},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 42 — Villanea 2025 -------------------------------------------
+% ⚠️ FLAGGED — preprint or published? User pin venue/DOI.
+@article{Villanea2025_FLAGGED,
+  note = {USER VERIFY: Villanea introgression-map comparison 2025.
+          Venue, exact title, and DOI not in audit doc.}
+}
+
+% ---- Row 46 — FASTER-NN -----------------------------------------------
+% Audit gives DOI directly: 10.1038/s42003-025-07480-7
+@article{vandenBelt2025,
+  author  = {van den Belt, ... and Alachiotis, Nikolaos},
+  title   = {FASTER-NN: a CNN-based method for detecting selective sweeps},  % USER VERIFY exact title
+  journal = {Communications Biology},
+  year    = {2025},
+  doi     = {10.1038/s42003-025-07480-7}
+}
+
+% ---- Row 47 — Salazar-Tortosa 2023 GBE --------------------------------
+% Audit gives GitHub repo dtortosa/Mixture_Density_Regression_pipeline
+@article{SalazarTortosa2023,
+  author  = {Salazar-Tortosa, Diego and others},
+  title   = {Mixture-density regression for population-scale {iHS} analysis},  % USER VERIFY
+  journal = {Genome Biology and Evolution},
+  year    = {2023},
+  doi     = {USER VERIFY}
+}
+
+% ---- Row 48 — Colbran 2026 bioRxiv ------------------------------------
+% ⚠️ Audit doc gives DOI prefix 10.64898 — NOT a valid bioRxiv DOI prefix.
+% Real bioRxiv DOIs are 10.1101/YYYY.MM.DD.NNNNNN. User must verify.
+@article{Colbran2026_FLAGGED,
+  note = {USER VERIFY DOI: audit cites 10.64898/2026.01.07.697984 — but bioRxiv
+          uses 10.1101 prefix. Likely a typo in audit doc.
+          Try DOI 10.1101/2026.01.07.697984 instead.},
+  author  = {Colbran, Laura L. and Terhorst, Jonathan and Mathieson, Iain},
+  title   = {Global patterns of natural selection inferred using ancient DNA},
+  journal = {bioRxiv},
+  year    = {2026}
+}
+
+% ---- Row 49 — Barton/Akbari "Convergent" 2026 bioRxiv -----------------
+% Same DOI-prefix issue as #48.
+@article{Barton2026convergent_FLAGGED,
+  note = {USER VERIFY DOI: 10.64898/2026.04.03.716344 in audit; suspect 10.1101 prefix.},
+  author  = {Barton, ... and Akbari, Ali and others},
+  title   = {Convergent natural selection at both ends of {E}urasia},
+  journal = {bioRxiv},
+  year    = {2026}
+}
+
+% ---- Row 52 — dbPSHP HKU 2014 NAR DB ----------------------------------
+@article{Li2014dbpshp,
+  author  = {Li, ... J.J. Wang},                   % USER VERIFY
+  title   = {db{PSHP}: a database of recent positive selection across human populations},
+  journal = {Nucleic Acids Research},
+  year    = {2014},
+  doi     = {USER VERIFY},
+  note    = {Database decommissioned ~2018-2020}
+}
+
+% ---- Row 53 — Sims 2017 Nat Genet AD-GWAS -----------------------------
+@article{Sims2017,
+  author  = {Sims, Rebecca and others},
+  title   = {Rare coding variants in {PLCG2}, {ABI3}, and {TREM2} implicate microglial-mediated innate immunity in {A}lzheimer's disease},
+  journal = {Nature Genetics},
+  year    = {2017},
+  doi     = {10.1038/ng.3916},                    % USER VERIFY (PMID 28714976)
+  pmid    = {28714976}
+}
+
+% ---- Row 54 — Bellenguez 2022 Nat Genet AD-GWAS -----------------------
+@article{Bellenguez2022,
+  author  = {Bellenguez, C{\'e}line and others},
+  title   = {New insights into the genetic etiology of {A}lzheimer's disease and related dementias},
+  journal = {Nature Genetics},
+  year    = {2022},
+  doi     = {10.1038/s41588-022-01024-z},          % USER VERIFY (PMID 35379992)
+  pmid    = {35379992}
+}
+
+% ---- Row 56 — Carrasquillo 2017 J Hum Genet ---------------------------
+% Currently mis-cited as Guerreiro2013 in the table. User must
+% (a) drop the cite, or (b) add this entry and replace the cite.
+@article{Carrasquillo2017,
+  author  = {Carrasquillo, Minerva M. and others},
+  title   = {{TREM2} and {TREML1} regulatory variant rs9357347-{C} in {AD} risk and brain expression},  % USER VERIFY exact title
+  journal = {Journal of Human Genetics},          % USER VERIFY (audit says J Hum Genet)
+  year    = {2017},
+  doi     = {USER VERIFY}
+}
