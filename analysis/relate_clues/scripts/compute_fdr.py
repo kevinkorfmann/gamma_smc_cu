@@ -12,7 +12,7 @@ import pandas as pd
 from scipy import stats
 from math import comb
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 RANKS = f"{REPO}/analysis/genome_wide/results/genome_wide_ranks.csv"
 SD_FLAG = f"{REPO}/analysis/genome_wide/postprocess/genes_sd_flag.csv"
 

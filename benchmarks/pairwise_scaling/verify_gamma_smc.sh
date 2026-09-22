@@ -8,7 +8,7 @@
 
 set -uo pipefail
 
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 export PATH="$(pwd)/.pixi/envs/default/bin:${PATH}"
 export LD_LIBRARY_PATH="$(pwd)/.pixi/envs/default/lib:${LD_LIBRARY_PATH:-}"
 

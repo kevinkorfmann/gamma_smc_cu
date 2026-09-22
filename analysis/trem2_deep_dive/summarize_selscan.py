@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import pandas as pd
 
-DIR = "/Users/kevinkorfmann/Projects/tmrca.cu/analysis/orthogonal_v41/selscan_genelevel"
+DIR = "/Users/kevinkorfmann/Projects/tmrca.cu/gamma_smc_cu/analysis/orthogonal_v41/selscan_genelevel"
 
 POPS = ["ACB","ASW","ESN","GWD","LWK","MSL","YRI",
         "CEU","FIN","GBR","IBS","TSI",

@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 RANKS = Path(__file__).resolve().parents[2] / "analysis/genome_wide/results/genome_wide_ranks.csv"
-VCF = Path(__file__).resolve().parents[2] / "research/manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
+VCF = Path(__file__).resolve().parents[2] / "../manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
 PANEL_SAMPLES = {
     # 1KG NYGC high-coverage IDs from the v5 trem2 dive script for IBS,
     # plus we'll build others from allele-frequency panel info parsed from VCF.

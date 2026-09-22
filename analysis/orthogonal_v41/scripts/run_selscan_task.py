@@ -24,7 +24,7 @@ import time
 
 import numpy as np
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 DATA_DIR = os.path.join(REPO, "analysis/genome_wide")
 PARSED_DIR = os.path.join(DATA_DIR, "cache/parsed")
 SAMPLES_PATH = os.path.join(DATA_DIR, "data/samples.txt")

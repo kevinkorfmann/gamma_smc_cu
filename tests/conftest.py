@@ -5,7 +5,7 @@ These tests are skipped on any machine that isn't betty. Run on betty
 with:
 
     ssh betty
-    cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+    cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
     pixi run pytest tests/betty/ -v
 
 To override the skip (e.g., to run locally with your own cache path):
@@ -21,9 +21,9 @@ from pathlib import Path
 import pytest
 
 
-DEFAULT_CACHE = Path("/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide/cache/parsed")
-DEFAULT_RESULTS = Path("/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide/results")
-DEFAULT_SAMPLES = Path("/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide/data/samples.txt")
+DEFAULT_CACHE = Path("/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/genome_wide/cache/parsed")
+DEFAULT_RESULTS = Path("/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/genome_wide/results")
+DEFAULT_SAMPLES = Path("/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/genome_wide/data/samples.txt")
 
 
 def _path_or_skip(env: str, default: Path, kind: str) -> Path:

@@ -6,15 +6,15 @@
 #SBATCH --mem=16G
 #SBATCH --time=0:30:00
 #SBATCH --requeue
-#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/benchmarks/test_suite_stdpopsim/logs/config_%a_%j.log
+#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/benchmarks/test_suite_stdpopsim/logs/config_%a_%j.log
 # Submit as (from repo root):
 #   N=$(python -c 'import json; print(len(json.load(open("benchmarks/test_suite_stdpopsim/configs.json"))))')
 #   sbatch --array=0-$((N-1))%8 benchmarks/test_suite_stdpopsim/slurm_array.sh
 
 set -euo pipefail
 
-BASE=/vast/projects/smathi/cohort/kkor/tmrca.cu/benchmarks/test_suite_stdpopsim
-PIXI_ENV=/vast/projects/smathi/cohort/kkor/tmrca.cu/.pixi/envs/default
+BASE=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/benchmarks/test_suite_stdpopsim
+PIXI_ENV=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/.pixi/envs/default
 PYTHON=${PIXI_ENV}/bin/python3.12
 
 # bgzip, tabix, zstd live inside the pixi env; make sure they're on PATH

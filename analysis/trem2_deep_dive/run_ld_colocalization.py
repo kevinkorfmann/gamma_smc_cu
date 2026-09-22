@@ -2,7 +2,7 @@
 """Compute LD (r^2, D') in IBS between our sweep peak and FOXP4 GWAS/eQTL lead.
 
 Inputs (local, already present):
-  - research/manuscript/v5/figures/data/trem2_pm500kb.vcf.gz (1KG NYGC chr6)
+  - ../manuscript/v5/figures/data/trem2_pm500kb.vcf.gz (1KG NYGC chr6)
   - Hard-coded IBS sample IDs from the existing v5 fig script
 
 Focal variants:
@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 
-VCF = Path(__file__).resolve().parents[2] / "research/manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
+VCF = Path(__file__).resolve().parents[2] / "../manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
 
 IBS = set(
     "HG01500 HG01501 HG01503 HG01504 HG01506 HG01507 HG01509 HG01510 HG01512 HG01513 "

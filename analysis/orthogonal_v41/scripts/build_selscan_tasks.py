@@ -7,7 +7,7 @@ Writes one line per task to analysis/orthogonal_v41/scripts/selscan_tasks.txt.
 
 import os
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 OUT = os.path.join(REPO, "analysis/orthogonal_v41/scripts/selscan_tasks.txt")
 
 POPS = [

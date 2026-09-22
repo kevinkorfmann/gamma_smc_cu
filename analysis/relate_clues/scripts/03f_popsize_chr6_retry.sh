@@ -13,13 +13,13 @@
 # CLUES job 5484941 that is still reading the iter-1 files.
 
 set -euo pipefail
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 BASE=analysis/relate_clues
 RELATE=${BASE}/tools/relate_v1.2.4
 TREEDIR=${BASE}/trees/chr6_EUREAS
 
 cd ${TREEDIR}
-REPO_ABS=/vast/projects/smathi/cohort/kkor/tmrca.cu
+REPO_ABS=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 ${REPO_ABS}/${RELATE}/scripts/EstimatePopulationSize/EstimatePopulationSize.sh \
     -i chr6_relate \
     -m 1.25e-8 \

@@ -16,7 +16,7 @@ These tests re-run `gamma_smc_cu.infer_blockwise()` against the real
 
 ```bash
 ssh betty
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 pixi run pytest tests/betty/ -v
 ```
 

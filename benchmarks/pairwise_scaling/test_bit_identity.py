@@ -5,7 +5,7 @@ Runs infer_blockwise on 10 pairs and saves the output. Run once per branch,
 then compare the saved .npy files.
 """
 import numpy as np, sys, os, argparse
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 sys.path.insert(0, os.path.join(REPO, "python"))
 import gamma_smc_cu
 

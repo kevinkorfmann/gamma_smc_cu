@@ -10,7 +10,7 @@ from collections import Counter
 import numpy as np
 import pandas as pd
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 PARSED = os.path.join(REPO, "analysis/genome_wide/cache/parsed")
 GENES_DIR = os.path.join(REPO, "analysis/genome_wide/cache/genes")
 SAMPLES = os.path.join(REPO, "analysis/genome_wide/data/samples.txt")

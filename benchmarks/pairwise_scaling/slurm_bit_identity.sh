@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-REPO=/vast/projects/smathi/cohort/kkor/tmrca.cu
+REPO=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 cd $REPO
 PIXI_ENV="${REPO}/.pixi/envs/default"
 export PATH="${PIXI_ENV}/bin:${PATH}"

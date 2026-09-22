@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 BASE=analysis/relate_clues
 RELATE=${BASE}/tools/relate_v1.2.4
 
@@ -27,7 +27,7 @@ fi
 MAP=${BASE}/input_files/Relate_input_files/GRCh38/recomb_map/genetic_map_chr${CHR}.txt
 
 cd ${TREEDIR}
-REPO=/vast/projects/smathi/cohort/kkor/tmrca.cu
+REPO=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 
 ${REPO}/${RELATE}/scripts/EstimatePopulationSize/EstimatePopulationSize.sh \
     -i chr${CHR}_relate \

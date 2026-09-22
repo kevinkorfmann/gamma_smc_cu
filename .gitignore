@@ -52,7 +52,7 @@ archive_*/
 # Legacy dir (notebooks, old Sphinx docs, pre-v4.1 archive) — local-only
 legacy/
 
-# Research workspace (independent private manuscript and local notes repos)
+# Older checkout layouts: manuscript and archive are now sibling repositories
 research/
 # Legacy name retained as an ignore rule for older checkouts
 private/

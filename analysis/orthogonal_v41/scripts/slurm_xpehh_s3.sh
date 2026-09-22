@@ -7,7 +7,7 @@
 #SBATCH --output=analysis/orthogonal_v41/logs/xpehh_s3_%j.log
 
 set -uo pipefail
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 export PATH="$(pwd)/.pixi/envs/default/bin:${PATH}"
 export CONDA_PREFIX="$(pwd)/.pixi/envs/default"
 export PYTHONPATH="$(pwd)/python:$(pwd)"

@@ -19,7 +19,7 @@ frequency trajectory estimation.
 ## Submission order
 
 ```bash
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 
 # Step 0: setup (downloads)
 JOB0=$(sbatch --parsable analysis/relate_clues/scripts/00_setup.sh)

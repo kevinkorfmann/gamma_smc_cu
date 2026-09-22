@@ -8,7 +8,7 @@
 
 # Build only — on CPU node where nvcc/cmake are available
 set -euo pipefail
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 
 PIXI_ENV=".pixi/envs/default"
 export PATH="$(pwd)/${PIXI_ENV}/bin:${PATH}"

@@ -10,9 +10,9 @@ import numpy as np
 import pandas as pd
 import os
 
-REPO = "/Users/kevinkorfmann/Projects/gamma_smc_cu"
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA_DIR = os.path.join(REPO, "benchmarks/pairwise_scaling")
-OUT_DIR = os.path.join(REPO, "docs_local/manuscript/v4.1/figures")
+OUT_DIR = os.path.join(REPO, "../manuscript/v4.1/figures")
 
 plt.rcParams.update({
     "font.family": "serif",

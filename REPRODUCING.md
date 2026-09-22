@@ -4,8 +4,9 @@ This guide walks through every step needed to reproduce the paper
 *"Fast pairwise coalescence enables gene-resolution scans for recent
 selection in diverse human populations"* from scratch, in order.
 
-The optional manuscript checkout is under `research/manuscript/` (formerly
-`private/manuscript/`) and is a separate private Git repository. The current
+The optional manuscript checkout is the sibling directory `../manuscript/`
+and is a separate private Git repository. Run the commands below from the
+software checkout unless a different directory is specified. The current
 editable package is `v5.2_revisions/`; the submitted PDFs remain frozen in
 `v5.1_submission/`. Earlier analysis stages below still reference the historical
 `v4.1/` and `v5/` scripts and their retained data caches.
@@ -76,7 +77,7 @@ several TB).
 
 ```bash
 # On betty
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide/
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/genome_wide/
 
 # 1. Download VCFs from IGSR / NYGC
 #    ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000G_2504_high_coverage/
@@ -102,7 +103,7 @@ histogram NPZ.
 
 ```bash
 # On betty
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide/
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/genome_wide/
 sbatch --array=0-571 slurm_infer_all.sh      # b200-mig45, ~1-10 h wall-clock
 # (or slurm_infer_dgx.sh for full B200 GPUs with --gres=gpu:B200:1)
 ```
@@ -136,16 +137,16 @@ sbatch slurm_postprocess.sh         # genoa-std-mem, ~20 min
 
 ```bash
 # All locally; reads postprocess CSVs
-cd research/manuscript/v4.1/verify/
-pixi run python 19_candidate_cascade.py    # cascade counts 19119 -> 165
-pixi run python 21_fdr.py                   # q_hier, stage-2 ranks
-pixi run python 13_replication_correlation.py  # Galwey n_eff per continent
+cd ../manuscript/v4.1/verify/
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python 19_candidate_cascade.py    # cascade counts 19119 -> 165
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python 21_fdr.py                   # q_hier, stage-2 ranks
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python 13_replication_correlation.py  # Galwey n_eff per continent
 ```
 
 **Outputs:**
-- `research/manuscript/v4.1/tables/fdr_qvalues.csv` (17,823 genes with
+- `../manuscript/v4.1/tables/fdr_qvalues.csv` (17,823 genes with
   per-gene p, BH-adjusted q, hierarchical q_hier)
-- `research/manuscript/v4.1/tables/stage5_loci_with_stats.csv`
+- `../manuscript/v4.1/tables/stage5_loci_with_stats.csv`
   (the 165-locus stage-5 set with orthogonal-statistic percentiles)
 - Spearman ρ matrices per continent (printed), n_eff values (paper
   numbers: 1.95/1.71/1.78/1.64/1.98, SAS+EUR combined 2.64)
@@ -215,7 +216,7 @@ Standalone pipeline under `analysis/relate_clues/scripts/`; each
 numbered script is a SLURM submission.
 
 ```bash
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/relate_clues/
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/relate_clues/
 ./scripts/00_setup.sh                    # install Relate + CLUES2
 ./scripts/01_prepare_inputs.sh           # download GRCh38 ancestral FASTA + recomb map
 ./scripts/02_run_relate.sh               # genome-wide Relate ARG
@@ -237,7 +238,7 @@ weeks' worth of cluster time but in practice 2-3 days on `b200-mig45`).
 ## Stage 8. Akbari 2026 cross-check
 
 ```bash
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/akbari_479_tmrca/
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/akbari_479_tmrca/
 
 # 1. Download Akbari supplementary from Harvard Dataverse
 #    doi:10.7910/DVN/7RVV9N -> akbari_lead_variants.tsv (GRCh37)
@@ -261,9 +262,9 @@ pixi run python make_heatmap.py
 ## Stage 9. Verification suite (mandatory before any figure/table update)
 
 ```bash
-cd research/manuscript/v4.1/verify/
+cd ../manuscript/v4.1/verify/
 for s in 0*_*.py 1*_*.py 2*_*.py; do
-    pixi run python $s 2>&1 | tail -5
+    pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python $s 2>&1 | tail -5
 done
 ```
 
@@ -278,35 +279,35 @@ or building the manuscript.
 ## Stage 10. Figure generation
 
 All figures in the paper are regenerated from scratch by scripts in
-`research/manuscript/v4.1/figures/gen_fig_*.py`. Each is independent and
+`../manuscript/v4.1/figures/gen_fig_*.py`. Each is independent and
 reads only the postprocess + verify + orthogonal outputs.
 
 ```bash
-cd research/manuscript/v4.1/figures/
+cd ../manuscript/v4.1/figures/
 
 # Fig 1 (tool parity) — main.tex fig:tool
-pixi run python gen_fig_accuracy_si.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_accuracy_si.py
 # Fig 2 (pipeline schematic) — main.tex fig:pipeline
-pixi run python gen_fig_pipeline.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_pipeline.py
 # Fig 3 (Manhattan) — main.tex fig:manhattan
-pixi run python gen_fig_manhattan.py
-pixi run python gen_fig_manhattan_sweeps.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_manhattan.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_manhattan_sweeps.py
 # Fig 4 (Akbari heatmap) — main.tex fig:akbari_heatmap
 # (produced by analysis/akbari_479_tmrca/make_heatmap.py, copied into figures/)
 # Fig 5 (GRK2 deep dive) — main.tex fig:grk2
-pixi run python gen_fig_grk2_dive.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_grk2_dive.py
 # Fig 6 (landscape: LCT + four exemplars) — main.tex fig:landscape
-pixi run python gen_fig_landscape.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_landscape.py
 
 # SI figures
-pixi run python gen_fig_all_genes.py
-pixi run python gen_fig_grk2_cluster_tmrca.py
-pixi run python gen_fig_known_sweeps.py
-pixi run python gen_fig_lct.py
-pixi run python gen_fig_sd_masking.py
-pixi run python gen_fig_si_missed_sweeps.py
-pixi run python gen_fig_three_method_compact.py
-pixi run python gen_fig_novel_clues.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_all_genes.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_grk2_cluster_tmrca.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_known_sweeps.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_lct.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_sd_masking.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_si_missed_sweeps.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_three_method_compact.py
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_fig_novel_clues.py
 ```
 
 **Runtime:** ~10 min total.
@@ -316,8 +317,8 @@ and si.tex).
 ## Stage 11. Table generation
 
 ```bash
-cd research/manuscript/v4.1/tables/
-pixi run python gen_tables.py
+cd ../manuscript/v4.1/tables/
+pixi run --manifest-path ../../../gamma_smc_cu/pixi.toml python gen_tables.py
 ```
 
 **Outputs:** `table{1,2,3}_*.tex` (known sweeps, novel findings,
@@ -327,7 +328,7 @@ community resource, gene catalog).
 ## Stage 12. Compile the manuscript
 
 ```bash
-cd research/manuscript/v5.2_revisions/
+cd ../manuscript/v5.2_revisions/
 bash build_v5_pdfs.sh
 ```
 
@@ -358,12 +359,12 @@ CUDA kernels is ~3 min on an A100.
 
 ## Legacy / audit artifacts
 
-- `research/manuscript/legacy/audit_2026_04_23/BUG_HUNT_FINDINGS_2026_04_23.md` —
+- `../manuscript/legacy/audit_2026_04_23/BUG_HUNT_FINDINGS_2026_04_23.md` —
   record of the Akbari GRCh37/GRCh38 coordinate bug (fixed) and other
   bug-hunt findings.
-- `research/manuscript/legacy/audit_2026_04_23/FIG5_AKBARI_ANNOTATION_2026_04_23.md` —
+- `../manuscript/legacy/audit_2026_04_23/FIG5_AKBARI_ANNOTATION_2026_04_23.md` —
   details of the Akbari tick-bar addition to Fig:grk2 and Fig:landscape.
-- `legacy/` — archived pre-v4.1 material (docs website, demo notebooks,
+- `../archive/legacy/software/` — archived pre-v4.1 material (docs website, demo notebooks,
   pre-Akbari-liftover code).
 
 ## Troubleshooting
@@ -414,21 +415,21 @@ strictly serial (Relate stage is the long pole).
 Tables and figures in the published manuscript are not annotated in-text with their source CSVs (to keep the caption prose clean). The mapping is:
 
 ### Manuscript `main.tex` — Table S2 / "165-locus stage-5 landscape"
-- **Raw per-gene metadata** (all columns described in the Table S2 paragraph): `research/manuscript/v4.1/tables/stage5_loci_with_stats.csv`.
-- Longtable formatter: `research/manuscript/v4.1/tables/gen_tables.py`.
+- **Raw per-gene metadata** (all columns described in the Table S2 paragraph): `../manuscript/v4.1/tables/stage5_loci_with_stats.csv`.
+- Longtable formatter: `../manuscript/v4.1/tables/gen_tables.py`.
 - Regenerate via `verify/build_stage5_table.py`.
 - Underlying counts validated by `verify/19_candidate_cascade.py`, `verify/20_stage5_aggregate_stats.py`, `verify/21_fdr.py`.
 
 ### Manuscript `si.tex` — Table S3 / "H12 / H2-H1 / XP-EHH"
-- **Ten-row canonical CSV**: `research/manuscript/v4.1/tables/s3_canonical.csv`.
+- **Ten-row canonical CSV**: `../manuscript/v4.1/tables/s3_canonical.csv`.
 - **Raw per-gene genome-wide H12 ±500 kb + H2/H1** (CDX / CHS / GIH): on betty, `analysis/orthogonal_v41/h12_500kb_v2/chr*_{pop}.csv`.
 - **XP-EHH per-gene means**: on betty, `analysis/orthogonal_v41/xpehh_s3.csv`.
-- Compute scripts committed under `research/manuscript/v4.1/verify/`: `run_h12_500kb_task.py`, `slurm_h12_500kb.sh` (66-task array), `run_xpehh_s3.py`, `slurm_xpehh_s3.sh`.
-- Aggregation: `research/manuscript/v4.1/verify/aggregate_s3.py`.
-- Local check: `research/manuscript/v4.1/verify/41_table_s3_from_scratch.py`.
+- Compute scripts committed under `../manuscript/v4.1/verify/`: `run_h12_500kb_task.py`, `slurm_h12_500kb.sh` (66-task array), `run_xpehh_s3.py`, `slurm_xpehh_s3.sh`.
+- Aggregation: `../manuscript/v4.1/verify/aggregate_s3.py`.
+- Local check: `../manuscript/v4.1/verify/41_table_s3_from_scratch.py`.
 
 ### Manuscript `si.tex` — Table S6 / "Candidate-selection cascade sensitivity"
-- **Raw cascade sensitivity sweep**: `local_memory/prior_sweep_audit/cascade_sensitivity.csv`.
+- **Raw cascade sensitivity sweep**: `../archive/notes/prior_sweep_audit/cascade_sensitivity.csv`.
 
 ### Manuscript `si.tex` — Fig S1 / "Population-scale decoding speed"
 - **Raw timings CSV**: `benchmarks/pairwise_scaling/results.csv` (all three methods: gamma_smc_cu / gamma_smc / ASMC on chr22 YRI, 63,190 pairs).
@@ -436,14 +437,14 @@ Tables and figures in the published manuscript are not annotated in-text with th
 - Plot script: `benchmarks/pairwise_scaling/plot_benchmarks.py`.
 
 ### Manuscript `main.tex` — Fig 3 / "Landscape panels for GRK2 + 4 exemplars"
-- Per-gene NPZ: `research/manuscript/v4.1/figures/data/{GENE}_{POP}_novel.npz` and `{GENE}_YRI_control.npz`.
-- Per-gene JSON summary (variants, max_fst, anchor SNP): `research/manuscript/v4.1/figures/data/{GENE}_{POP}.json`.
-- Per-locus CLUES2 results: `research/manuscript/v4.1/figures/data/{gene}_result_*.txt`.
-- H12 track for ±500 kb computation (used in panel c): `research/manuscript/v4.1/figures/data/multistat_demo.npz`.
+- Per-gene NPZ: `../manuscript/v4.1/figures/data/{GENE}_{POP}_novel.npz` and `{GENE}_YRI_control.npz`.
+- Per-gene JSON summary (variants, max_fst, anchor SNP): `../manuscript/v4.1/figures/data/{GENE}_{POP}.json`.
+- Per-locus CLUES2 results: `../manuscript/v4.1/figures/data/{gene}_result_*.txt`.
+- H12 track for ±500 kb computation (used in panel c): `../manuscript/v4.1/figures/data/multistat_demo.npz`.
 
 ### Run the verification suite
 
-From inside `research/manuscript/v4.1/`:
+From inside `../manuscript/v4.1/`:
 
 ```bash
 python verify/run_all.py

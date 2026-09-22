@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.patches import Rectangle
 
-BASE = "/Users/kevinkorfmann/Projects/tmrca.cu/analysis/akbari_479_tmrca"
+BASE = "/Users/kevinkorfmann/Projects/tmrca.cu/gamma_smc_cu/analysis/akbari_479_tmrca"
 sys.path.insert(0, BASE)
 import make_heatmap as mh
 

@@ -8,7 +8,7 @@ ASMC uses amortized initialization.
 """
 import numpy as np, sys, os, csv, gzip, subprocess, tempfile, time
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 sys.path.insert(0, os.path.join(REPO, "python"))
 
 PARSED_DIR = os.path.join(REPO, "analysis/genome_wide/cache/parsed")

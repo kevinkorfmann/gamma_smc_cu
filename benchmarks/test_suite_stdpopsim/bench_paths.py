@@ -35,7 +35,7 @@ def resolve_flow_field_path(here: str) -> str:
         os.environ.get("TMRCA_CU_FLOW_FIELD"),
         os.path.join(here, "gamma_smc", "resources", "default_flow_field.txt"),
         os.path.join(here, "..", "..", "python", "gamma_smc_cu", "default_flow_field.txt"),
-        "/vast/projects/smathi/cohort/kkor/tmrca.cu/default_flow_field.txt",
+        "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/python/gamma_smc_cu/default_flow_field.txt",
     )
     if path is None:
         raise FileNotFoundError(

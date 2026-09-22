@@ -9,7 +9,7 @@
 set -euo pipefail
 set -x
 
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 
 # Activate the same pixi env layer as the inference scripts use
 PIXI_ENV=".pixi/envs/default"
@@ -71,7 +71,7 @@ ls plink.chr22.GRCh38.map && echo "genetic maps OK" || echo "GENETIC MAPS DOWNLO
 cd ${TOOLS_DIR}
 
 # ─── 5. Smoke test cxt and asmc python bindings ────────────────
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 python - <<'PY'
 print("=== cxt smoke test ===")
 try:
@@ -92,7 +92,7 @@ except Exception as e:
 PY
 
 # ─── 6. Write tools_ready.txt ──────────────────────────────────
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 {
 echo "Tool installation status (run on $(hostname) at $(date))"
 echo "============================================================"

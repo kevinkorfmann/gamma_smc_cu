@@ -12,7 +12,7 @@ from pyliftover import LiftOver
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC  = os.path.join(HERE, 'akbari_lead_variants.tsv')
 DST  = os.path.join(HERE, 'akbari_lead_variants_grch38.tsv')
-CHAIN = '/vast/projects/smathi/cohort/kkor/tmrca.cu/references/hg19ToHg38.over.chain.gz'
+CHAIN = '/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/references/hg19ToHg38.over.chain.gz'
 
 lo = LiftOver(CHAIN)
 

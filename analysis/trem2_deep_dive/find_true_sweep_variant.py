@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-VCF = Path(__file__).resolve().parents[2] / "research/manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
+VCF = Path(__file__).resolve().parents[2] / "../manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
 
 # Load panel
 PANEL = "/tmp/1kgp_panel.txt"

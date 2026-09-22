@@ -5,7 +5,7 @@ import runpy, os, sys
 import numpy as np
 
 # Monkey-patch: reuse make_heatmap.py but replace log transform with identity.
-BASE = "/Users/kevinkorfmann/Projects/tmrca.cu/analysis/akbari_479_tmrca"
+BASE = "/Users/kevinkorfmann/Projects/tmrca.cu/gamma_smc_cu/analysis/akbari_479_tmrca"
 sys.path.insert(0, BASE)
 import make_heatmap as mh
 

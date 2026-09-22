@@ -5,7 +5,7 @@ import sys
 import time
 import os
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 sys.path.insert(0, os.path.join(REPO, "python"))
 import gamma_smc_cu
 

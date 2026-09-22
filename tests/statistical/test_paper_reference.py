@@ -2,7 +2,7 @@
 against a small bundled reference CSV.
 
 The CSV `tests/data/paper_reference_qhier.csv` is a 16-row subset of the
-full 17,823-gene FDR output table (`research/manuscript/v4.1/tables/
+full 17,823-gene FDR output table (`../manuscript/v4.1/tables/
 fdr_qvalues.csv`) containing the 5 main-text candidates
 (GRK2, CCDC92, CLEC6A, SLC6A15, BPIFA2), 2 Discussion replicators
 (TREM2, IFIH1), and 9 canonical sweeps (LCT, SLC24A5, EDAR, FADS1,

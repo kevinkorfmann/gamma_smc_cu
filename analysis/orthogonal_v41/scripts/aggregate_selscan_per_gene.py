@@ -36,7 +36,7 @@ import time
 import numpy as np
 import pandas as pd
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 GENES_DIR = os.path.join(REPO, "analysis/genome_wide/cache/genes")
 SELSCAN_DIR = os.path.join(REPO, "analysis/orthogonal_v41/selscan")
 OUT_DIR = os.path.join(REPO, "analysis/orthogonal_v41/selscan_genelevel")

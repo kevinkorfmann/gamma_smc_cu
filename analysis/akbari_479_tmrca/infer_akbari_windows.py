@@ -27,7 +27,7 @@ import time
 import numpy as np
 import pandas as pd
 
-BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 DATA = os.path.join(BASE, "analysis/genome_wide")
 CACHE_DIR = os.path.join(DATA, "cache")
 # The 1000G cache is GRCh38; keep the original GRCh37 table for provenance only.

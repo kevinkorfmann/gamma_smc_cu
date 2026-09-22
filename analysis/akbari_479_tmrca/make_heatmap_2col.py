@@ -16,7 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-BASE = "/Users/kevinkorfmann/Projects/tmrca.cu/analysis/akbari_479_tmrca"
+BASE = "/Users/kevinkorfmann/Projects/tmrca.cu/gamma_smc_cu/analysis/akbari_479_tmrca"
 sys.path.insert(0, BASE)
 import make_heatmap as mh
 
@@ -194,7 +194,7 @@ def plot():
     print(f"wrote: {png}")
 
     # Mirror into manuscript figures dir when the working copy is checked out.
-    manuscript_fig_dir = "/Users/kevinkorfmann/Projects/tmrca.cu/docs_local/manuscript/v4.1/figures"
+    manuscript_fig_dir = "/Users/kevinkorfmann/Projects/tmrca.cu/manuscript/v4.1/figures"
     if os.path.isdir(manuscript_fig_dir):
         import shutil
         for src, name in [(png, "fig_akbari_heatmap.png"),

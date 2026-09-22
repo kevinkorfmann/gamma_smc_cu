@@ -30,7 +30,7 @@ import re
 import numpy as np
 import pandas as pd
 
-BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide"
+BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/genome_wide"
 RESULTS = os.path.join(BASE, "results")
 
 ALL_POPULATIONS = [

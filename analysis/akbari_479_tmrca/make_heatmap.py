@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.patches import Rectangle
 
-# The 23 canonical human-sweep genes in docs_local/manuscript/v4.1/tables/
+# The 23 canonical human-sweep genes in ../manuscript/v4.1/tables/
 # table1_known_sweeps.tex. Rows whose label contains any of these (as a
 # standalone token) are drawn in bold italic.
 KNOWN_SWEEPS_FLAGSHIP = frozenset({
@@ -45,7 +45,7 @@ def is_flagship_label(label: str) -> bool:
     tokens = set(_GENE_TOKEN_RE.findall(label))
     return bool(tokens & KNOWN_SWEEPS_FLAGSHIP)
 
-BASE = "/Users/kevinkorfmann/Projects/tmrca.cu/analysis/akbari_479_tmrca"
+BASE = "/Users/kevinkorfmann/Projects/tmrca.cu/gamma_smc_cu/analysis/akbari_479_tmrca"
 RESULTS = os.path.join(BASE, "results")
 GENES = os.path.join(BASE, "genes")
 YR_PER_GEN = 29.0

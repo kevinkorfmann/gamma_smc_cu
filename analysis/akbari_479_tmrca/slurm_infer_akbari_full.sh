@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 
 PIXI_ENV=".pixi/envs/default"
 export PATH="$(pwd)/${PIXI_ENV}/bin:${PATH}"
@@ -37,7 +37,7 @@ CHR=${CHRS[${CHR_IDX}]}
 POP=${POPS[${POP_IDX}]}
 
 # Skip if already done (restart-friendly).
-OUT_CSV="/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/akbari_479_tmrca/results/chr${CHR}/${POP}.csv"
+OUT_CSV="/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/akbari_479_tmrca/results/chr${CHR}/${POP}.csv"
 if [[ -s "${OUT_CSV}" ]]; then
     echo "${OUT_CSV} already exists, skipping."
     exit 0

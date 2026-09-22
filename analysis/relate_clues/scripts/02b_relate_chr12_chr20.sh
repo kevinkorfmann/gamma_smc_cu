@@ -13,7 +13,7 @@
 
 set -euo pipefail
 
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 BASE=analysis/relate_clues
 RELATE=${BASE}/tools/relate_v1.2.4/bin
 INPUT=${BASE}/input_files
@@ -54,7 +54,7 @@ echo "  CHR=${CHR}, PREFIX=${PREFIX}, Ne=${Ne}"
 echo "  HAPS=$(wc -l < ${HAPS}) sites"
 
 cd ${OUTDIR}
-REPO_ABS=/vast/projects/smathi/cohort/kkor/tmrca.cu
+REPO_ABS=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 
 ${REPO_ABS}/${RELATE}/Relate --mode All \
     -m 1.25e-8 -N ${Ne} \

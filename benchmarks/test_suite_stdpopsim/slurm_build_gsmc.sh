@@ -4,12 +4,12 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=8G
 #SBATCH --time=0:30:00
-#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/benchmarks/test_suite_stdpopsim/logs/build_gsmc_%j.log
+#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/benchmarks/test_suite_stdpopsim/logs/build_gsmc_%j.log
 
 set -euo pipefail
 
-BASE=/vast/projects/smathi/cohort/kkor/tmrca.cu/benchmarks/test_suite_stdpopsim
-PIXI_ENV=/vast/projects/smathi/cohort/kkor/tmrca.cu/.pixi/envs/default
+BASE=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/benchmarks/test_suite_stdpopsim
+PIXI_ENV=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/.pixi/envs/default
 
 mkdir -p "${BASE}/logs"
 cd "${BASE}"

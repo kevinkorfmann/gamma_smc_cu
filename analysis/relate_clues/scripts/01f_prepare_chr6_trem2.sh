@@ -10,7 +10,7 @@
 # Keep EUR + EAS (matches TREM2's 10/10 replication pattern, ~1500 haps).
 
 set -euo pipefail
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 BASE=analysis/relate_clues
 RELATE=${BASE}/tools/relate_v1.2.4/bin
 INPUT=${BASE}/input_files

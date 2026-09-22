@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Profile kernel timing separately from D2H by measuring small vs large pairs."""
 import numpy as np, sys, os, time
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 sys.path.insert(0, os.path.join(REPO, "python"))
 import gamma_smc_cu
 

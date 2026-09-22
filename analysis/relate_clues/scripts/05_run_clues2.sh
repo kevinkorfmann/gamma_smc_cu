@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 BASE=analysis/relate_clues
 CLUES2=${BASE}/tools/CLUES2
 PIXI_ENV=".pixi/envs/default"

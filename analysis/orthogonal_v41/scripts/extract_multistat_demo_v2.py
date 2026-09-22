@@ -9,7 +9,7 @@ import numpy as np
 import os
 import pandas as pd
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 PARSED_DIR = os.path.join(REPO, "analysis/genome_wide/cache/parsed")
 GENES_DIR = os.path.join(REPO, "analysis/genome_wide/cache/genes")
 SAMPLES_PATH = os.path.join(REPO, "analysis/genome_wide/data/samples.txt")

@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import pearsonr, spearmanr
 
-BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide"
+BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/genome_wide"
 ORIG = os.path.join(BASE, "results")
 REPRO = os.path.join(BASE, "reproducibility", "results")
 

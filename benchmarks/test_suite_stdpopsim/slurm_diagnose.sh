@@ -5,12 +5,12 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --time=0:20:00
-#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/benchmarks/test_suite_stdpopsim/logs/diagnose_%j.log
+#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/benchmarks/test_suite_stdpopsim/logs/diagnose_%j.log
 
 set -euo pipefail
 
-BASE=/vast/projects/smathi/cohort/kkor/tmrca.cu/benchmarks/test_suite_stdpopsim
-PIXI_ENV=/vast/projects/smathi/cohort/kkor/tmrca.cu/.pixi/envs/default
+BASE=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/benchmarks/test_suite_stdpopsim
+PIXI_ENV=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/.pixi/envs/default
 
 export PATH=${PIXI_ENV}/bin:${PATH}
 export LD_LIBRARY_PATH=${PIXI_ENV}/lib:${LD_LIBRARY_PATH:-}

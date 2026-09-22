@@ -4,11 +4,11 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=8G
 #SBATCH --time=0:10:00
-#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/benchmarks/test_suite_stdpopsim/logs/aggregate_%j.log
+#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/benchmarks/test_suite_stdpopsim/logs/aggregate_%j.log
 
 set -euo pipefail
-BASE=/vast/projects/smathi/cohort/kkor/tmrca.cu/benchmarks/test_suite_stdpopsim
-PIXI_ENV=/vast/projects/smathi/cohort/kkor/tmrca.cu/.pixi/envs/default
+BASE=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/benchmarks/test_suite_stdpopsim
+PIXI_ENV=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/.pixi/envs/default
 export PATH=${PIXI_ENV}/bin:${PATH}
 export MPLBACKEND=Agg
 

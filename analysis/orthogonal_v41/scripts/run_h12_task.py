@@ -33,7 +33,7 @@ import time
 import numpy as np
 import pandas as pd
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 DATA_DIR = os.path.join(REPO, "analysis/genome_wide")
 PARSED_DIR = os.path.join(DATA_DIR, "cache/parsed")
 GENES_DIR = os.path.join(DATA_DIR, "cache/genes")

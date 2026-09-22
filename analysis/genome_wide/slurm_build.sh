@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 
 # Activate pixi env manually (no pixi binary on compute nodes)
 PIXI_ENV=".pixi/envs/default"

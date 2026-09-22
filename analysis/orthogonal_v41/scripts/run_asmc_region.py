@@ -25,7 +25,7 @@ import traceback
 
 import numpy as np
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 sys.path.insert(0, os.path.join(REPO, "python"))
 
 DATA_DIR = os.path.join(REPO, "analysis/genome_wide")

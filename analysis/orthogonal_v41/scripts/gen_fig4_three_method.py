@@ -14,7 +14,7 @@ Run from the repo root after all 30 SLURM tasks have completed:
 
     python analysis/orthogonal_v41/scripts/gen_fig4_three_method.py
 
-Output: docs_local/manuscript/v4.1/figures/fig4_three_method.{png,pdf}
+Output: ../manuscript/v4.1/figures/fig4_three_method.{png,pdf}
 """
 
 from __future__ import annotations
@@ -28,9 +28,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-REPO = "/Users/kevinkorfmann/Projects/tmrca.cu"
+REPO = "/Users/kevinkorfmann/Projects/tmrca.cu/gamma_smc_cu"
 THREE_METHOD_DIR = os.path.join(REPO, "analysis/orthogonal_v41/three_method")
-OUT_DIR = os.path.join(REPO, "docs_local/manuscript/v4.1/figures")
+OUT_DIR = os.path.join(REPO, "../manuscript/v4.1/figures")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # Same gene order as the SLURM tasks.txt: novel, positive, neutral.

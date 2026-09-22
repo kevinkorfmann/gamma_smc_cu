@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 BASE=analysis/relate_clues
 
 mkdir -p ${BASE}/{tools,input_files,data/chr2,data/chr11,trees/chr2_EUR,trees/chr11_EURSAS,clues/GRK2,clues/LCT,clues/neutral,figures,logs}
@@ -75,7 +75,7 @@ if [ ! -d ${BASE}/input_files/hg38 ]; then
     rm Relate_input_files.tgz
     echo "  Input files extracted:"
     ls -d */ 2>/dev/null || ls
-    cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+    cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 else
     echo "  Relate input files already present."
 fi

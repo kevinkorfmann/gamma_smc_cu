@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 
 # Activate pixi env manually
 PIXI_ENV=".pixi/envs/default"

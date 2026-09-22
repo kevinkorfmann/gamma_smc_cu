@@ -5,7 +5,7 @@
 #SBATCH --mem=512G
 #SBATCH --time=24:00:00
 #SBATCH --array=0-5
-#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/relate_clues/logs/clues_traj_rest_%A_%a.log
+#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/relate_clues/logs/clues_traj_rest_%A_%a.log
 
 # CLUES2 trajectory inference for the 6 remaining swept-block variants in
 # the TREML1/TREM2 cluster (TREM2_OoA_v6). pos41137356 was already done
@@ -16,7 +16,7 @@
 # IBS derived-allele frequency computed from each pos's derived.txt.
 
 set -e
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 export PATH=$(pwd)/.pixi/envs/default/bin:$PATH
 
 POSITIONS=(41121942 41166068 41176920 41189316 41189932 41191484)

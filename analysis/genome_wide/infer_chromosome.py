@@ -38,7 +38,7 @@ import time
 
 import numpy as np
 
-BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 DATA = os.path.join(BASE, "analysis/genome_wide")
 CACHE_DIR = os.path.join(DATA, "cache")
 RESULTS_DIR = os.path.join(DATA, "results")

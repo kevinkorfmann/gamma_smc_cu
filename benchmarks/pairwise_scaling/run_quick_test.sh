@@ -1,6 +1,6 @@
 #!/bin/bash
 set -uo pipefail
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 PIXI_ENV=".pixi/envs/default"
 export PATH="$(pwd)/${PIXI_ENV}/bin:${PATH}"
 export PYTHONPATH="$(pwd)/python:$(pwd)"

@@ -11,7 +11,7 @@ chosen from the new genome_wide_stats.csv.
 import os
 import pandas as pd
 
-REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
+REPO = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
 STATS = os.path.join(REPO, "analysis/genome_wide/results/genome_wide_stats.csv")
 SD_FLAG = os.path.join(REPO, "analysis/genome_wide/postprocess/genes_sd_flag.csv")
 

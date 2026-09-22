@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu/analysis/genome_wide"
+BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/genome_wide"
 RESULTS = os.path.join(BASE, "results")
 OUT = os.path.join(BASE, "postprocess")
 os.makedirs(OUT, exist_ok=True)

@@ -20,7 +20,7 @@ Three tiers of test, from fastest to slowest:
 Run on betty:
 
     ssh betty
-    cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+    cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
     pixi run pytest tests/betty/ -v               # all three tiers
     pixi run pytest tests/betty/ -v -k tier1      # fastest only
     pixi run pytest tests/betty/ -v -k tier2      # fresh-inference checks

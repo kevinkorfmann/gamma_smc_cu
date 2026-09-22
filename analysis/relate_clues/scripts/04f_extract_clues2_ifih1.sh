@@ -10,7 +10,7 @@
 # Uses existing chr2_popsize trees (CEU-filtered).
 
 set -uo pipefail
-cd /vast/projects/smathi/cohort/kkor/tmrca.cu
+cd /vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu
 BASE=analysis/relate_clues
 RELATE=${BASE}/tools/relate_v1.2.4
 CLUES2=${BASE}/tools/CLUES2

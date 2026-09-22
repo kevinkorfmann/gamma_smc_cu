@@ -86,6 +86,21 @@ To reproduce the full manuscript pipeline end-to-end (benchmarks,
 genome-wide scan, orthogonal validation, figures, tables, manuscript
 compile), see [REPRODUCING.md](REPRODUCING.md).
 
+## Repository organization
+
+The repository contains the CUDA implementation (`src/`, `include/`), Python
+package (`python/`), tests, benchmarks, and analysis workflows. Analysis scripts
+stay in `analysis/`; published summary tables and supporting evidence stay in
+`findings_database/`. Large input data, caches, compiled binaries, logs, and run
+outputs remain ignored by Git on the host where they are used.
+
+In the author's `tmrca.cu/` workspace, this software checkout is `gamma_smc_cu/`,
+the independent private manuscript is the sibling `manuscript/`, and local notes,
+plans, and legacy material are in the sibling `archive/`. A standalone clone of
+this public repository does not require either sibling for normal software use.
+On Betty, launch analysis from
+`/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu`.
+
 ## Quick start
 
 ### From a tree sequence
