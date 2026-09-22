@@ -5,7 +5,7 @@ Runs on genoa-std-mem for fair CPU comparison against gamma_smc_cu on B200.
 """
 import numpy as np, sys, os, csv, gzip, subprocess, tempfile, time
 
-REPO = "/vast/projects/smathi/cohort/kkor/gamma_smc_cu"
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "python"))
 
 PARSED_DIR = os.path.join(REPO, "analysis/genome_wide/cache/parsed")

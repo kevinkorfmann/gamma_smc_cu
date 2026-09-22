@@ -30,7 +30,8 @@ import pandas as pd
 BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu"
 DATA = os.path.join(BASE, "analysis/genome_wide")
 CACHE_DIR = os.path.join(DATA, "cache")
-LEADS_TSV = os.path.join(BASE, "analysis/akbari_479_tmrca/akbari_lead_variants.tsv")
+# The 1000G cache is GRCh38; keep the original GRCh37 table for provenance only.
+LEADS_TSV = os.path.join(BASE, "analysis/akbari_479_tmrca/akbari_lead_variants_grch38.tsv")
 RESULTS_DIR = os.path.join(BASE, "analysis/akbari_479_tmrca/results")
 
 MU = 1.25e-8

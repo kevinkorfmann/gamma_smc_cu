@@ -22,7 +22,7 @@ import time
 
 import numpy as np
 
-REPO = "/vast/projects/smathi/cohort/kkor/gamma_smc_cu"
+REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(REPO, "python"))
 
 PARSED_DIR = os.path.join(REPO, "analysis/genome_wide/cache/parsed")
