@@ -16,7 +16,9 @@ SAMPLES_PATH = os.path.join(REPO, "analysis/genome_wide/data/samples.txt")
 ASMC_DATA = "/vast/projects/smathi/cohort/kkor/asmc_data"
 DQ_FILE = os.path.join(ASMC_DATA, "CEU_50.decodingQuantities.gz")
 GAMMA_SMC_BIN = os.path.join(REPO, "benchmarks/test_suite_stdpopsim/gamma_smc/bin/gamma_smc")
-FLOW_FIELD = os.path.join(REPO, "default_flow_field.txt")
+FLOW_FIELD = os.path.join(REPO, "python/gamma_smc_cu/default_flow_field.txt")
+if not os.path.isfile(FLOW_FIELD):  # Older cluster checkouts keep it at the root.
+    FLOW_FIELD = os.path.join(REPO, "default_flow_field.txt")
 OUT_DIR = os.path.join(REPO, "benchmarks/pairwise_scaling")
 
 CHR = 22

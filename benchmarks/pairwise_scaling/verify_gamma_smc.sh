@@ -13,7 +13,8 @@ export PATH="$(pwd)/.pixi/envs/default/bin:${PATH}"
 export LD_LIBRARY_PATH="$(pwd)/.pixi/envs/default/lib:${LD_LIBRARY_PATH:-}"
 
 GSMC=benchmarks/test_suite_stdpopsim/gamma_smc/bin/gamma_smc
-FF=default_flow_field.txt
+FF=python/gamma_smc_cu/default_flow_field.txt
+if [[ ! -f "$FF" ]]; then FF=default_flow_field.txt; fi
 OUT=benchmarks/pairwise_scaling/gsmc_verify
 mkdir -p $OUT
 

@@ -160,7 +160,7 @@ chromosome.
 
 ```bash
 pixi run python docs/_scripts/make_examples.py \
-    --flow-field default_flow_field.txt \
+    --flow-field python/gamma_smc_cu/default_flow_field.txt \
     --out-dir docs/_static
 ```
 
