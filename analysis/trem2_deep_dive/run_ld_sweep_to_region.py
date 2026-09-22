@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import gzip
 import sys
+from pathlib import Path
 
 import numpy as np
 
-VCF = "/Users/kevinkorfmann/Projects/tmrca.cu/private/manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
+VCF = Path(__file__).resolve().parents[2] / "research/manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
 
 IBS = set(
     "HG01500 HG01501 HG01503 HG01504 HG01506 HG01507 HG01509 HG01510 HG01512 HG01513 "

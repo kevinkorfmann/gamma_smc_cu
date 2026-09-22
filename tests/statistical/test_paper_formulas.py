@@ -6,7 +6,7 @@ p-values, the combinatorial cascade identities, and the binomial sensitivity
 benchmark can be rederived from first principles.
 
 Every assertion in this file corresponds to a specific number printed in
-docs/private/manuscript/v4.1/main.tex; the docstring of each test points at
+docs/research/manuscript/v4.1/main.tex; the docstring of each test points at
 the relevant line.
 
 Runs in <0.1 s on CPU.
@@ -77,7 +77,7 @@ def test_galwey_all_continents_paper_table():
 
     Constant-rho proxy is within ~0.05 of the actual paper values computed
     on the real Spearman matrix. Exact paper values come from
-    private/manuscript/v4.1/verify/13_replication_correlation.py.
+    research/manuscript/v4.1/verify/13_replication_correlation.py.
     """
     cases = [
         # (pop, n_pops, mean_rho, paper_neff, tol)

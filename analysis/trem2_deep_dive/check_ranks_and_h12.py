@@ -12,13 +12,14 @@ from __future__ import annotations
 
 import gzip
 import sys
+from pathlib import Path
 from collections import Counter
 
 import numpy as np
 import pandas as pd
 
-RANKS = "/Users/kevinkorfmann/Projects/tmrca.cu/analysis/genome_wide/results/genome_wide_ranks.csv"
-VCF = "/Users/kevinkorfmann/Projects/tmrca.cu/private/manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
+RANKS = Path(__file__).resolve().parents[2] / "analysis/genome_wide/results/genome_wide_ranks.csv"
+VCF = Path(__file__).resolve().parents[2] / "research/manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
 PANEL_SAMPLES = {
     # 1KG NYGC high-coverage IDs from the v5 trem2 dive script for IBS,
     # plus we'll build others from allele-frequency panel info parsed from VCF.

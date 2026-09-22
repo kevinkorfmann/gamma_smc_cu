@@ -41,7 +41,7 @@ actually references before it can be cited.
 
 ### Bib entries added to `references.bib`
 
-30 new entries appended to `private/manuscript/v5/references.bib`. All
+30 new entries appended to `research/manuscript/v5/references.bib`. All
 have verified DOIs from the agent verification pass:
 
 ```

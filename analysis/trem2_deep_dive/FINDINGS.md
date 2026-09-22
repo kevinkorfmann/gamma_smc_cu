@@ -22,7 +22,7 @@ Exploratory only. Not integrated into main.tex.
 
 ## 1. Akbari 2026 aDNA posterior at this region
 
-Source: `private/manuscript/v5/tests/fixtures/akbari_TREM2.tsv` (Akbari et al. 2026 extracted window, chr6:40,626,344–41,630,783, 4,059 variants, 3,322 PASS).
+Source: `research/manuscript/v5/tests/fixtures/akbari_TREM2.tsv` (Akbari et al. 2026 extracted window, chr6:40,626,344–41,630,783, 4,059 variants, 3,322 PASS).
 
 **Gene-body posteriors:**
 - TREM2 gene body ±10 kb: max POSTERIOR = 0.32 (MAF<0.01 warning), 0.14 among PASS. **Flat.**

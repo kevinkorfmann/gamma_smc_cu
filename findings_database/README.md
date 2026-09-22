@@ -60,7 +60,7 @@ top.iloc[16][["gene_name","chr","min_rank","min_pop","start"]]
 ## Build provenance
 
 The CSVs in `02_tables/` are the file equivalents of the LaTeX tables produced by
-`private/manuscript/v5/tables/gen_tables.py`. The flat variant-evidence CSV in
+`research/manuscript/v5/tables/gen_tables.py`. The flat variant-evidence CSV in
 `03_variant_evidence/all_genes_summary.csv` is reproducible from the 12 JSONs in
 `per_gene_json/` — see the `pd.json_normalize`-style flattening logic in this
 repository's deposit-builder commit.

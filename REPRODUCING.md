@@ -1,8 +1,14 @@
 # Reproducing the manuscript end-to-end
 
 This guide walks through every step needed to reproduce the paper
-*"Pairwise coalescence-time inference localises a shared West Eurasian
-sweep haplotype at chr11q13.2 (GRK2)"* from scratch, in order.
+*"Fast pairwise coalescence enables gene-resolution scans for recent
+selection in diverse human populations"* from scratch, in order.
+
+The optional manuscript checkout is under `research/manuscript/` (formerly
+`private/manuscript/`) and is a separate private Git repository. The current
+editable package is `v5.2_revisions/`; the submitted PDFs remain frozen in
+`v5.1_submission/`. Earlier analysis stages below still reference the historical
+`v4.1/` and `v5/` scripts and their retained data caches.
 
 Every stage lists: **inputs**, **command**, **expected outputs**,
 **expected runtime**, and **what the output is used for downstream**.
@@ -130,16 +136,16 @@ sbatch slurm_postprocess.sh         # genoa-std-mem, ~20 min
 
 ```bash
 # All locally; reads postprocess CSVs
-cd private/manuscript/v4.1/verify/
+cd research/manuscript/v4.1/verify/
 pixi run python 19_candidate_cascade.py    # cascade counts 19119 -> 165
 pixi run python 21_fdr.py                   # q_hier, stage-2 ranks
 pixi run python 13_replication_correlation.py  # Galwey n_eff per continent
 ```
 
 **Outputs:**
-- `private/manuscript/v4.1/tables/fdr_qvalues.csv` (17,823 genes with
+- `research/manuscript/v4.1/tables/fdr_qvalues.csv` (17,823 genes with
   per-gene p, BH-adjusted q, hierarchical q_hier)
-- `private/manuscript/v4.1/tables/stage5_loci_with_stats.csv`
+- `research/manuscript/v4.1/tables/stage5_loci_with_stats.csv`
   (the 165-locus stage-5 set with orthogonal-statistic percentiles)
 - Spearman ρ matrices per continent (printed), n_eff values (paper
   numbers: 1.95/1.71/1.78/1.64/1.98, SAS+EUR combined 2.64)
@@ -255,7 +261,7 @@ pixi run python make_heatmap.py
 ## Stage 9. Verification suite (mandatory before any figure/table update)
 
 ```bash
-cd private/manuscript/v4.1/verify/
+cd research/manuscript/v4.1/verify/
 for s in 0*_*.py 1*_*.py 2*_*.py; do
     pixi run python $s 2>&1 | tail -5
 done
@@ -272,11 +278,11 @@ or building the manuscript.
 ## Stage 10. Figure generation
 
 All figures in the paper are regenerated from scratch by scripts in
-`private/manuscript/v4.1/figures/gen_fig_*.py`. Each is independent and
+`research/manuscript/v4.1/figures/gen_fig_*.py`. Each is independent and
 reads only the postprocess + verify + orthogonal outputs.
 
 ```bash
-cd private/manuscript/v4.1/figures/
+cd research/manuscript/v4.1/figures/
 
 # Fig 1 (tool parity) — main.tex fig:tool
 pixi run python gen_fig_accuracy_si.py
@@ -310,7 +316,7 @@ and si.tex).
 ## Stage 11. Table generation
 
 ```bash
-cd private/manuscript/v4.1/tables/
+cd research/manuscript/v4.1/tables/
 pixi run python gen_tables.py
 ```
 
@@ -321,20 +327,12 @@ community resource, gene catalog).
 ## Stage 12. Compile the manuscript
 
 ```bash
-cd private/manuscript/v4.1/
-pdflatex -interaction=nonstopmode main.tex
-bibtex main
-pdflatex -interaction=nonstopmode main.tex
-pdflatex -interaction=nonstopmode main.tex
-
-# SI
-pdflatex -interaction=nonstopmode si.tex
-bibtex si
-pdflatex -interaction=nonstopmode si.tex
-pdflatex -interaction=nonstopmode si.tex
+cd research/manuscript/v5.2_revisions/
+bash build_v5_pdfs.sh
 ```
 
-**Outputs:** `main.pdf` (29 pages), `si.pdf` (tables + figures).
+**Outputs:** `main.pdf` and `si.pdf`, with references refreshed in both directions.
+Do not rebuild the frozen PDFs under `v5.1_submission/`.
 **Runtime:** ~10 s per pass.
 
 ## Stage 13. (Optional) Unit tests for continuous integration
@@ -360,10 +358,10 @@ CUDA kernels is ~3 min on an A100.
 
 ## Legacy / audit artifacts
 
-- `private/manuscript/legacy/audit_2026_04_23/BUG_HUNT_FINDINGS_2026_04_23.md` —
+- `research/manuscript/legacy/audit_2026_04_23/BUG_HUNT_FINDINGS_2026_04_23.md` —
   record of the Akbari GRCh37/GRCh38 coordinate bug (fixed) and other
   bug-hunt findings.
-- `private/manuscript/legacy/audit_2026_04_23/FIG5_AKBARI_ANNOTATION_2026_04_23.md` —
+- `research/manuscript/legacy/audit_2026_04_23/FIG5_AKBARI_ANNOTATION_2026_04_23.md` —
   details of the Akbari tick-bar addition to Fig:grk2 and Fig:landscape.
 - `legacy/` — archived pre-v4.1 material (docs website, demo notebooks,
   pre-Akbari-liftover code).
@@ -416,18 +414,18 @@ strictly serial (Relate stage is the long pole).
 Tables and figures in the published manuscript are not annotated in-text with their source CSVs (to keep the caption prose clean). The mapping is:
 
 ### Manuscript `main.tex` — Table S2 / "165-locus stage-5 landscape"
-- **Raw per-gene metadata** (all columns described in the Table S2 paragraph): `private/manuscript/v4.1/tables/stage5_loci_with_stats.csv`.
-- Longtable formatter: `private/manuscript/v4.1/tables/gen_tables.py`.
+- **Raw per-gene metadata** (all columns described in the Table S2 paragraph): `research/manuscript/v4.1/tables/stage5_loci_with_stats.csv`.
+- Longtable formatter: `research/manuscript/v4.1/tables/gen_tables.py`.
 - Regenerate via `verify/build_stage5_table.py`.
 - Underlying counts validated by `verify/19_candidate_cascade.py`, `verify/20_stage5_aggregate_stats.py`, `verify/21_fdr.py`.
 
 ### Manuscript `si.tex` — Table S3 / "H12 / H2-H1 / XP-EHH"
-- **Ten-row canonical CSV**: `private/manuscript/v4.1/tables/s3_canonical.csv`.
+- **Ten-row canonical CSV**: `research/manuscript/v4.1/tables/s3_canonical.csv`.
 - **Raw per-gene genome-wide H12 ±500 kb + H2/H1** (CDX / CHS / GIH): on betty, `analysis/orthogonal_v41/h12_500kb_v2/chr*_{pop}.csv`.
 - **XP-EHH per-gene means**: on betty, `analysis/orthogonal_v41/xpehh_s3.csv`.
-- Compute scripts committed under `private/manuscript/v4.1/verify/`: `run_h12_500kb_task.py`, `slurm_h12_500kb.sh` (66-task array), `run_xpehh_s3.py`, `slurm_xpehh_s3.sh`.
-- Aggregation: `private/manuscript/v4.1/verify/aggregate_s3.py`.
-- Local check: `private/manuscript/v4.1/verify/41_table_s3_from_scratch.py`.
+- Compute scripts committed under `research/manuscript/v4.1/verify/`: `run_h12_500kb_task.py`, `slurm_h12_500kb.sh` (66-task array), `run_xpehh_s3.py`, `slurm_xpehh_s3.sh`.
+- Aggregation: `research/manuscript/v4.1/verify/aggregate_s3.py`.
+- Local check: `research/manuscript/v4.1/verify/41_table_s3_from_scratch.py`.
 
 ### Manuscript `si.tex` — Table S6 / "Candidate-selection cascade sensitivity"
 - **Raw cascade sensitivity sweep**: `local_memory/prior_sweep_audit/cascade_sensitivity.csv`.
@@ -438,14 +436,14 @@ Tables and figures in the published manuscript are not annotated in-text with th
 - Plot script: `benchmarks/pairwise_scaling/plot_benchmarks.py`.
 
 ### Manuscript `main.tex` — Fig 3 / "Landscape panels for GRK2 + 4 exemplars"
-- Per-gene NPZ: `private/manuscript/v4.1/figures/data/{GENE}_{POP}_novel.npz` and `{GENE}_YRI_control.npz`.
-- Per-gene JSON summary (variants, max_fst, anchor SNP): `private/manuscript/v4.1/figures/data/{GENE}_{POP}.json`.
-- Per-locus CLUES2 results: `private/manuscript/v4.1/figures/data/{gene}_result_*.txt`.
-- H12 track for ±500 kb computation (used in panel c): `private/manuscript/v4.1/figures/data/multistat_demo.npz`.
+- Per-gene NPZ: `research/manuscript/v4.1/figures/data/{GENE}_{POP}_novel.npz` and `{GENE}_YRI_control.npz`.
+- Per-gene JSON summary (variants, max_fst, anchor SNP): `research/manuscript/v4.1/figures/data/{GENE}_{POP}.json`.
+- Per-locus CLUES2 results: `research/manuscript/v4.1/figures/data/{gene}_result_*.txt`.
+- H12 track for ±500 kb computation (used in panel c): `research/manuscript/v4.1/figures/data/multistat_demo.npz`.
 
 ### Run the verification suite
 
-From inside `private/manuscript/v4.1/`:
+From inside `research/manuscript/v4.1/`:
 
 ```bash
 python verify/run_all.py

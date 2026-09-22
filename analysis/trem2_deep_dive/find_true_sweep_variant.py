@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import gzip
 import sys
+from pathlib import Path
 
 import numpy as np
 
-VCF = "/Users/kevinkorfmann/Projects/tmrca.cu/private/manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
+VCF = Path(__file__).resolve().parents[2] / "research/manuscript/v5/figures/data/trem2_pm500kb.vcf.gz"
 
 # Load panel
 PANEL = "/tmp/1kgp_panel.txt"

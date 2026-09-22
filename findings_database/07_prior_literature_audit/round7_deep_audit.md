@@ -36,7 +36,7 @@ The Round 6 conclusion stands: FASTER-NN's only published real-data scan is puri
 
 - AGES URL: `https://reich-ages.rc.hms.harvard.edu/` (live, returns 200, JS SPA).
 - API: only `/api/health/`, `/api/search`, `/api/fetch`, `/api/generate_token` exposed; data endpoints are token-gated. SPA bundle parsed at `/js/app.01de6390.js` — no other endpoints exposed.
-- The data the browser serves IS the per-variant Selection Summary Statistics table we already store locally at `private/manuscript/v5/audit/akbari2026_Selection_Summary_Statistics.tsv.gz` plus the per-gene fixtures at `private/manuscript/v5/tests/fixtures/akbari_TREM2.tsv` (4059 chr6 variants spanning 40.6–41.6 Mb).
+- The data the browser serves IS the per-variant Selection Summary Statistics table we already store locally at `research/manuscript/v5/audit/akbari2026_Selection_Summary_Statistics.tsv.gz` plus the per-gene fixtures at `research/manuscript/v5/tests/fixtures/akbari_TREM2.tsv` (4059 chr6 variants spanning 40.6–41.6 Mb).
 
 **Coordinate-window verification of the Akbari fixture** (chr6:41,000,000 – 41,300,000 GRCh37):
 - 1553 variants in window
