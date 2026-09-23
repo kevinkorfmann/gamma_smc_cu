@@ -4,6 +4,7 @@
 #include <cstring>
 #include <algorithm>
 #include <vector>
+#include <memory>
 
 bool load_flow_field(const char* path, FlowFieldData& out) {
     FILE* f = fopen(path, "r");
@@ -13,7 +14,7 @@ bool load_flow_field(const char* path, FlowFieldData& out) {
     }
 
     float mean_min_lin, mean_max_lin;
-    int mean_n;
+    int mean_n = 0;
     if (fscanf(f, "%f %f %d", &mean_min_lin, &mean_max_lin, &mean_n) != 3 ||
         mean_n != FF_MEAN_N) {
         fprintf(stderr, "flow_field: bad mean grid (got n=%d, expected %d)\n",
@@ -23,7 +24,7 @@ bool load_flow_field(const char* path, FlowFieldData& out) {
     }
 
     float cv_min_lin, cv_max_lin;
-    int cv_n;
+    int cv_n = 0;
     if (fscanf(f, "%f %f %d", &cv_min_lin, &cv_max_lin, &cv_n) != 3 ||
         cv_n != FF_CV_N) {
         fprintf(stderr, "flow_field: bad cv grid (got n=%d, expected %d)\n",
@@ -32,6 +33,12 @@ bool load_flow_field(const char* path, FlowFieldData& out) {
         return false;
     }
 
+    if (!std::isfinite(mean_min_lin) || !std::isfinite(mean_max_lin) ||
+        !std::isfinite(cv_min_lin) || !std::isfinite(cv_max_lin) ||
+        fabsf(mean_min_lin - 1e-5f) > 1e-10f || mean_max_lin != 100.0f ||
+        fabsf(cv_min_lin - 0.01f) > 1e-7f || cv_max_lin != 1.0f) {
+        fclose(f); return false;
+    }
     out.mean_log10_min = log10f(mean_min_lin);
     out.mean_log10_max = log10f(mean_max_lin);
     out.cv_log10_min   = log10f(cv_min_lin);
@@ -50,6 +57,8 @@ bool load_flow_field(const char* path, FlowFieldData& out) {
             }
 
     fclose(f);
+    for (int i = 0; i < FF_GRID; ++i)
+        if (!std::isfinite(out.u[i]) || !std::isfinite(out.v[i])) return false;
     return true;
 }
 
@@ -219,18 +228,30 @@ FlowFieldCache build_flow_field_cache(
     float cv_step   = (cv_max - cv_min) / (FF_CV_N - 1);
 
     size_t total = (size_t)n_max_steps * FF_GRID;
-    float* missing_mean = new float[total];
-    float* missing_cv   = new float[total];
-    float* cache_mean = new float[total];
-    float* cache_cv   = new float[total];
-    float* fwd_hom_site_mean = new float[total];
-    float* fwd_hom_site_cv   = new float[total];
-    float* fwd_het_site_mean = new float[total];
-    float* fwd_het_site_cv   = new float[total];
-    float* bwd_hom_site_mean = new float[total];
-    float* bwd_hom_site_cv   = new float[total];
-    float* bwd_het_site_mean = new float[total];
-    float* bwd_het_site_cv   = new float[total];
+    auto missing_mean_owner = std::make_unique<float[]>(total);
+    float* missing_mean = missing_mean_owner.get();
+    auto missing_cv_owner = std::make_unique<float[]>(total);
+    float* missing_cv = missing_cv_owner.get();
+    auto cache_mean_owner = std::make_unique<float[]>(total);
+    float* cache_mean = cache_mean_owner.get();
+    auto cache_cv_owner = std::make_unique<float[]>(total);
+    float* cache_cv = cache_cv_owner.get();
+    auto fwd_hom_site_mean_owner = std::make_unique<float[]>(total);
+    float* fwd_hom_site_mean = fwd_hom_site_mean_owner.get();
+    auto fwd_hom_site_cv_owner = std::make_unique<float[]>(total);
+    float* fwd_hom_site_cv = fwd_hom_site_cv_owner.get();
+    auto fwd_het_site_mean_owner = std::make_unique<float[]>(total);
+    float* fwd_het_site_mean = fwd_het_site_mean_owner.get();
+    auto fwd_het_site_cv_owner = std::make_unique<float[]>(total);
+    float* fwd_het_site_cv = fwd_het_site_cv_owner.get();
+    auto bwd_hom_site_mean_owner = std::make_unique<float[]>(total);
+    float* bwd_hom_site_mean = bwd_hom_site_mean_owner.get();
+    auto bwd_hom_site_cv_owner = std::make_unique<float[]>(total);
+    float* bwd_hom_site_cv = bwd_hom_site_cv_owner.get();
+    auto bwd_het_site_mean_owner = std::make_unique<float[]>(total);
+    float* bwd_het_site_mean = bwd_het_site_mean_owner.get();
+    auto bwd_het_site_cv_owner = std::make_unique<float[]>(total);
+    float* bwd_het_site_cv = bwd_het_site_cv_owner.get();
 
     // Step 0: missing stretch = recombination only, no hom emission.
     for (int row = 0; row < FF_MEAN_N; row++) {
@@ -372,18 +393,18 @@ FlowFieldCache build_flow_field_cache(
 
     return {
         n_max_steps,
-        missing_mean,
-        missing_cv,
-        cache_mean,
-        cache_cv,
-        fwd_hom_site_mean,
-        fwd_hom_site_cv,
-        fwd_het_site_mean,
-        fwd_het_site_cv,
-        bwd_hom_site_mean,
-        bwd_hom_site_cv,
-        bwd_het_site_mean,
-        bwd_het_site_cv,
+        missing_mean_owner.release(),
+        missing_cv_owner.release(),
+        cache_mean_owner.release(),
+        cache_cv_owner.release(),
+        fwd_hom_site_mean_owner.release(),
+        fwd_hom_site_cv_owner.release(),
+        fwd_het_site_mean_owner.release(),
+        fwd_het_site_cv_owner.release(),
+        bwd_hom_site_mean_owner.release(),
+        bwd_hom_site_cv_owner.release(),
+        bwd_het_site_mean_owner.release(),
+        bwd_het_site_cv_owner.release(),
     };
 }
 

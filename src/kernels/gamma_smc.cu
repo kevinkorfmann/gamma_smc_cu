@@ -50,8 +50,8 @@ __global__ void precompute_xor_kernel(
     int n_pairs,
     uint64_t* __restrict__ xor_buf)
 {
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    int total = n_pairs * n_words;
+    size_t tid = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total = (size_t)n_pairs * n_words;
     if (tid >= total) return;
 
     int pid = tid / n_words;
@@ -230,7 +230,7 @@ void gamma_smc_forward_gpu(
     cudaMalloc(&d_xor_buf, xor_bytes);
 
     {
-        int total = n_pairs * n_words;
+        size_t total = (size_t)n_pairs * n_words;
         int block = 256;
         int grid = (total + block - 1) / block;
         precompute_xor_kernel<<<grid, block>>>(
@@ -288,7 +288,7 @@ void gamma_smc_forward_quantized_gpu(
     cudaMalloc(&d_xor_buf, xor_bytes);
 
     {
-        int total = n_pairs * n_words;
+        size_t total = (size_t)n_pairs * n_words;
         int block = 256;
         int grid = (total + block - 1) / block;
         precompute_xor_kernel<<<grid, block>>>(

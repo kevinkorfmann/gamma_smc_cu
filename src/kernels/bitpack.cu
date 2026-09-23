@@ -22,15 +22,16 @@ __global__ void bitpack_kernel(const uint8_t* __restrict__ G,
     for (int bit = 0; bit < 64; bit++) {
         int site = base_site + bit;
         if (site < S) {
-            uint64_t val = (uint64_t)G[hap * S + site];
+            uint64_t val = (uint64_t)G[(size_t)hap * S + site];
             word |= (val & 1ULL) << bit;
         }
     }
-    packed[hap * n_words + w] = word;
+    packed[(size_t)hap * n_words + w] = word;
 }
 
 void bitpack_genotypes_gpu(const uint8_t* G, uint64_t* packed,
                            int n, int S, int n_words) {
+    if (n <= 0 || S <= 0) return;
     dim3 block(4, 256);
     dim3 grid((n_words + 3) / 4, (n + 255) / 256);
     bitpack_kernel<<<grid, block>>>(G, packed, n, S, n_words);
@@ -48,19 +49,20 @@ __global__ void unpack_kernel(const uint64_t* __restrict__ packed,
 
     if (hap >= n || w >= n_words) return;
 
-    uint64_t word = packed[hap * n_words + w];
+    uint64_t word = packed[(size_t)hap * n_words + w];
     int base_site = w * 64;
     #pragma unroll
     for (int bit = 0; bit < 64; bit++) {
         int site = base_site + bit;
         if (site < S) {
-            G[hap * S + site] = (uint8_t)((word >> bit) & 1ULL);
+            G[(size_t)hap * S + site] = (uint8_t)((word >> bit) & 1ULL);
         }
     }
 }
 
 void unpack_genotypes_gpu(const uint64_t* packed, uint8_t* G,
                           int n, int S, int n_words) {
+    if (n <= 0 || S <= 0) return;
     dim3 block(4, 256);
     dim3 grid((n_words + 3) / 4, (n + 255) / 256);
     unpack_kernel<<<grid, block>>>(packed, G, n, S, n_words);
@@ -134,6 +136,7 @@ __global__ void prefix_scan_kernel(const uint64_t* __restrict__ packed,
 void pairwise_prefix_scan_gpu(const uint64_t* packed, int n_words, int S,
                               const int* pair_i, const int* pair_j,
                               int n_pairs, int64_t* prefix_out) {
+    if (n_pairs <= 0 || S <= 0) return;
     // One block per pair, 32 threads (one warp)
     prefix_scan_kernel<<<n_pairs, 32>>>(packed, n_words, S,
                                         pair_i, pair_j, n_pairs,
@@ -149,8 +152,8 @@ void pairwise_prefix_scan_gpu(const uint64_t* packed, int n_words, int S,
 __global__ void windowed_div_kernel(const int64_t* __restrict__ prefix,
                                     int S, int n_pairs, int W,
                                     float* __restrict__ div_out) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int pair_idx = idx / S;
+    size_t idx = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t pair_idx = idx / S;
     int s = idx % S;
 
     if (pair_idx >= n_pairs) return;
@@ -158,8 +161,7 @@ __global__ void windowed_div_kernel(const int64_t* __restrict__ prefix,
     const int64_t* p = prefix + (long long)pair_idx * S;
 
     int left = s - W;
-    int right = s + W;
-    if (right >= S) right = S - 1;
+    int right = (int)min((long long)s + W, (long long)S - 1);
 
     int64_t right_val = p[right];
     int64_t left_val = (left >= 0) ? p[left] : 0;
@@ -170,7 +172,7 @@ __global__ void windowed_div_kernel(const int64_t* __restrict__ prefix,
 void windowed_divergence_gpu(const int64_t* prefix, int S,
                              int n_pairs, int window_sites,
                              float* div_out) {
-    int total = n_pairs * S;
+    size_t total = (size_t)n_pairs * S;
     int block = 256;
     int grid = (total + block - 1) / block;
     windowed_div_kernel<<<grid, block>>>(prefix, S, n_pairs, window_sites,

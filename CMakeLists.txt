@@ -48,4 +48,5 @@ target_link_libraries(_core PRIVATE gamma_smc_cu_kernels)
 target_include_directories(_core PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
 # Install the Python module into python/gamma_smc_cu/
-install(TARGETS _core DESTINATION ${CMAKE_SOURCE_DIR}/python/gamma_smc_cu)
+set_target_properties(_core PROPERTIES INSTALL_RPATH "$ORIGIN")
+install(TARGETS _core gamma_smc_cu_kernels DESTINATION ${CMAKE_SOURCE_DIR}/python/gamma_smc_cu)

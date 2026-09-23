@@ -1,11 +1,11 @@
 # Blockwise FB
 
 `gamma_smc_cu.infer_blockwise()` is a memory-bounded variant of the standard
-forward-backward decoder. It produces **the same output** as
-{func}`infer` (byte-identical, when configured correctly) but its peak GPU
-memory is bounded by one block instead of the full sequence × pairs forward
-buffer. This is what makes cohort-sized inputs (1000 Genomes scale and up)
-feasible on a single GPU.
+forward-backward decoder. It returns the same output format as {func}`infer`
+while bounding decoding scratch by a padded site block and pair batch across
+all active streams. Padded windows that cover the full sequence reproduce
+full-sequence decoding; finite flanks generally approximate it. The final
+result resides in host memory, including when multiple CUDA streams are used.
 
 ## What `infer()` does and why it runs out of memory
 
@@ -24,7 +24,7 @@ over the entire 5M-site sequence. That's the time bottleneck.
 
 Even before pair chunking, you eat the chr2 genotype matrix
 (`5008 × 5e6 ÷ 8 ≈ 3.1 GB`), the position array (`5e6 × 8 = 40 MB`), the
-flow-field cache (~5 MB), and a per-pair-chunk forward buffer of multiple GB.
+flow-field cache (~122 MB at 1000 steps), and a per-pair-chunk forward buffer of multiple GB.
 On a 24 GB A10 you don't have headroom for a useful pair chunk; on an 80 GB
 H100 you do but you've already given up most of the GPU to scratch.
 
@@ -69,20 +69,13 @@ forward state at `padded_start`. Without flanking history, every block starts
 from the wrong distribution and the per-block posterior is invalid for the
 first few hundred sites.
 
-The flanks are a **burn-in**: by the time the forward kernel walks the $F$
-flank sites and reaches `core_start`, the state has converged to whatever the
-full-sequence forward sweep would have produced there, *modulo* the small
-contribution from sites that came before `padded_start`. Symmetrically for
-the backward pass.
-
-How much flank is enough depends on the HMM's autocorrelation length. For
-Gamma-SMC at typical human-genetics parameters
-($\rho = 10^{-8}$, $N_e = 10^4$, median 1KG SNP spacing ≈ 300 bp) the
-forward state converges within a few hundred sites. The default
-`flank_sites=2048` is conservative — the bench shows
-`flank_sites=1024` already gives byte-identical output to `infer()` across
-input shapes. Drop it lower at your own risk; pad it more if you suspect
-unusual rho or sparse sites.
+The flanks provide a **burn-in** that reduces the effect of resetting the
+forward and backward states at each padded boundary. Finite flanks do not
+guarantee byte-identical posteriors. The required flank length depends on
+mutation/recombination rates, site spacing and the data. Compare against
+full-sequence decoding on a representative subset, or increase the flank
+length until the estimates stabilize to the tolerance your analysis needs.
+The default is `flank_sites=2048`.
 
 `flank_sites=0` with **multiple blocks** is broken and the Python wrapper
 rejects it with a `ValueError`. The single-block case (`core_block_sites >=
@@ -104,7 +97,7 @@ with:
 | `core_block_sites`  | `'auto'`      | query free GPU memory and pick the largest block that fits all pairs in one batch (clamped to `[1024, 32768]` or to `n_sites` if everything fits in one block) |
 | `flank_sites`       | `2048`        | burn-in on either side of the core            |
 | `pair_batch_size`   | `-1`          | C++ auto-chunks pairs to fit GPU memory; the Python wrapper caps this at `n_pairs` so the C++ doesn't over-allocate |
-| `max_streams`       | `1`           | single CUDA stream; opt into `2` for ~2x speedup at ~2x peak scratch |
+| `max_streams`       | `1`           | single CUDA stream; larger values allow overlap within a shared memory budget |
 | `mean_only`         | `True`        | skip CI bounds; saves ~40% wall time and 2/3 of output bytes |
 | `verbose`           | `False`       | if True, print the chosen block sizing and memory estimate |
 
@@ -149,27 +142,17 @@ in tests — the wrapper falls back to `core_block_sites=8192` and emits a
 
 ## How `pair_batch_size=-1` is handled
 
-The C++ backend allocates per-block scratch buffers sized by the chunk cap
-**before** it knows how many pairs the call has. With `pair_batch_size=-1`,
-the C++ would use `compute_max_fb_block_chunk()`, which on a roomy GPU can be
-much larger than the actual `n_pairs` and produces over-sized cudaMallocs that
-nearly exhaust VRAM.
+The native planner caps each batch by the actual pair count, the requested
+batch size (if positive), and the memory budget divided across all active
+streams. It includes the forward buffer, requested mean/CI/posterior arrays,
+pair indices and XOR words. Once allocated, this plan is reused for every
+block; free memory is not queried again to shrink already allocated batches.
 
-The Python wrapper guards against this by capping `pair_batch_size=-1` to
-`n_pairs` before forwarding the call:
-
-```python
-effective_pair_batch_size = pair_batch_size
-if effective_pair_batch_size == -1:
-    effective_pair_batch_size = max(1, n_pairs)
-```
-
-The C++ then takes `min(effective_pair_batch_size, auto_chunk_cap)`, so:
-
-- with few pairs and plenty of memory: scratch sized for `n_pairs` (cheap),
-- with many pairs and tight memory: scratch sized by `auto_chunk_cap` (the
-  C++ pair-chunker takes over),
-- never anything in between.
+For outputs totaling at most 256 MiB, streams transfer directly into the
+registered host output arrays. Larger results (or failed host registrations)
+use bounded pinned staging buffers, then copy into the final host array. The multi-stream path does not allocate a
+full `n_sites × n_pairs` output on the GPU. Increasing `max_streams` shares the
+same device memory budget among more streams, which can reduce each batch.
 
 ## Numbers from the bench
 
@@ -188,8 +171,10 @@ Read the rightmost three columns: `blk_default`'s GPU memory delta is
 **essentially constant ~40 MB regardless of input size**, while `infer()`'s
 scales linearly. For inputs that comfortably fit `infer()`'s budget, `infer()`
 is faster — there is real per-block overhead. For inputs that don't fit,
-blockwise is the only option, and `max_streams=2` recovers about half the
-overhead by overlapping kernel exec with H2D/D2H copies.
+blockwise is an option. These historical timings precede the current bounded
+multi-stream implementation. Additional streams can overlap kernels and
+transfers, but speedup depends on GPU occupancy, block size and transfer costs;
+measure representative inputs on the target GPU.
 
 ## When to use blockwise
 
@@ -221,3 +206,16 @@ The test suite at `tests/unit/test_infer.py::TestInferBlockwise` covers:
 Cross-build verification (paper-v3-frozen vs HEAD) confirmed all md5 hashes
 match across a small grid of input shapes for both `mean_only=True` and
 `mean_only=False`. See the bench script at `benchmarks/bench_blockwise.py`.
+
+## CUDA regression checks
+
+Run `pytest tests/unit tests/property tests/integration` with both GPUs visible
+to include the multi-GPU checks. The large-allocation regressions are opt-in:
+
+```bash
+GAMMA_SMC_CU_LARGE_TESTS=1 pytest tests/unit/test_cuda_regressions.py
+```
+
+Run those checks only on an idle GPU with at least 8 GiB free. They cover
+bitpacking/unpacking across the signed 32-bit byte-offset boundary and
+blockwise decoding when the host output exceeds available GPU memory.
