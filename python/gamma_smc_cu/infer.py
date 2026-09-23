@@ -18,27 +18,52 @@ _DEFAULT_BLOCK_SITES = 8192
 
 
 def _coerce_inputs(G_or_ts, positions):
-    """Normalize tree-sequence and matrix inputs to contiguous arrays."""
+    """Validate before narrowing alleles to uint8 (which can wrap values)."""
     if hasattr(G_or_ts, "genotype_matrix"):
-        ts = G_or_ts
-        G = ts.genotype_matrix().T.astype(np.uint8, copy=False)
-        positions_arr = np.array(
-            [variant.position for variant in ts.variants()],
-            dtype=np.float64,
-        )
+        G = np.asarray(G_or_ts.genotype_matrix()).T
+        positions = [variant.position for variant in G_or_ts.variants()]
     else:
         if positions is None:
             raise ValueError("positions is required when G_or_ts is a genotype matrix.")
-        G = np.ascontiguousarray(G_or_ts, dtype=np.uint8)
-        if G.ndim != 2:
-            raise ValueError("G_or_ts must be a 2D haplotype matrix or a tree sequence.")
-        positions_arr = np.ascontiguousarray(positions, dtype=np.float64)
-        if positions_arr.ndim != 1:
-            raise ValueError("positions must be a 1D array of site coordinates.")
-        if G.shape[1] != positions_arr.shape[0]:
-            raise ValueError("positions length must match the number of sites in G_or_ts.")
+        G = np.asarray(G_or_ts)
+    if G.ndim != 2 or G.shape[0] < 1:
+        raise ValueError("G_or_ts must be a 2D haplotype matrix with at least one haplotype.")
+    # Reductions avoid full-matrix boolean temporaries for cohort-sized inputs.
+    if G.dtype.kind in "biu":
+        binary = G.size == 0 or (G.max() <= 1 and (G.dtype.kind != "i" or G.min() >= 0))
+    elif G.dtype.kind == "f":
+        binary = all(np.all((chunk == 0) | (chunk == 1)) for chunk in np.nditer(
+            G, flags=["external_loop", "buffered", "zerosize_ok"], buffersize=1 << 20))
+    else:
+        binary = False
+    if not binary:
+        raise ValueError("Genotypes must contain only 0 and 1; missing/multiallelic sites are unsupported.")
+    positions_arr = np.ascontiguousarray(positions, dtype=np.float64)
+    if positions_arr.ndim != 1:
+        raise ValueError("positions must be a 1D array of site coordinates.")
+    if positions_arr.size != G.shape[1]:
+        raise ValueError("positions length must match the number of sites in G_or_ts.")
+    if (not np.all(np.isfinite(positions_arr)) or np.any(positions_arr < 0)
+            or np.any(np.diff(positions_arr) <= 0)):
+        raise ValueError("positions must be finite, non-negative and strictly increasing.")
+    return np.ascontiguousarray(G, dtype=np.uint8), positions_arr
 
-    return G, positions_arr
+
+def _validate_rates(Ne, mu, rho):
+    if not (math.isfinite(Ne) and Ne > 0 and math.isfinite(mu) and mu >= 0
+            and math.isfinite(rho) and rho >= 0):
+        raise ValueError("Ne must be finite and positive; mu and rho must be finite and non-negative.")
+
+
+def _empty_result(positions, pairs, mean_only, posterior, blockwise=False):
+    keys = ["mean"] + ([] if mean_only else ["lower", "upper"])
+    if posterior:
+        keys += ["posterior_alpha", "posterior_beta"]
+    result = {key: np.empty((len(positions), len(pairs)), dtype=np.float32) for key in keys}
+    result.update(positions=positions, pairs=pairs)
+    if blockwise:
+        result["blocks"] = np.empty((0, 4), dtype=np.int32)
+    return result
 
 
 def _estimate_scaled_params(G, positions, mu, rho, Ne):
@@ -129,11 +154,10 @@ def _filter_segregating(G, positions):
 def _resolve_flow_field_path(flow_field_path):
     """Locate the default flow field if the caller did not pass one."""
     if flow_field_path is not None:
-        return flow_field_path
+        return os.fspath(flow_field_path)
 
     candidates = [
         os.path.join(os.path.dirname(__file__), "default_flow_field.txt"),
-        "/sietch_colab/kkor/gamma_smc/resources/default_flow_field.txt",
     ]
     for candidate in candidates:
         if os.path.exists(candidate):
@@ -144,8 +168,16 @@ def _resolve_flow_field_path(flow_field_path):
     )
 
 
-def _normalize_pairs(pairs):
-    return [(int(i), int(j)) for i, j in pairs]
+def _normalize_pairs(pairs, n_haplotypes=None):
+    import operator
+    try:
+        result = [(operator.index(i), operator.index(j)) for i, j in pairs]
+    except (TypeError, ValueError) as exc:
+        raise ValueError("pairs must contain two integer haplotype indices per pair.") from exc
+    if n_haplotypes is not None and any(
+            i < 0 or j < 0 or i >= n_haplotypes or j >= n_haplotypes for i, j in result):
+        raise ValueError("Pair indices must be within [0, n_haplotypes).")
+    return result
 
 
 def _gpu_bytes_per_pair_site(mean_only):
@@ -265,6 +297,7 @@ def infer(
     """
     from gamma_smc_cu import _core
 
+    _validate_rates(Ne, mu, rho)
     G, positions = _coerce_inputs(G_or_ts, positions)
     G, positions, _ = _filter_segregating(G, positions)
     n = G.shape[0]
@@ -272,7 +305,10 @@ def infer(
     if pairs is None:
         pairs = [(i, j) for i in range(n) for j in range(i)]
     else:
-        pairs = _normalize_pairs(pairs)
+        pairs = _normalize_pairs(pairs, G.shape[0])
+
+    if positions.size == 0 or not pairs:
+        return _empty_result(positions, pairs, mean_only, return_posterior)
 
     flow_field_path = _resolve_flow_field_path(flow_field_path)
 
@@ -319,15 +355,19 @@ def infer_blockwise(
     with ``flank_sites`` sites of context on either side, then stitches the
     core regions of every block back into the usual ``(n_sites, n_pairs)``
     site-major output array. The flanks act as a forward/backward burn-in
-    so the per-block posterior matches the full-sequence posterior to
-    floating-point precision.
+    to approximate the full-sequence posterior. Accuracy depends on the input
+    and flank size; compare larger flanks or full-sequence results on a subset.
 
     Monomorphic sites in ``G`` are filtered before decoding to match
     :func:`infer` and the original gamma_smc (Schweiger & Durbin,
     2023); see :func:`infer` for details.
 
-    Memory: peak GPU usage is bounded by one padded block,
-    ``(core_block_sites + 2 * flank_sites) * pair_chunk * (12 or 20) bytes``,
+    Memory: decoding scratch is bounded by the padded block and pair batch
+    across all active streams (12 bytes per pair/site for means, 20 with CI,
+    plus 8 for posterior parameters). Packed genotypes, positions, the flow
+    cache and per-stream XOR words also reside on the GPU. Results are
+    transferred directly to host outputs when at most 256 MiB can be pinned,
+    otherwise through bounded pinned host staging buffers,
     instead of the full ``n_sites * n_pairs * ...`` forward buffer that
     :func:`infer` allocates. This is the entire point of the function and
     is what makes cohort-sized inputs feasible.
@@ -392,11 +432,15 @@ def infer_blockwise(
             raise ValueError("core_block_sites must be positive (or 'auto').")
 
     # ----- parse inputs to learn n_sites / n_pairs -----
+    _validate_rates(Ne, mu, rho)
     G, positions = _coerce_inputs(G_or_ts, positions)
     G, positions, _ = _filter_segregating(G, positions)
-    pairs = _normalize_pairs(pairs)
+    pairs = _normalize_pairs(pairs, G.shape[0])
     n_sites = G.shape[1]
     n_pairs = len(pairs)
+
+    if n_sites == 0:
+        return _empty_result(positions, pairs, mean_only, return_posterior, blockwise=True)
 
     # ----- auto-size or sanity-check core_block_sites -----
     free_bytes = _query_free_gpu_bytes()
@@ -450,10 +494,8 @@ def infer_blockwise(
             "single block."
         )
 
-    # The C++ backend allocates per-block GPU buffers sized by pair_batch_size
-    # *before* it learns how many pairs we actually have. With pair_batch_size=-1
-    # the auto-cap can be much larger than n_pairs on a roomy GPU, causing huge
-    # wasted allocations. Cap by n_pairs here so the buffer matches the work.
+    # The native memory planner also caps the batch by actual work and accounts
+    # for all streams and optional posterior output arrays.
     effective_pair_batch_size = pair_batch_size
     if effective_pair_batch_size == -1:
         effective_pair_batch_size = max(1, n_pairs)

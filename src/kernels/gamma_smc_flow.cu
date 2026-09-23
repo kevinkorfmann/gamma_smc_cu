@@ -1,3 +1,5 @@
+#include <stdexcept>
+#include <string>
 #include "gamma_smc_cu/flow_field.h"
 #include <cmath>
 #include <cstdio>
@@ -364,10 +366,12 @@ void gamma_smc_flow_fb_gpu(
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_flow forward: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_flow forward: ") + cudaGetErrorString(err));
     }
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 
     // Backward + combine
     bool ci = (tmrca_lower_out != nullptr && tmrca_upper_out != nullptr);
@@ -391,10 +395,12 @@ void gamma_smc_flow_fb_gpu(
 
     err = cudaGetLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_flow backward: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_flow backward: ") + cudaGetErrorString(err));
     }
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 }
 
 // ============================================================
@@ -618,11 +624,11 @@ extern __global__ void precompute_xor_kernel(
 void launch_precompute_xor(
     const uint64_t* packed, int n_words,
     const int* pair_i, const int* pair_j, int n_pairs,
-    uint64_t* xor_out)
+    uint64_t* xor_out, void* stream_handle)
 {
-    int total = n_pairs * n_words;
+    size_t total = (size_t)n_pairs * n_words;
     int grid = (total + 255) / 256;
-    precompute_xor_kernel<<<grid, 256>>>(packed, n_words, pair_i, pair_j, n_pairs, xor_out);
+    precompute_xor_kernel<<<grid, 256, 0, static_cast<cudaStream_t>(stream_handle)>>>(packed, n_words, pair_i, pair_j, n_pairs, xor_out);
 }
 
 // ============================================================
@@ -869,10 +875,12 @@ void gamma_smc_flow_cached_fb_gpu(
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_cached forward: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_cached forward: ") + cudaGetErrorString(err));
     }
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 
     // Backward + combine
     bool ci = (tmrca_lower_out != nullptr && tmrca_upper_out != nullptr);
@@ -896,10 +904,12 @@ void gamma_smc_flow_cached_fb_gpu(
 
     err = cudaGetLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_cached backward: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_cached backward: ") + cudaGetErrorString(err));
     }
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 }
 
 // ============================================================
@@ -912,7 +922,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
     float Ne,
     int n_pairs,
     FlowFieldDeviceCacheView cache,
-    float* fwd_buf,       // layout: [fwd_mean][fwd_cv][fwd_alpha][fwd_beta] = 4 × block_S × n_pairs
+    float* fwd_buf,       // layout: [fwd_mean][fwd_cv] = 2 × block_S × n_pairs
     float* tmrca_mean_out,
     float* tmrca_lower_out,
     float* tmrca_upper_out,
@@ -937,8 +947,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
 
     cudaError_t err = cudaPeekAtLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_cached forward block: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_cached forward block: ") + cudaGetErrorString(err));
     }
 
     bool ci = (tmrca_lower_out != nullptr && tmrca_upper_out != nullptr);
@@ -962,8 +971,7 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
 
     err = cudaPeekAtLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_cached backward block: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_cached backward block: ") + cudaGetErrorString(err));
     }
 }
 
@@ -1126,10 +1134,12 @@ void gamma_smc_flow_tex_fwd_gpu(
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_tex fwd: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_tex fwd: ") + cudaGetErrorString(err));
     }
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 }
 
 // ============================================================
@@ -1288,10 +1298,12 @@ void gamma_smc_flow_h2_fwd_gpu(
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_h2 fwd: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_h2 fwd: ") + cudaGetErrorString(err));
     }
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 }
 
 // ============================================================
@@ -1418,10 +1430,12 @@ void gamma_smc_flow_sync_fwd_gpu(
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_sync fwd: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_sync fwd: ") + cudaGetErrorString(err));
     }
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 }
 
 // ============================================================
@@ -1439,8 +1453,7 @@ void gamma_smc_cached_fwd_only_kernel(
     const int* __restrict__ pair_i,
     const int* __restrict__ pair_j,
     int n_pairs,
-    const float2* __restrict__ cache,   // interleaved [n_max_steps × FF_GRID]
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* __restrict__ mean_out,
     float* __restrict__ lower_out,
     float* __restrict__ upper_out)
@@ -1454,30 +1467,21 @@ void gamma_smc_cached_fwd_only_kernel(
     float m = 0.0f, c = 0.0f;
     int cur_word = -1;
     uint64_t xor_w = 0;
-    double prev_pos = 0.0;
+    double prev_pos = -1.0;
 
     for (int s = 0; s < S; s++) {
         double pos = positions[s];
-        int gap_steps = (int)(pos - prev_pos + 0.5);
+        int seg_steps = rounded_segment_steps(pos - prev_pos);
         prev_pos = pos;
 
-        if (s > 0 && gap_steps > 0)
-            cache_advance_f2(m, c, cache, gap_steps, n_max_steps);
-
-        // Het emission (rare: ~1% of sites)
         int w = s >> 6, bit = s & 63;
         if (w != cur_word) {
             xor_w = packed[(long long)hi * n_words + w]
                   ^ packed[(long long)hj * n_words + w];
             cur_word = w;
         }
-        if ((xor_w >> bit) & 1ULL) {
-            float alpha = __exp10f(-2.0f * c) + 1.0f;
-            float a_log = __log10f(alpha);
-            float b_log = -2.0f * c - m;
-            m = a_log - b_log;
-            c = -0.5f * a_log;
-        }
+        bool is_het = ((xor_w >> bit) & 1ULL) != 0;
+        cache_apply_forward_segment(m, c, cache, seg_steps, is_het);
 
         // Output: mean_gen = 10^m * 2Ne
         long long idx = (long long)s * n_pairs + pid;
@@ -1505,8 +1509,7 @@ void gamma_smc_flow_cached_fwd_gpu(
     const double* positions, int S,
     float Ne,
     const int* pair_i, const int* pair_j, int n_pairs,
-    const void* d_cache_void,
-    int n_max_steps,
+    FlowFieldDeviceCacheView cache,
     float* tmrca_mean_out,
     float* tmrca_lower_out,
     float* tmrca_upper_out)
@@ -1514,29 +1517,30 @@ void gamma_smc_flow_cached_fwd_gpu(
     const int block = 256;
     int grid = (n_pairs + block - 1) / block;
     float two_Ne = 2.0f * Ne;
-    const float2* d_cache = (const float2*)d_cache_void;
 
     bool ci = (tmrca_lower_out != nullptr && tmrca_upper_out != nullptr);
     if (ci) {
         gamma_smc_cached_fwd_only_kernel<true><<<grid, block>>>(
             packed, n_words, positions, S, two_Ne,
             pair_i, pair_j, n_pairs,
-            d_cache, n_max_steps,
+            cache,
             tmrca_mean_out, tmrca_lower_out, tmrca_upper_out);
     } else {
         gamma_smc_cached_fwd_only_kernel<false><<<grid, block>>>(
             packed, n_words, positions, S, two_Ne,
             pair_i, pair_j, n_pairs,
-            d_cache, n_max_steps,
+            cache,
             tmrca_mean_out, nullptr, nullptr);
     }
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_cached fwd_only: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_cached fwd_only: ") + cudaGetErrorString(err));
     }
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 }
 
 void gamma_smc_flow_cached_forward_states_gpu(
@@ -1559,10 +1563,12 @@ void gamma_smc_flow_cached_forward_states_gpu(
 
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        fprintf(stderr, "gamma_smc_cached forward_states: %s\n", cudaGetErrorString(err));
-        return;
+        throw std::runtime_error(std::string("gamma_smc_cached forward_states: ") + cudaGetErrorString(err));
     }
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 }
 
 // ============================================================
@@ -1662,7 +1668,10 @@ void gamma_smc_flow_cached_fb_reduce_gpu(
         pair_i, pair_j, n_pairs,
         cache,
         fwd_mean, fwd_cv);
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 
     // Zero accumulators
     cudaMemset(site_mean_out, 0, S * sizeof(float));
@@ -1674,10 +1683,16 @@ void gamma_smc_flow_cached_fb_reduce_gpu(
         cache,
         fwd_mean, fwd_cv,
         site_mean_out, nullptr, nullptr);
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 
     // Finalize: divide by n_pairs
     int fgrid = (S + 255) / 256;
     finalize_site_mean_kernel<<<fgrid, 256>>>(site_mean_out, S, 1.0f / (float)n_pairs);
-    cudaDeviceSynchronize();
+    {
+        auto status = cudaDeviceSynchronize();
+        if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    }
 }

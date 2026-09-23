@@ -144,18 +144,9 @@ class CoalescenceEstimator:
         gpu_id : int
             GPU device to use (reserved for future multi-GPU support).
         """
-        genotypes = np.ascontiguousarray(genotypes, dtype=np.uint8)
-        positions = np.ascontiguousarray(positions, dtype=np.float64)
-
-        if genotypes.ndim != 2:
-            raise ValueError(f"genotypes must be 2D (n, S), got shape {genotypes.shape}")
-        if positions.ndim != 1:
-            raise ValueError(f"positions must be 1D (S,), got shape {positions.shape}")
-        if genotypes.shape[1] != positions.shape[0]:
-            raise ValueError(
-                f"genotypes has {genotypes.shape[1]} sites but positions has "
-                f"{positions.shape[0]} entries"
-            )
+        from gamma_smc_cu.infer import _coerce_inputs, _validate_rates
+        genotypes, positions = _coerce_inputs(genotypes, positions)
+        _validate_rates(Ne, mu, rho)
 
         self.genotypes = genotypes
         self.positions = positions
@@ -200,7 +191,7 @@ class CoalescenceEstimator:
         """
         # Extract genotype matrix: tskit returns (n_sites, n_samples), we need
         # (n_samples, n_sites).
-        G = ts.genotype_matrix().T.astype(np.uint8)
+        G = ts.genotype_matrix().T
         positions = np.array([v.position for v in ts.variants()], dtype=np.float64)
 
         # Infer parameters from tree sequence if not provided

@@ -38,23 +38,30 @@ class MultiGPUFlowContext:
                  gpu_ids=None, cache_steps=0):
         if gpu_ids is None:
             gpu_ids = list(range(_core.get_device_count()))
+        if not gpu_ids or len(set(gpu_ids)) != len(gpu_ids):
+            raise ValueError("gpu_ids must contain at least one distinct device.")
         self.gpu_ids = gpu_ids
         self.n_gpus = len(gpu_ids)
         self.S = len(positions)
 
         self.contexts = []
-        for gid in gpu_ids:
-            _core.set_device(gid)
-            ctx = _core.FlowContext(G, positions, float(Ne), mu, rho,
-                                    flow_field_path, cache_steps)
-            self.contexts.append(ctx)
-        _core.set_device(gpu_ids[0])
+        previous_device = _core.get_device()
+        try:
+            for gid in gpu_ids:
+                _core.set_device(gid)
+                ctx = _core.FlowContext(G, positions, float(Ne), mu, rho,
+                                        flow_field_path, cache_steps)
+                self.contexts.append(ctx)
+        finally:
+            _core.set_device(previous_device)
 
         # Persistent thread pool avoids per-call ThreadPoolExecutor overhead
         self._pool = ThreadPoolExecutor(max_workers=self.n_gpus)
 
     def __del__(self):
-        self._pool.shutdown(wait=False)
+        pool = getattr(self, "_pool", None)
+        if pool is not None:
+            pool.shutdown(wait=False)
 
     def _split_pairs(self, pairs):
         """Split pairs list into per-GPU chunks."""

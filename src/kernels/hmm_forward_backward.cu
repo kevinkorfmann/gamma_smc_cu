@@ -266,7 +266,7 @@ __global__ void hmm_forward_backward_kernel(
     // Handle last site gamma/summary (backward starts from S-2, so site S-1 gamma = alpha * 1.0 = alpha)
     if constexpr (MODE >= 1) {
         // Site S-1: gamma = alpha (beta=1, normalized)
-        float gamma_val = alpha_store[(S - 1) * K_TPL + k];
+        float gamma_val = alpha_store[(long long)(S - 1) * K_TPL + k];
         float mean_contrib = gamma_val * t_k;
         float site_mean = block_reduce_sum_f<K_TPL>(mean_contrib, my_smem, k);
 
@@ -294,8 +294,21 @@ __global__ void hmm_forward_backward_kernel(
             // For K>32, use shared memory approach
             lower_val = (float)time_midpoints[0];
             upper_val = (float)time_midpoints[K_TPL - 1];
-            // Fallback: thread 0 reads from alpha_store
-            // (gamma_val at S-1 = alpha)
+            if (k == 0) {
+                float cumulative = 0.0f;
+                bool lower_set = false;
+                for (int kk = 0; kk < K_TPL; ++kk) {
+                    cumulative += alpha_store[(long long)(S - 1) * K_TPL + kk];
+                    if (!lower_set && cumulative >= 0.025f) {
+                        lower_val = (float)time_midpoints[kk];
+                        lower_set = true;
+                    }
+                    if (cumulative >= 0.975f) {
+                        upper_val = (float)time_midpoints[kk];
+                        break;
+                    }
+                }
+            }
         }
 
         long long out_idx = (long long)pair_idx * S + (S - 1);
@@ -548,8 +561,8 @@ __global__ void extract_summaries_kernel(
     float* __restrict__ tmrca_lower,
     float* __restrict__ tmrca_upper)
 {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int pair_idx = idx / S;
+    size_t idx = (size_t)blockIdx.x * blockDim.x + threadIdx.x;
+    size_t pair_idx = idx / S;
     int s = idx % S;
 
     if (pair_idx >= n_pairs) return;
@@ -560,7 +573,7 @@ __global__ void extract_summaries_kernel(
     double cum = 0.0;
     double lower = time_midpoints[0];
     double upper = time_midpoints[K - 1];
-    bool lower_set = false;
+    bool lower_set = false, upper_set = false;
 
     for (int k = 0; k < K; k++) {
         double gk = (double)g[k];
@@ -571,9 +584,9 @@ __global__ void extract_summaries_kernel(
             lower = tk;
             lower_set = true;
         }
-        if (cum >= 0.975) {
+        if (!upper_set && cum >= 0.975) {
             upper = tk;
-            break;
+            upper_set = true;
         }
     }
 
@@ -588,7 +601,7 @@ void extract_summaries_gpu(const float* gamma, int n_pairs, int S,
                            float* tmrca_mean, float* tmrca_lower,
                            float* tmrca_upper,
                            int K) {
-    int total = n_pairs * S;
+    size_t total = (size_t)n_pairs * S;
     int block = 256;
     int grid = (total + block - 1) / block;
     extract_summaries_kernel<<<grid, block>>>(

@@ -15,7 +15,9 @@ import pytest
 import gamma_smc_cu._core as _core
 from gamma_smc_cu.multigpu import MultiGPUFlowContext
 
-FLOW_FIELD_PATH = "/sietch_colab/kkor/gamma_smc/resources/default_flow_field.txt"
+from gamma_smc_cu.infer import _resolve_flow_field_path
+
+FLOW_FIELD_PATH = _resolve_flow_field_path(None)
 
 N_GPUS = _core.get_device_count()
 

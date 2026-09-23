@@ -1,8 +1,5 @@
 """Test flow-field Gamma-SMC forward-backward on GPU vs numpy reference."""
 
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-
 import numpy as np
 import pytest
 from tests.reference.gamma_smc_flow_numpy import _bilinear
@@ -13,7 +10,7 @@ def make_test_data(n=20, length=1_000_000, Ne=10_000, mu=1.25e-8, rho=1e-8, seed
     ts = msprime.sim_ancestry(
         n, sequence_length=length, recombination_rate=rho,
         population_size=Ne, random_seed=seed)
-    ts = msprime.sim_mutations(ts, rate=mu, random_seed=seed + 1)
+    ts = msprime.sim_mutations(ts, rate=mu, model=msprime.BinaryMutationModel(), random_seed=seed + 1)
     G = ts.genotype_matrix().T.astype(np.uint8)  # (n_haps, S)
     pos = np.array([v.position for v in ts.variants()])
     # Get true TMRCA for pairs
@@ -57,7 +54,7 @@ def test_flow_fb_vs_true_tmrca():
     ts = msprime.sim_ancestry(
         50, sequence_length=2_000_000, recombination_rate=rho,
         population_size=Ne, random_seed=123)
-    ts = msprime.sim_mutations(ts, rate=mu, random_seed=124)
+    ts = msprime.sim_mutations(ts, rate=mu, model=msprime.BinaryMutationModel(), random_seed=124)
     G = ts.genotype_matrix().T.astype(np.uint8)
     pos = np.array([v.position for v in ts.variants()])
 
@@ -98,7 +95,7 @@ def test_flow_fb_vs_moment_match():
     ts = msprime.sim_ancestry(
         20, sequence_length=1_000_000, recombination_rate=rho,
         population_size=Ne, random_seed=456)
-    ts = msprime.sim_mutations(ts, rate=mu, random_seed=457)
+    ts = msprime.sim_mutations(ts, rate=mu, model=msprime.BinaryMutationModel(), random_seed=457)
     G = ts.genotype_matrix().T.astype(np.uint8)
     pos = np.array([v.position for v in ts.variants()])
 

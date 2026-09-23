@@ -110,6 +110,7 @@ data/
 1kGP_*.tbi
 1kGP_*.vcf.gz*
 default_flow_field.txt
+!python/gamma_smc_cu/default_flow_field.txt
 private_verify_s3.py
 
 # Backup files
