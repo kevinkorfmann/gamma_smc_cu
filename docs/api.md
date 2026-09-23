@@ -210,6 +210,10 @@ result = ctx.run_fwd(pairs, mean_only=True)
 # Standard FB: smoothed posterior, full forward buffer
 result = ctx.run_fb(pairs, mean_only=True)
 
+# Per-site summaries over the requested pairs, without a dense host result
+summary = ctx.run_fb_summary(pairs)
+# summary["site_mean"], summary["site_min"], summary["site_max"]: (n_sites,)
+
 # Blockwise FB: bounded GPU memory, multi-block decoding with flanks
 result = ctx.run_fb_blockwise(
     pairs,
@@ -225,6 +229,13 @@ result = ctx.run_fb_blockwise(
 precomputed multi-step flow-field cache on the GPU for its entire lifetime.
 The cost of construction is dominated by the cache build (a few hundred ms in
 double-precision on host); subsequent calls reuse all GPU state.
+
+`run_fb_summary()` returns the mean, minimum and maximum across the requested
+pairs' posterior means at each site, in generations, plus `n_pairs`. The extrema
+are across pairs, not posterior credible intervals. Pair chunking bounds GPU
+scratch memory; only the three per-site arrays are copied to the host. Empty
+pair lists return NaN arrays, and zero-site inputs return empty arrays. GPU
+reductions can differ slightly in the last floating-point digits between runs.
 
 ## Multi-GPU
 

@@ -162,10 +162,11 @@ fwd_buf[2 × S × n_pairs]   // 2 floats: (m, c)
 you'd run out of GPU memory before getting to the backward sweep. Two
 mitigations are in place at the C++ level inside `FlowContext`:
 
-1. **Pair chunking.** `compute_max_fb_chunk()` calls `cudaMemGetInfo()`, leaves
-   ~512 MB of headroom, and computes the largest pair-chunk that fits the
-   forward buffer + output arrays. The C++ then loops over pair chunks,
-   running a complete forward+backward per chunk.
+1. **Summary pair chunking.** `run_fb_summary()` calls `compute_max_fb_chunk()`
+   to budget free and reusable GPU memory with ~512 MiB of headroom. Each
+   pair needs two forward-state planes and pair indices; the mean/min/max
+   accumulators have only one value per site. The C++ loops over pair chunks,
+   running a complete forward+backward per chunk without a dense result matrix.
 2. **`run_fwd()` (forward-only).** If you only want a smoothed mean per site
    from the forward filter and don't need the backward correction (i.e. the
    filtered, not smoothed, posterior), `run_fwd()` skips the buffer entirely
@@ -176,6 +177,13 @@ The third mitigation is the **blockwise FB**, which is significant enough to
 have [its own page](blockwise.md). It splits the *site* axis instead of the
 pair axis, so the per-block forward buffer is bounded by the block size and
 the kernel can decode arbitrarily long sequences regardless of `n_pairs`.
+
+Cached flow launches use whole-warp block sizes between 32 and 256 threads.
+Smaller pair batches use smaller blocks to spread work across multiprocessors;
+large batches retain 256-thread blocks. Summary batches of at least 1,024 pairs
+reduce mean/min/max within each warp before the global atomic updates. Smaller
+batches update directly to avoid the shuffle overhead. These choices preserve
+the inference calculation; the order of floating-point mean reduction can vary.
 
 ## Persistent `FlowContext`
 

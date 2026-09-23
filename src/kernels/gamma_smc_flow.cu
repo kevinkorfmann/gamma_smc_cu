@@ -4,6 +4,21 @@
 #include <cmath>
 #include <cstdio>
 #include <cuda_fp16.h>
+#include <math_constants.h>
+
+static int cached_flow_block_size(int n_pairs) {
+    int device = 0, multiprocessors = 0;
+    auto status = cudaGetDevice(&device);
+    if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    status = cudaDeviceGetAttribute(&multiprocessors, cudaDevAttrMultiProcessorCount, device);
+    if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
+    // Spread modest batches across the GPU; keep 256 threads for large batches.
+    // All sizes are whole warps, including launches of the reduction kernel.
+    int block = 256;
+    while (block > 32 && ((long long)n_pairs + block - 1) / block < 2LL * multiprocessors)
+        block /= 2;
+    return block;
+}
 
 // ============================================================
 // Constants
@@ -860,8 +875,8 @@ void gamma_smc_flow_cached_fb_gpu(
     float* posterior_alpha_out,
     float* posterior_beta_out)
 {
-    const int block = 256;
-    int grid = (n_pairs + block - 1) / block;
+    const int block = cached_flow_block_size(n_pairs);
+    int grid = (int)(((long long)n_pairs + block - 1) / block);
 
     float* fwd_mean = fwd_buf;
     float* fwd_cv   = fwd_buf + (long long)S * n_pairs;
@@ -930,8 +945,8 @@ void gamma_smc_flow_cached_fb_block_gpu_async(
     float* posterior_beta_out,
     void* stream_handle)
 {
-    const int block = 256;
-    int grid = (n_pairs + block - 1) / block;
+    const int block = cached_flow_block_size(n_pairs);
+    int grid = (int)(((long long)n_pairs + block - 1) / block);
     cudaStream_t stream = static_cast<cudaStream_t>(stream_handle);
 
     // fwd_buf layout: [fwd_mean][fwd_cv]
@@ -1514,8 +1529,8 @@ void gamma_smc_flow_cached_fwd_gpu(
     float* tmrca_lower_out,
     float* tmrca_upper_out)
 {
-    const int block = 256;
-    int grid = (n_pairs + block - 1) / block;
+    const int block = cached_flow_block_size(n_pairs);
+    int grid = (int)(((long long)n_pairs + block - 1) / block);
     float two_Ne = 2.0f * Ne;
 
     bool ci = (tmrca_lower_out != nullptr && tmrca_upper_out != nullptr);
@@ -1550,8 +1565,8 @@ void gamma_smc_flow_cached_forward_states_gpu(
     FlowFieldDeviceCacheView cache,
     float* fwd_buf)
 {
-    const int block = 256;
-    int grid = (n_pairs + block - 1) / block;
+    const int block = cached_flow_block_size(n_pairs);
+    int grid = (int)(((long long)n_pairs + block - 1) / block);
     float* fwd_mean = fwd_buf;
     float* fwd_cv = fwd_buf + (long long)S * n_pairs;
 
@@ -1574,9 +1589,32 @@ void gamma_smc_flow_cached_forward_states_gpu(
 // ============================================================
 // Fused backward + per-site reduction kernel
 // Instead of writing [S × n_pairs] mean_out, accumulates per-site
-// mean via warp shuffle + atomicAdd. Output is [S] floats.
+// mean/min/max, with one atomic update per warp for larger pair batches.
 // Eliminates the massive D2H transfer entirely.
 // ============================================================
+__device__ __forceinline__ void atomic_min_float(float* address, float value) {
+    // IEEE float bit order is increasing for positive values and reversed for
+    // negative values. Signed/unsigned integer atomics handle both signs.
+    if (value >= 0.0f) atomicMin(reinterpret_cast<int*>(address), __float_as_int(value));
+    else atomicMax(reinterpret_cast<unsigned*>(address), __float_as_uint(value));
+}
+
+__device__ __forceinline__ void atomic_max_float(float* address, float value) {
+    if (value >= 0.0f) atomicMax(reinterpret_cast<int*>(address), __float_as_int(value));
+    else atomicMin(reinterpret_cast<unsigned*>(address), __float_as_uint(value));
+}
+
+__global__ void initialize_site_summary_kernel(
+    float* site_sum, float* site_min, float* site_max, int S)
+{
+    int s = blockIdx.x * blockDim.x + threadIdx.x;
+    if (s >= S) return;
+    site_sum[s] = 0.0f;
+    if (site_min) site_min[s] = CUDART_INF_F;
+    if (site_max) site_max[s] = -CUDART_INF_F;
+}
+
+template<bool WARP_REDUCE>
 __global__ void gamma_smc_cached_backward_reduce_kernel(
     const uint64_t* __restrict__ packed,
     int n_words,
@@ -1594,6 +1632,8 @@ __global__ void gamma_smc_cached_backward_reduce_kernel(
     float* __restrict__ site_max)    // [S] or NULL
 {
     int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    // Capture the partial final warp before out-of-range lanes return.
+    const unsigned mask = __ballot_sync(0xffffffff, pid < n_pairs);
     if (pid >= n_pairs) return;
 
     int hi = pair_i[pid];
@@ -1617,8 +1657,30 @@ __global__ void gamma_smc_cached_backward_reduce_kernel(
         float b_s = fwd_b + bwd_b - 1.0f;
         float mean_gen = (a_s / fmaxf(b_s, 1e-10f)) * unscale;
 
-        // Simple per-thread atomicAdd (no warp shuffle needed)
-        atomicAdd(&site_sum[s], mean_gen);
+        if constexpr (WARP_REDUCE) {
+            float sum = mean_gen, minimum = mean_gen, maximum = mean_gen;
+            const int lane = threadIdx.x & 31;
+            const int active = __popc(mask);
+            for (int delta = 16; delta > 0; delta /= 2) {
+                float other = __shfl_down_sync(mask, sum, delta);
+                float other_min = __shfl_down_sync(mask, minimum, delta);
+                float other_max = __shfl_down_sync(mask, maximum, delta);
+                if (lane + delta < active) {
+                    sum += other;
+                    minimum = fminf(minimum, other_min);
+                    maximum = fmaxf(maximum, other_max);
+                }
+            }
+            if (lane == 0) {
+                atomicAdd(&site_sum[s], sum);
+                if (site_min) atomic_min_float(&site_min[s], minimum);
+                if (site_max) atomic_max_float(&site_max[s], maximum);
+            }
+        } else {
+            atomicAdd(&site_sum[s], mean_gen);
+            if (site_min) atomic_min_float(&site_min[s], mean_gen);
+            if (site_max) atomic_max_float(&site_max[s], mean_gen);
+        }
 
 
         // Propagate the segment ending at s so the next iteration matches the
@@ -1656,8 +1718,8 @@ void gamma_smc_flow_cached_fb_reduce_gpu(
     float* site_min_out,   // [S] device or NULL
     float* site_max_out)   // [S] device or NULL
 {
-    const int block = 256;
-    int grid = (n_pairs + block - 1) / block;
+    const int block = cached_flow_block_size(n_pairs);
+    int grid = (int)(((long long)n_pairs + block - 1) / block);
 
     float* fwd_mean = fwd_buf;
     float* fwd_cv   = fwd_buf + (long long)S * n_pairs;
@@ -1673,23 +1735,28 @@ void gamma_smc_flow_cached_fb_reduce_gpu(
         if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
     }
 
-    // Zero accumulators
-    cudaMemset(site_mean_out, 0, S * sizeof(float));
+    const int fgrid = (int)(((long long)S + 255) / 256);
+    initialize_site_summary_kernel<<<fgrid, 256>>>(
+        site_mean_out, site_min_out, site_max_out, S);
 
-    // Fused backward + reduce (pass NULL for min/max to skip atomic float ops)
-    gamma_smc_cached_backward_reduce_kernel<<<grid, block>>>(
-        packed, n_words, positions, S, Ne,
-        pair_i, pair_j, n_pairs,
-        cache,
-        fwd_mean, fwd_cv,
-        site_mean_out, nullptr, nullptr);
+    // Avoid shuffle overhead for tiny batches; aggregate atomics for larger ones.
+    if (n_pairs >= 1024) {
+        gamma_smc_cached_backward_reduce_kernel<true><<<grid, block>>>(
+            packed, n_words, positions, S, Ne,
+            pair_i, pair_j, n_pairs, cache, fwd_mean, fwd_cv,
+            site_mean_out, site_min_out, site_max_out);
+    } else {
+        gamma_smc_cached_backward_reduce_kernel<false><<<grid, block>>>(
+            packed, n_words, positions, S, Ne,
+            pair_i, pair_j, n_pairs, cache, fwd_mean, fwd_cv,
+            site_mean_out, site_min_out, site_max_out);
+    }
     {
         auto status = cudaDeviceSynchronize();
         if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
     }
 
     // Finalize: divide by n_pairs
-    int fgrid = (S + 255) / 256;
     finalize_site_mean_kernel<<<fgrid, 256>>>(site_mean_out, S, 1.0f / (float)n_pairs);
     {
         auto status = cudaDeviceSynchronize();
