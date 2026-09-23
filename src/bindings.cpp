@@ -2642,15 +2642,18 @@ public:
 
     int compute_max_fb_chunk() const {
         size_t free_mem = 0, total_mem = 0;
-        cudaMemGetInfo(&free_mem, &total_mem);
-        if (free_mem < 512ULL * 1024 * 1024) return 1;
-        free_mem -= 512ULL * 1024 * 1024;  // reserve 512MB headroom
-        // Per pair: fwd_buf (2*S*4) + pair indices (2*4) + output scratch (S*4*3)
-        size_t per_pair = (size_t)S_ * 2 * sizeof(float)   // fwd_buf
-                        + sizeof(int) * 2                    // pi, pj
-                        + (size_t)S_ * sizeof(float);        // output scratch (mean only)
-        int max_chunk = (int)(free_mem / per_pair);
-        return std::max(max_chunk, 1);
+        CUDA_CHECK(cudaMemGetInfo(&free_mem, &total_mem));
+        // Existing forward storage is reusable (or freed before growing it).
+        free_mem += 2ULL * S_ * fwd_buf_pairs_ * sizeof(float);
+        const size_t reserve = 512ULL * 1024 * 1024;
+        const size_t site_buffers = 3ULL * S_ * sizeof(float);
+        if (free_mem <= reserve + site_buffers) return 1;
+        free_mem -= reserve + site_buffers;
+        // Summaries only need forward states and pair indices, not a dense output.
+        const size_t per_pair = 2ULL * S_ * sizeof(float) + 2 * sizeof(int);
+        const size_t max_chunk = std::min(free_mem / per_pair,
+                                         (size_t)std::numeric_limits<int>::max());
+        return (int)std::max(max_chunk, (size_t)1);
     }
 
     py::dict run_fb_summary(std::vector<std::pair<int, int>> pairs) {
@@ -2687,13 +2690,15 @@ public:
             std::lock_guard<std::mutex> lock(run_mutex_);
             DeviceGuard device(device_id_);
 
-            // Determine chunk size from available VRAM
+            // A previous full-output call may have left dense result buffers.
+            if (d_mean_) free_output();
+            // Determine chunk size from available VRAM and reusable forward storage.
             int max_chunk = compute_max_fb_chunk();
             int chunk_size = std::min(max_chunk, n_pairs);
 
             // Allocate buffers for one chunk
             alloc_fwd_buf(chunk_size);
-            alloc_output(chunk_size, false);
+            alloc_pair_buf(chunk_size);
 
             DeviceBuffer<float> site_mean(S_), site_min(S_), site_max(S_);
             float* d_site_mean = site_mean.get();
@@ -2701,9 +2706,9 @@ public:
             float* d_site_max = site_max.get();
 
             // Host accumulators for weighted mean across chunks
-            std::vector<float> h_sum(S_, 0.0f);
-            std::vector<float> h_gmin(S_, std::numeric_limits<float>::max());
-            std::vector<float> h_gmax(S_, std::numeric_limits<float>::lowest());
+            std::vector<double> h_sum(S_, 0.0);
+            std::vector<float> h_gmin(S_, std::numeric_limits<float>::infinity());
+            std::vector<float> h_gmax(S_, -std::numeric_limits<float>::infinity());
             std::vector<float> h_chunk_mean(S_);
             std::vector<float> h_chunk_min(S_);
             std::vector<float> h_chunk_max(S_);
@@ -2711,7 +2716,7 @@ public:
             for (int offset = 0; offset < n_pairs; offset += chunk_size) {
                 int chunk = std::min(chunk_size, n_pairs - offset);
 
-                // Resize fwd_buf if this chunk is smaller (reuse existing allocation)
+                // Reuse the existing forward allocation for the final partial chunk.
                 CUDA_CHECK(cudaMemcpy(d_pi_, pi.data() + offset, chunk * sizeof(int), cudaMemcpyHostToDevice));
                 CUDA_CHECK(cudaMemcpy(d_pj_, pj.data() + offset, chunk * sizeof(int), cudaMemcpyHostToDevice));
 
@@ -2728,16 +2733,16 @@ public:
 
                 // Accumulate: weighted sum for mean, global min/max
                 for (int s = 0; s < S_; s++) {
-                    h_sum[s] += h_chunk_mean[s] * chunk;
+                    h_sum[s] += (double)h_chunk_mean[s] * chunk;
                     h_gmin[s] = std::min(h_gmin[s], h_chunk_min[s]);
                     h_gmax[s] = std::max(h_gmax[s], h_chunk_max[s]);
                 }
             }
 
             // Finalize weighted mean
-            float inv_n = 1.0f / (float)n_pairs;
+            const double inv_n = 1.0 / n_pairs;
             for (int s = 0; s < S_; s++) {
-                h_mean[s] = h_sum[s] * inv_n;
+                h_mean[s] = (float)(h_sum[s] * inv_n);
                 h_min[s] = h_gmin[s];
                 h_max[s] = h_gmax[s];
             }
