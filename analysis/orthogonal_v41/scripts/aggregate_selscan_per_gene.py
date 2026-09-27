@@ -3,9 +3,9 @@
 
 For one population:
   1. Read iHS and nSL outputs from analysis/orthogonal_v41/selscan/chr*_<POP>/
-  2. Frequency-bin-normalize raw iHS and nSL within the population (z-score
-     within 20 DAF bins of width 0.05) — this is the standard Voight 2006
-     normalization that selscan-norm performs.
+  2. Frequency-bin-normalize raw iHS and nSL separately per chromosome and
+     population (z-score within 20 coded-allele-frequency bins of width 0.05).
+     See normalize_within_bins for the exact eligibility and coding rules.
   3. For each protein-coding gene on each chromosome, compute:
        n_sites              number of polymorphic sites in the gene
        max_abs_ihs_norm     max |iHS_norm| over sites in the gene

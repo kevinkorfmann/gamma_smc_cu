@@ -1,0 +1,20 @@
+{
+  "GRK2": {
+    "source_sha256": "93e58c8106a8055ea55dbe55899d94bc18e96fbc415016e86d059d2e27235b5e",
+    "plotted_scores": {
+      "GIH": 50,
+      "BEB": 57,
+      "IBS": 75
+    },
+    "svg_sha256": "6ce99dcb423a6fd142827d056f63ef158bd5f4288f64a2be677aaa05afd065c4",
+    "png_sha256": "5091202a205a233c92482bd2867a232c2408596e072f9a4011d99b5a4be70661"
+  },
+  "TREM2": {
+    "source_sha256": "8cf1433c87e145522fcb22126da3c955861aeeb62b015116294b80d2e1c83df5",
+    "plotted_scores": {
+      "IBS": 536
+    },
+    "svg_sha256": "f3839b891acabe2a037678c7489b7298b018578474694cd1a26263e85ac7210c",
+    "png_sha256": "fc2e00d72f1048cb9e0a235d23abe9e0c8db39333c26378b7c73b62791fcf322"
+  }
+}

@@ -6,7 +6,10 @@ The first release on this rebuilt documentation site publishes the corrected
 143-locus atlas, calibrated accuracy and runtime tables, threshold sensitivity,
 and focal CLUES2 summaries. It labels the earlier 165-locus deposit as historical,
 and adds the executed iHS/nSL methods.
-See [Latest findings](findings.md) for interpretation and remaining limitations.
+The findings page also includes regional iHS plots for GRK2 and TREML1 / TREM2,
+with downloadable plotted scores and source hashes. These documentation assets
+supplement the release; the published atlas tables are unchanged.
+See [Latest findings](findings.md).
 
 ## Add a findings release
 

@@ -1,0 +1,155 @@
+{
+  "assembly": "GRCh38",
+  "coordinate_convention": "1-based closed intervals",
+  "flank_bp": 100000,
+  "normalization": {
+    "scope": "whole chromosome, separately per population, before regional extraction",
+    "frequency": "VCF-coded allele; not verified ancestral/derived polarity",
+    "bin_edges": [
+      0.0,
+      0.05,
+      0.1,
+      0.15000000000000002,
+      0.2,
+      0.25,
+      0.30000000000000004,
+      0.35000000000000003,
+      0.4,
+      0.45,
+      0.5,
+      0.55,
+      0.6000000000000001,
+      0.65,
+      0.7000000000000001,
+      0.75,
+      0.8,
+      0.8500000000000001,
+      0.9,
+      0.9500000000000001,
+      1.0
+    ],
+    "closed": "right, include lowest endpoint",
+    "minimum_finite_scores_per_bin": 50,
+    "ddof": 0,
+    "normalizer_sha256": "0974d90658f20d7c0cafb2d3e87daca8ca9f1ec92d7809233c83730038bd5aef"
+  },
+  "cases": {
+    "GRK2": {
+      "chromosome": 11,
+      "window_start": 67166473,
+      "window_end": 67386556,
+      "genes": [
+        {
+          "gene_name": "GRK2",
+          "start": 67266473,
+          "end": 67286556
+        }
+      ],
+      "gene_annotation_sha256": "9fa4c98f9d7904151e9f372cd8e3eda5c3d2bb8714bfec7dfcc8d87f7a0e6299",
+      "tracks": [
+        {
+          "population": "GIH",
+          "raw_source": "analysis/orthogonal_v41/selscan/chr11_GIH/ihs.ihs.out",
+          "raw_source_sha256": "09bb2fdeda350fff086a5086f5536aa5af3b905ce0fd5a9f8ef3d8cbdbd84932",
+          "chromosome_returned_rows": 381976,
+          "chromosome_finite_normalized_scores": 381976,
+          "region_returned_rows": 50,
+          "region_distinct_positions": 47,
+          "region_finite_normalized_scores": 50,
+          "gene_counts": {
+            "GRK2": {
+              "returned_rows": 0,
+              "finite_scores": 0,
+              "scores_above_2": 0,
+              "max_abs_normalized_ihs": null
+            }
+          }
+        },
+        {
+          "population": "BEB",
+          "raw_source": "analysis/orthogonal_v41/selscan/chr11_BEB/ihs.ihs.out",
+          "raw_source_sha256": "db37e2a40025d416562f23015825a63a29e06d15d7c64e34212067e7f4f60455",
+          "chromosome_returned_rows": 376513,
+          "chromosome_finite_normalized_scores": 376513,
+          "region_returned_rows": 57,
+          "region_distinct_positions": 54,
+          "region_finite_normalized_scores": 57,
+          "gene_counts": {
+            "GRK2": {
+              "returned_rows": 5,
+              "finite_scores": 5,
+              "scores_above_2": 4,
+              "max_abs_normalized_ihs": 2.6742718737078897
+            }
+          }
+        },
+        {
+          "population": "IBS",
+          "raw_source": "analysis/orthogonal_v41/selscan/chr11_IBS/ihs.ihs.out",
+          "raw_source_sha256": "fbbd6c8490160fc253f0b538c324e4ff00d5d0cbaf5ed74297994fdb6afe7e36",
+          "chromosome_returned_rows": 376035,
+          "chromosome_finite_normalized_scores": 376035,
+          "region_returned_rows": 75,
+          "region_distinct_positions": 69,
+          "region_finite_normalized_scores": 75,
+          "gene_counts": {
+            "GRK2": {
+              "returned_rows": 4,
+              "finite_scores": 4,
+              "scores_above_2": 1,
+              "max_abs_normalized_ihs": 2.7854730715569347
+            }
+          }
+        }
+      ],
+      "csv": "grk2_ihs.csv",
+      "csv_sha256": "93e58c8106a8055ea55dbe55899d94bc18e96fbc415016e86d059d2e27235b5e"
+    },
+    "TREM2": {
+      "chromosome": 6,
+      "window_start": 41049337,
+      "window_end": 41263186,
+      "genes": [
+        {
+          "gene_name": "TREML1",
+          "start": 41149337,
+          "end": 41154347
+        },
+        {
+          "gene_name": "TREM2",
+          "start": 41158506,
+          "end": 41163186
+        }
+      ],
+      "gene_annotation_sha256": "aee8a75fcdd10b67660d3915fc505f16f90f99f5cfa1df20520b82249bfbcc12",
+      "tracks": [
+        {
+          "population": "IBS",
+          "raw_source": "analysis/orthogonal_v41/selscan/chr6_IBS/ihs.ihs.out",
+          "raw_source_sha256": "c240efb86b1a8d8bd38af24eee027321e98649310fbdc5b8e9e3b38b0db4d431",
+          "chromosome_returned_rows": 518031,
+          "chromosome_finite_normalized_scores": 518031,
+          "region_returned_rows": 536,
+          "region_distinct_positions": 525,
+          "region_finite_normalized_scores": 536,
+          "gene_counts": {
+            "TREML1": {
+              "returned_rows": 4,
+              "finite_scores": 4,
+              "scores_above_2": 0,
+              "max_abs_normalized_ihs": 1.1629635999991061
+            },
+            "TREM2": {
+              "returned_rows": 0,
+              "finite_scores": 0,
+              "scores_above_2": 0,
+              "max_abs_normalized_ihs": null
+            }
+          }
+        }
+      ],
+      "csv": "trem2_ihs.csv",
+      "csv_sha256": "8cf1433c87e145522fcb22126da3c955861aeeb62b015116294b80d2e1c83df5"
+    }
+  }
+}
