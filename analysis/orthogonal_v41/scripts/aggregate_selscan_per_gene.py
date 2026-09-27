@@ -49,7 +49,7 @@ POPS = [
     "PEL", "PJL", "PUR", "STU", "TSI", "YRI",
 ]
 
-DAF_BINS = np.linspace(0.0, 1.0, 21)  # 20 bins of width 0.05
+FREQUENCY_BINS = np.linspace(0.0, 1.0, 21)  # 20 bins of width 0.05; coded allele
 EXTREME_THRESHOLD = 2.0  # |iHS_norm| or |nSL_norm| > 2 -> extreme
 FLANK_BP = 0  # extend gene window by this many bp on each side
 
@@ -82,16 +82,17 @@ def load_selscan_table(path: str, stat: str) -> pd.DataFrame:
 
 
 def normalize_within_bins(df: pd.DataFrame, stat: str) -> pd.DataFrame:
-    """Z-normalize the raw stat within DAF bins.
+    """Z-normalize raw scores within coded-allele-frequency bins.
 
-    Replicates selscan-norm's behavior: bin by derived allele frequency (we use
-    the freq column directly since selscan reports DAF), compute mean and std
-    within each bin, then standardize.
+    The input preserves VCF REF/ALT 0/1 coding; ancestral polarity was not
+    supplied. The selscan freq column is not verified derived-allele frequency.
+    This is our chromosome/population normalization, not a claim of exact
+    equivalence to every selscan-norm version.
     """
     df = df.copy()
-    df["bin"] = pd.cut(df["freq"], bins=DAF_BINS, include_lowest=True, labels=False)
+    df["bin"] = pd.cut(df["freq"], bins=FREQUENCY_BINS, include_lowest=True, labels=False)
     norm = np.full(len(df), np.nan, dtype=np.float64)
-    for b in range(len(DAF_BINS) - 1):
+    for b in range(len(FREQUENCY_BINS) - 1):
         mask = (df["bin"] == b) & np.isfinite(df[stat])
         if mask.sum() < 50:
             continue

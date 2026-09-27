@@ -1,0 +1,18 @@
+body { --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.content { max-width: 50rem; }
+h1, h2, h3 { font-weight: 600; letter-spacing: -0.02em; }
+article p, article li { line-height: 1.65; }
+article table { font-size: 0.92rem; }
+.sidebar-brand-text { font-size: 1.25rem; font-weight: 600; }
+pre { border-radius: 3px; }
+.findings-browser label { display: block; font-weight: 600; margin-bottom: .5rem; }
+#locus-search { box-sizing: border-box; width: 100%; padding: .7rem .8rem; font: inherit;
+  color: var(--color-foreground-primary); background: var(--color-background-primary);
+  border: 1px solid var(--color-foreground-border); border-radius: 3px; }
+#locus-count { font-size: .9rem; color: var(--color-foreground-secondary); }
+.locus-table-wrap { max-height: 32rem; overflow: auto; border: 1px solid var(--color-foreground-border); }
+#locus-table { width: 100%; border-collapse: collapse; margin: 0; font-size: .85rem; }
+#locus-table th { position: sticky; top: 0; background: var(--color-background-secondary); text-align: left; }
+#locus-table td, #locus-table th { padding: .65rem .7rem; border-bottom: 1px solid var(--color-foreground-border); }
+#locus-table td:first-child { font-weight: 600; }
+#locus-table tr[hidden] { display: none; }
