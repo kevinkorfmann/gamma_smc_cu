@@ -278,8 +278,9 @@ def run(cfg):
         truth_all = true_t_all_pairs(ts, all_pairs, pos)  # (S, n_pairs)
         print(f"  ground truth: {time.perf_counter() - t_gt0:.1f}s", flush=True)
 
-        r_tmrca, r_gsmc = [], []
+        r_tmrca, r_gsmc, r_between = [], [], []
         rmse_tmrca, rmse_gsmc = [], []
+        pair_metrics = []
         for pidx, pair in enumerate(all_pairs):
             truth = truth_all[:, pidx]
             est_t = tmrca_mean[:, pidx]
@@ -292,6 +293,14 @@ def run(cfg):
                 est_g = np.interp(pos, gsmc_pos, raw)
                 r_gsmc.append(r_log(truth, est_g))
                 rmse_gsmc.append(rmse_log(truth, est_g))
+                r_between.append(r_log(est_t, est_g))
+                pair_metrics.append({
+                    "haplotype_i": pair[0], "haplotype_j": pair[1],
+                    "r_gamma_smc_cu": r_tmrca[-1], "r_gsmc": r_gsmc[-1],
+                    "r_between_methods": r_between[-1],
+                    "rmse_gamma_smc_cu": rmse_tmrca[-1],
+                    "rmse_gsmc": rmse_gsmc[-1],
+                })
 
     def _qstats(v):
         a = np.asarray(v, dtype=float)
@@ -309,6 +318,7 @@ def run(cfg):
     r_g = _qstats(r_gsmc)
     e_t = _qstats(rmse_tmrca)
     e_g = _qstats(rmse_gsmc)
+    r_b = _qstats(r_between)
 
     speedup_total = (t_gsmc_total / t_gamma_smc_cu_total) if t_gamma_smc_cu_total > 0 else None
     speedup_compute = (t_gsmc_compute / t_gamma_smc_cu_compute) if t_gamma_smc_cu_compute > 0 else None
@@ -339,7 +349,17 @@ def run(cfg):
         "r_gsmc_q25": r_g["q25"],
         "r_gsmc_q75": r_g["q75"],
         "rmse_gamma_smc_cu_median": e_t["median"],
+        "rmse_gamma_smc_cu_q25": e_t["q25"],
+        "rmse_gamma_smc_cu_q75": e_t["q75"],
         "rmse_gsmc_median": e_g["median"],
+        "rmse_gsmc_q25": e_g["q25"],
+        "rmse_gsmc_q75": e_g["q75"],
+        "r_between_methods_median": r_b["median"],
+        "r_between_methods_q25": r_b["q25"],
+        "r_between_methods_q75": r_b["q75"],
+        "n_pairs_evaluated_between": r_b["n"],
+        "seed": cfg["seed"],
+        "pair_metrics": pair_metrics,
         "n_pairs_evaluated_tmrca": r_t["n"],
         "n_pairs_evaluated_gsmc": r_g["n"],
         "status": "ok",
@@ -353,6 +373,8 @@ def run(cfg):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config-idx", type=int, required=True)
+    ap.add_argument("--results-dir", default=RESULTS_DIR,
+                    help="Output directory; use a new directory to preserve a previous run.")
     args = ap.parse_args()
 
     if not os.path.exists(CONFIGS_JSON):
@@ -370,9 +392,9 @@ def main():
     else:
         cfg = matches[0]
 
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    out_path = os.path.join(RESULTS_DIR, f"config_{args.config_idx:03d}.json")
-    fail_path = os.path.join(RESULTS_DIR, f"config_{args.config_idx:03d}.FAILED")
+    os.makedirs(args.results_dir, exist_ok=True)
+    out_path = os.path.join(args.results_dir, f"config_{args.config_idx:03d}.json")
+    fail_path = os.path.join(args.results_dir, f"config_{args.config_idx:03d}.FAILED")
 
     # Clean stale markers
     for p in (out_path, fail_path):

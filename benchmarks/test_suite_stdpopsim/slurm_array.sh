@@ -30,4 +30,4 @@ mkdir -p "${BASE}/results" "${BASE}/logs" "${STDPOPSIM_CACHE_DIR}"
 
 cd "${BASE}"
 echo "host=$(hostname)  idx=${SLURM_ARRAY_TASK_ID}  job=${SLURM_JOB_ID}"
-"${PYTHON}" "${BASE}/run_one.py" --config-idx "${SLURM_ARRAY_TASK_ID}"
+"${PYTHON}" "${BASE}/run_one.py" --config-idx "${SLURM_ARRAY_TASK_ID}" "$@"

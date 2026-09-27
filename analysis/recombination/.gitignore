@@ -1,0 +1,7 @@
+cache/
+logs/
+maps/
+results/
+inputs/
+bgs/
+__pycache__/
