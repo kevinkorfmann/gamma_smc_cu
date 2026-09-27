@@ -5,6 +5,7 @@ Produces:
   figures/test_suite_stdpopsim.{pdf,png}
   figures/test_suite_summary.csv
 """
+import argparse
 import glob
 import json
 import os
@@ -51,8 +52,9 @@ SPECIES_COLORS = {
 }
 
 
-def load_results():
+def load_results(allow_incomplete=False):
     files = sorted(glob.glob(os.path.join(RESULTS_DIR, "config_*.json")))
+    files += sorted(glob.glob(os.path.join(RESULTS_DIR, "config_*", "result.json")))
     if not files:
         sys.exit(f"No result JSONs found in {RESULTS_DIR}")
     rows = []
@@ -60,6 +62,14 @@ def load_results():
         with open(fp) as f:
             rows.append(json.load(f))
     df = pd.DataFrame(rows)
+    if df["config_idx"].duplicated().any():
+        raise ValueError("duplicate configuration IDs: keep hosts/seeds in separate run directories")
+    schemas = {row.get("schema_version", 1) for row in rows}
+    if len(schemas) > 1:
+        raise ValueError("never aggregate corrected and historical benchmark schemas together")
+    expected = set(range(9)) | set(range(10, 15))
+    if not allow_incomplete and set(df.config_idx) != expected:
+        raise ValueError(f"expected exactly retained IDs {sorted(expected)}; found {sorted(df.config_idx)}")
     # Stable ordering: species first, then model name.
     df["species"] = df["species"].astype(str)
     df = df.sort_values(["species", "model_id"]).reset_index(drop=True)
@@ -233,8 +243,15 @@ def plot(df):
 
 
 def main():
-    df = load_results()
-    os.makedirs(FIG_DIR, exist_ok=True)
+    global RESULTS_DIR, FIG_DIR
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--results-dir", required=True)
+    parser.add_argument("--output-dir", required=True, help="New aggregate directory; never overwrite an existing figure package")
+    parser.add_argument("--allow-incomplete", action="store_true")
+    args = parser.parse_args()
+    RESULTS_DIR, FIG_DIR = args.results_dir, args.output_dir
+    df = load_results(args.allow_incomplete)
+    os.makedirs(FIG_DIR, exist_ok=False)
     csv_path = os.path.join(FIG_DIR, "test_suite_summary.csv")
     df.to_csv(csv_path, index=False)
     print(f"wrote {csv_path}  ({len(df)} configs)")

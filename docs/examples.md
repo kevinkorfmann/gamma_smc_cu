@@ -45,7 +45,7 @@ result = gamma_smc_cu.infer(
 mean = result["mean"][:, 0]    # (n_sites,) float32, generations
 ```
 
-Returned keys: `mean`, `pairs`, `positions`.
+Returned keys: `mean`, `pairs`, `positions`, `metadata`.
 
 ![mean only](_static/examples_mean.png)
 
@@ -69,7 +69,7 @@ lower  = result["lower"][:, 0]   # 2.5% percentile
 upper  = result["upper"][:, 0]   # 97.5% percentile
 ```
 
-Returned keys: `mean`, `lower`, `upper`, `pairs`, `positions`.
+Returned keys: `mean`, `lower`, `upper`, `pairs`, `positions`, `metadata`.
 
 ![mean with CI](_static/examples_ci.png)
 
@@ -82,7 +82,8 @@ posterior is broad.
 
 Adds the per-site combined Gamma posterior parameters
 $(\alpha_s, \beta_s)$ in **scaled coalescent time**
-($T_{\mathrm{scaled}} = T / (2 N_e)$). With these in hand you can compute
+($T_{\mathrm{scaled}} = T / c$, with $c$ given in the result metadata).
+With these in hand you can compute
 arbitrary credible intervals, posterior variances, density evaluations,
 or anything else `scipy.stats.gamma` supports.
 
@@ -96,12 +97,13 @@ result = gamma_smc_cu.infer(
     return_posterior=True,           # works with mean_only=True or False
 )
 
-mean  = result["mean"][:, 0]                   # generations (== (a/b)*2*Ne)
+mean  = result["mean"][:, 0]                   # generations (== (a/b)*time_scale)
 alpha = result["posterior_alpha"][:, 0]        # scaled-time shape
 beta  = result["posterior_beta"][:, 0]         # scaled-time rate
+time_scale = result["metadata"]["generations_per_coalescent_unit"]
 
 # 50% credible interval (interquartile range), in real generations:
-post = gamma(alpha, scale=2.0 * NE / beta)
+post = gamma(alpha, scale=time_scale / beta)
 q25  = post.ppf(0.25)
 q75  = post.ppf(0.75)
 
@@ -110,7 +112,7 @@ density_at_5000 = post.pdf(5000.0)
 ```
 
 Returned keys: `mean`, `posterior_alpha`, `posterior_beta`, `pairs`,
-`positions`. Combine with `mean_only=False` to also get `lower` and
+`positions`, `metadata`. Combine with `mean_only=False` to also get `lower` and
 `upper`.
 
 ![full posterior](_static/examples_posterior.png)

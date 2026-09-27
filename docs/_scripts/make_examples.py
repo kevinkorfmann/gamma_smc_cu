@@ -97,7 +97,7 @@ def plot_ci(out_dir, pos_mb, truth, mean, lower, upper):
     plt.close(fig)
 
 
-def plot_posterior(out_dir, pos_mb, truth, mean, alpha, beta):
+def plot_posterior(out_dir, pos_mb, truth, mean, alpha, beta, time_scale):
     """Mean + custom credible bands across position, plus the actual
     Gamma PDF at three representative sites picked at low / median / high
     posterior uncertainty.
@@ -110,8 +110,8 @@ def plot_posterior(out_dir, pos_mb, truth, mean, alpha, beta):
 
     bands = []
     for q_lo, q_hi in quantile_pairs:
-        lo = gamma(alpha, scale=2.0 * NE / beta).ppf(q_lo)
-        hi = gamma(alpha, scale=2.0 * NE / beta).ppf(q_hi)
+        lo = gamma(alpha, scale=time_scale / beta).ppf(q_lo)
+        hi = gamma(alpha, scale=time_scale / beta).ppf(q_hi)
         bands.append((lo, hi))
 
     # Pick three representative sites by 95% CI *relative width*
@@ -159,7 +159,7 @@ def plot_posterior(out_dir, pos_mb, truth, mean, alpha, beta):
         b_i = float(beta[idx])
         m_i = float(mean[idx])
         t_i = float(truth[idx])
-        scale_i = 2.0 * NE / b_i
+        scale_i = time_scale / b_i
         post = gamma(a_i, scale=scale_i)
         sd = post.std()
         t_min = max(0.0, m_i - 4 * sd)
@@ -244,6 +244,7 @@ def main():
         r3["mean"][:, 0],
         r3["posterior_alpha"][:, 0],
         r3["posterior_beta"][:, 0],
+        r3["metadata"]["generations_per_coalescent_unit"],
     )
 
     print(f"wrote figures to {out_dir}", flush=True)

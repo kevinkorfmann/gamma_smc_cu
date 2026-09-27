@@ -15,6 +15,7 @@ endif()
 # Find pybind11
 find_package(pybind11 REQUIRED)
 find_package(Python REQUIRED COMPONENTS Interpreter Development)
+find_package(Threads REQUIRED)
 
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
@@ -44,7 +45,7 @@ target_link_libraries(gamma_smc_cu_kernels PRIVATE cudart)
 
 # Python module
 pybind11_add_module(_core src/bindings.cpp)
-target_link_libraries(_core PRIVATE gamma_smc_cu_kernels)
+target_link_libraries(_core PRIVATE gamma_smc_cu_kernels Threads::Threads)
 target_include_directories(_core PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
 # Install the Python module into python/gamma_smc_cu/

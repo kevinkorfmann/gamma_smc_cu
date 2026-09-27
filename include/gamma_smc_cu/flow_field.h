@@ -152,3 +152,21 @@ void gamma_smc_flow_cached_forward_states_gpu(
     const int* pair_i, const int* pair_j, int n_pairs,
     FlowFieldDeviceCacheView cache,
     float* fwd_buf);
+
+// Full-context checkpoint/replay, with persistent backward carry between tiles.
+void gamma_smc_flow_checkpoint_build_gpu(
+    const uint64_t* xor_buf, int n_words, const double* positions,
+    int S, int n_pairs, int tile_sites, FlowFieldDeviceCacheView cache,
+    void* checkpoints, void* stream = nullptr);
+void gamma_smc_flow_checkpoint_tile_gpu(
+    const uint64_t* xor_buf, int n_words, const double* positions,
+    int site_start, int tile_S, int n_pairs, float Ne,
+    FlowFieldDeviceCacheView cache, const void* checkpoint, void* carry,
+    float* forward, float* mean, float* lower, float* upper,
+    float* alpha, float* beta, float calibration, int* invalid_mean,
+    void* stream = nullptr);
+void gamma_smc_region_moments_tile_gpu(
+    const float* values, int P, int start, int rows, const void* bounds,
+    int regions, float calibration, double* linear, double* logarithmic);
+void gamma_smc_region_moments_finalize_gpu(
+    int P, const void* bounds, int regions, double* linear, double* logarithmic);

@@ -37,7 +37,6 @@ import pandas as pd
 BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/analysis/genome_wide"
 RESULTS = os.path.join(BASE, "results")
 OUT = os.path.join(BASE, "postprocess")
-os.makedirs(OUT, exist_ok=True)
 
 POPS = [
     "ACB", "ASW", "BEB", "CDX", "CEU", "CHB", "CHS", "CLM",
@@ -55,44 +54,7 @@ SUPERPOPS = {
 
 
 # ---------- Step 1 ---------- #
-def load_sd_intervals(path):
-    """Return dict chr_int -> sorted list of (start, end) intervals."""
-    intervals = defaultdict(list)
-    with gzip.open(path, "rt") as f:
-        for line in f:
-            parts = line.split("\t")
-            if len(parts) < 4:
-                continue
-            chrom = parts[1]
-            if not chrom.startswith("chr"):
-                continue
-            try:
-                chr_int = int(chrom.replace("chr", ""))
-            except ValueError:
-                continue
-            start = int(parts[2])
-            end = int(parts[3])
-            intervals[chr_int].append((start, end))
-    for c in intervals:
-        intervals[c].sort()
-    return intervals
-
-
-def gene_overlaps_sd(gene_chr, gene_start, gene_end, sd_intervals, frac_threshold=0.5):
-    """Return True if >=frac_threshold of the gene length overlaps SD."""
-    ivs = sd_intervals.get(int(gene_chr), [])
-    if not ivs:
-        return False
-    gene_len = max(1, gene_end - gene_start)
-    overlap = 0
-    for s, e in ivs:
-        if e < gene_start:
-            continue
-        if s > gene_end:
-            break
-        overlap += max(0, min(e, gene_end) - max(s, gene_start))
-    return overlap / gene_len >= frac_threshold
-
+from sd_mask import load_sd_intervals, gene_overlaps_sd
 
 def step1_sd_mask():
     print("=" * 60)
@@ -551,6 +513,15 @@ def step6_novel_findings():
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--results-dir', required=True)
+    parser.add_argument('--output-dir', required=True)
+    parser.add_argument('--data-dir', required=True, help='Read-only directory containing genomicSuperDups.txt.gz and ancillary inputs')
+    args = parser.parse_args()
+    global BASE, RESULTS, OUT
+    BASE, RESULTS, OUT = args.data_dir, args.results_dir, args.output_dir
+    os.makedirs(OUT, exist_ok=False)
     step1_sd_mask()
     print()
     step2_pick_primary()

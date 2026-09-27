@@ -189,25 +189,31 @@ result = gamma_smc_cu.infer(
 | `posterior_beta`   | `(n_sites, n_pairs)`   | float32 | `return_posterior=True`        | combined Gamma posterior β (scaled coalescent time)                        |
 | `positions`        | `(n_sites,)`           | float64 | always                         | site positions in bp                                                       |
 | `pairs`            | `list[(int, int)]`     |         | always                         | haplotype index pairs                                                      |
+| `metadata`         |                        | dict    | always                         | scaled rates, physical mutation rate and time conversion                    |
 
 `mean_only=True` (the default) skips writing `lower`/`upper`, which saves
 ~40% wall time on the backward pass and 2/3 of the output bytes.
 
 `return_posterior=True` adds the per-site combined Gamma posterior parameters
-in **scaled coalescent time** (`T_scaled = T / (2 * Ne)`). The posterior at
+in **scaled coalescent time** (`T_scaled = T / time_scale`). Here
+`time_scale = result["metadata"]["generations_per_coalescent_unit"]`: by
+default this is the estimated theta divided by twice the physical mutation
+rate, while fixed-parameter mode without `physical_mu` uses `2 * Ne`.
+The posterior at
 site $s$ for a given pair is
 
 $$
-T_s \cdot \tfrac{1}{2N_e} \;\sim\; \mathrm{Gamma}(\alpha_s, \beta_s),
+T_s / c \;\sim\; \mathrm{Gamma}(\alpha_s, \beta_s),
 $$
 
-so the mean in real generations is `(alpha / beta) * 2 * Ne` (which equals
+where $c$ is `time_scale` in generations. The mean is `(alpha / beta) * time_scale` (which equals
 `mean` to floating-point precision), the variance is
-`(alpha / beta**2) * (2 * Ne)**2`, and any quantile $q$ is
+`(alpha / beta**2) * time_scale**2`, and any quantile $q$ is
 
 ```python
 from scipy.stats import gamma
-T_q = gamma(alpha_s, scale=2*Ne/beta_s).ppf(q)
+time_scale = result["metadata"]["generations_per_coalescent_unit"]
+T_q = gamma(alpha_s, scale=time_scale/beta_s).ppf(q)
 ```
 
 Use this when you need the full distributional shape per site (e.g. for

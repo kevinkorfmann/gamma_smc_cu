@@ -11,7 +11,7 @@ from infer_maps import weighted_intervals, sha
 
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--root',type=Path,required=True)
-    ap.add_argument('--ranks',type=Path,required=True);ap.add_argument('--case-data',type=Path,required=True)
+    ap.add_argument('--ranks',type=Path,required=True);ap.add_argument('--case-data',type=Path)
     a=ap.parse_args();out=a.root/'results';out.mkdir(exist_ok=True)
     targets=pd.read_csv(a.root/'inputs/targets.tsv',sep='\t')
     ranks=pd.read_csv(a.ranks).set_index('gene_id');rows=[];missing=[];splits=[];spatial=[]
@@ -48,15 +48,17 @@ def main():
                 sources=t.sources))
             if t.gene not in ['GRK2','TREM2']:continue
             windows=pd.read_csv(str(prefix)+'.windows.tsv',sep='\t')
-            case=np.load(a.case_data/f'{t.gene}_plot_data.npz');tag='control' if pop=='YRI' else 'focal'
+            case=np.load(a.case_data/f'{t.gene}_plot_data.npz') if a.case_data else None
+            tag='control' if pop=='YRI' else 'focal'
             for size in [10000,50000]:
                 d=windows[windows.window_bp==size];centers=(d.start+d.end)/2+1
-                valid=(centers>=case[tag+'_positions'][0])&(centers<=case[tag+'_positions'][-1])&(d.coverage_fraction>=.99)
-                tmrca=np.interp(centers,case[tag+'_positions'],case[tag+'_median'])
-                finite=valid&np.isfinite(d.rho_per_bp)&(d.rho_per_bp>0)&(tmrca>0)
-                spatial.append(dict(gene=t.gene,population=pop,window_bp=size,n_windows=int(finite.sum()),
-                    spearman_tmrca_rho=float(spearmanr(tmrca[finite],d.rho_per_bp[finite]).statistic),
-                    note='Descriptive spatial association; adjacent windows are correlated, no independence-based P value.'))
+                if case is not None:
+                    valid=(centers>=case[tag+'_positions'][0])&(centers<=case[tag+'_positions'][-1])&(d.coverage_fraction>=.99)
+                    tmrca=np.interp(centers,case[tag+'_positions'],case[tag+'_median'])
+                    finite=valid&np.isfinite(d.rho_per_bp)&(d.rho_per_bp>0)&(tmrca>0)
+                    spatial.append(dict(gene=t.gene,population=pop,window_bp=size,n_windows=int(finite.sum()),
+                        spearman_tmrca_rho=float(spearmanr(tmrca[finite],d.rho_per_bp[finite]).statistic),
+                        note='Descriptive spatial association; adjacent windows are correlated, no independence-based P value.'))
                 paths=[a.root/'maps'/f'{t.gene}.{pop}_half{k}.windows.tsv' for k in [1,2]]
                 if all(p.exists() for p in paths):
                     h=[pd.read_csv(p,sep='\t').query('window_bp==@size') for p in paths]
@@ -72,6 +74,7 @@ def main():
     report=dict(expected_genes=len(targets),expected_maps=sum(len(x.split(',')) for x in targets.populations),
                 completed_maps=len(rows),completed_genes=len(set(r['gene'] for r in rows)),missing=missing,
                 validated_hashes_and_rate_scaling=True,BGS_source_sha256_validated=True,
+                spatial_associations_recomputed=a.case_data is not None,
                 genes_with_complete_BGS_body_coverage=int((bgtab.gene_Bprime_coverage>=.999999).sum()))
     (out/'validation.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
 

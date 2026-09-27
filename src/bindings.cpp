@@ -12,6 +12,15 @@
 #include <mutex>
 #include <map>
 #include <limits>
+#include <future>
+#include <chrono>
+#ifndef _WIN32
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <cerrno>
+#include <system_error>
+#endif
 
 #include "gamma_smc_cu/api.h"
 
@@ -2949,6 +2958,328 @@ public:
         return result;
     }
 
+    // Write dense means directly from a bounded pinned ring. The caller owns
+    // the file format/header; offsets refer to its contiguous float32 payload.
+    py::dict export_mean_fd(std::vector<std::pair<int, int>> pairs, int fd,
+                            int64_t data_offset, int tile_sites,
+                            float calibration, int buffers) {
+#ifdef _WIN32
+        throw std::runtime_error("Direct dense export requires POSIX pwrite.");
+#else
+        validate_pairs(pairs, n_haps_);
+        if (tile_sites < 1 || buffers < 2 || buffers > 8)
+            throw std::invalid_argument("Positive tile_sites and 2..8 staging buffers required.");
+        if (!std::isfinite(calibration) || calibration <= 0)
+            throw std::invalid_argument("calibration_factor must be finite and positive.");
+        const int P = (int)pairs.size();
+        if (data_offset < 0 || (S_ && (uint64_t)P >
+                (uint64_t)(INT64_MAX - data_offset) / sizeof(float) / S_))
+            throw std::invalid_argument("Output offset or payload exceeds supported file size.");
+        const uint64_t payload = (uint64_t)S_ * P * sizeof(float);
+        struct File {
+            int fd;
+            explicit File(int input) : fd(::dup(input)) {
+                if (fd < 0) throw std::system_error(errno, std::generic_category(), "dup output");
+            }
+            ~File() { ::close(fd); }
+        } file(fd);
+        struct stat st;
+        if (::fstat(file.fd, &st) != 0)
+            throw std::system_error(errno, std::generic_category(), "stat output");
+        const int flags = ::fcntl(file.fd, F_GETFL);
+        if (flags < 0 || !S_ISREG(st.st_mode) || (flags & O_ACCMODE) == O_RDONLY ||
+                (flags & O_APPEND) || st.st_size < 0 ||
+                (uint64_t)st.st_size < (uint64_t)data_offset + payload)
+            throw std::invalid_argument("Output must be a writable, pre-sized regular file without O_APPEND.");
+        py::dict result;
+        result["output_bytes"] = payload;
+        result["posterior_means_validated"] = true;
+        if (!P || !S_) return result;
+        const int B = std::min(tile_sites, S_);
+        const int tiles = (int)(((int64_t)S_ + B - 1) / B);
+        const size_t plane = (size_t)B * P;
+        const size_t workspace = (size_t)P * n_words_ * sizeof(uint64_t) +
+            ((size_t)tiles + 1) * P * sizeof(float2) +
+            (2ULL + buffers) * plane * sizeof(float) + (2ULL * P + 1) * sizeof(int);
+        std::vector<int> pi(P), pj(P);
+        for (int i = 0; i < P; ++i) { pi[i] = pairs[i].first; pj[i] = pairs[i].second; }
+        using Clock = std::chrono::steady_clock;
+        struct Timing { double compute = 0, transfer = 0, write = 0; } total;
+        double wall = 0;
+        {
+            py::gil_scoped_release release;
+            std::lock_guard<std::mutex> lock(run_mutex_);
+            DeviceGuard device(device_id_);
+            const auto start = Clock::now();
+            free_output();
+            if (d_fwd_buf_) { cudaFree(d_fwd_buf_); d_fwd_buf_ = nullptr; }
+            fwd_buf_pairs_ = 0;
+            size_t available = 0, capacity = 0;
+            CUDA_CHECK(cudaMemGetInfo(&available, &capacity));
+            const size_t reserve = 512ULL * 1024 * 1024;
+            if (available <= reserve || workspace > available - reserve)
+                throw std::runtime_error("Export workspace exceeds free GPU memory; reduce batch or tile size.");
+            DeviceBuffer<int> dpi(P), dpj(P), invalid(1);
+            DeviceBuffer<uint64_t> xor_buf((size_t)P * n_words_);
+            DeviceBuffer<float2> checkpoints((size_t)tiles * P), carry(P);
+            DeviceBuffer<float> forward(2 * plane);
+            struct Stream {
+                cudaStream_t value = nullptr;
+                Stream() { CUDA_CHECK(cudaStreamCreateWithFlags(&value, cudaStreamNonBlocking)); }
+                ~Stream() { cudaStreamSynchronize(value); cudaStreamDestroy(value); }
+            } compute, transfer;
+            struct Slot {
+                DeviceBuffer<float> output;
+                float* host = nullptr;
+                cudaEvent_t begun = nullptr, ready = nullptr, copying = nullptr, copied = nullptr;
+                std::future<Timing> writer;
+                void clean() {
+                    for (auto event : {begun, ready, copying, copied}) if (event) cudaEventDestroy(event);
+                    if (host) cudaFreeHost(host);
+                }
+                explicit Slot(size_t plane) : output(plane) {
+                    try {
+                        CUDA_CHECK(cudaMallocHost(&host, plane * sizeof(float)));
+                        CUDA_CHECK(cudaEventCreate(&begun));
+                        CUDA_CHECK(cudaEventCreate(&ready));
+                        CUDA_CHECK(cudaEventCreate(&copying));
+                        CUDA_CHECK(cudaEventCreate(&copied));
+                    } catch (...) { clean(); throw; }
+                }
+                ~Slot() { if (writer.valid()) writer.wait(); clean(); }
+            };
+            std::vector<std::unique_ptr<Slot>> slots;
+            for (int i = 0; i < buffers; ++i) slots.emplace_back(std::make_unique<Slot>(plane));
+            auto drain = [&](Slot& slot) {
+                if (!slot.writer.valid()) return;
+                auto timing = slot.writer.get();
+                total.compute += timing.compute;
+                total.transfer += timing.transfer;
+                total.write += timing.write;
+            };
+            try {
+                CUDA_CHECK(cudaMemcpy(dpi.get(), pi.data(), P*sizeof(int), cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemcpy(dpj.get(), pj.data(), P*sizeof(int), cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemsetAsync(invalid.get(), 0, sizeof(int), compute.value));
+                CUDA_CHECK(cudaMemsetAsync(carry.get(), 0, P*sizeof(float2), compute.value));
+                // Record initialization on a slot before its first tile reuses the events.
+                CUDA_CHECK(cudaEventRecord(slots[0]->begun, compute.value));
+                launch_precompute_xor(d_packed_, n_words_, dpi.get(), dpj.get(), P, xor_buf.get(), compute.value);
+                gamma_smc_flow_checkpoint_build_gpu(xor_buf.get(), n_words_, d_pos_, S_, P, B,
+                                                    ctx_cache_, checkpoints.get(), compute.value);
+                CUDA_CHECK(cudaGetLastError());
+                CUDA_CHECK(cudaEventRecord(slots[0]->ready, compute.value));
+                CUDA_CHECK(cudaEventSynchronize(slots[0]->ready));
+                float initialization_ms = 0;
+                CUDA_CHECK(cudaEventElapsedTime(&initialization_ms, slots[0]->begun, slots[0]->ready));
+                total.compute += initialization_ms / 1000.;
+                for (int tile = tiles - 1; tile >= 0; --tile) {
+                    auto* slot = slots[(tiles - 1 - tile) % buffers].get();
+                    drain(*slot);
+                    const int first = tile * B, rows = std::min(B, S_ - first);
+                    CUDA_CHECK(cudaEventRecord(slot->begun, compute.value));
+                    gamma_smc_flow_checkpoint_tile_gpu(xor_buf.get(), n_words_, d_pos_, first, rows,
+                        P, ctx_cache_Ne_, ctx_cache_, checkpoints.get() + (size_t)tile*P, carry.get(),
+                        forward.get(), slot->output.get(), nullptr, nullptr, nullptr, nullptr,
+                        calibration, invalid.get(), compute.value);
+                    CUDA_CHECK(cudaGetLastError());
+                    CUDA_CHECK(cudaEventRecord(slot->ready, compute.value));
+                    CUDA_CHECK(cudaStreamWaitEvent(transfer.value, slot->ready, 0));
+                    CUDA_CHECK(cudaEventRecord(slot->copying, transfer.value));
+                    const size_t bytes = (size_t)rows * P * sizeof(float);
+                    CUDA_CHECK(cudaMemcpyAsync(slot->host, slot->output.get(), bytes,
+                                              cudaMemcpyDeviceToHost, transfer.value));
+                    CUDA_CHECK(cudaEventRecord(slot->copied, transfer.value));
+                    const int device_id = device_id_, output_fd = file.fd;
+                    const off_t offset = (off_t)(data_offset + (uint64_t)first * P * sizeof(float));
+                    slot->writer = std::async(std::launch::async, [slot, bytes, offset, device_id, output_fd] {
+                        DeviceGuard guard(device_id);
+                        CUDA_CHECK(cudaEventSynchronize(slot->copied));
+                        float kernel_ms = 0, copy_ms = 0;
+                        CUDA_CHECK(cudaEventElapsedTime(&kernel_ms, slot->begun, slot->ready));
+                        CUDA_CHECK(cudaEventElapsedTime(&copy_ms, slot->copying, slot->copied));
+                        const auto start = Clock::now();
+                        size_t done = 0;
+                        while (done < bytes) {
+                            const size_t count = std::min<size_t>(bytes - done, 1ULL << 30);
+                            const ssize_t n = ::pwrite(output_fd, reinterpret_cast<char*>(slot->host) + done,
+                                                      count, offset + (off_t)done);
+                            if (n < 0 && errno == EINTR) continue;
+                            if (n < 0) throw std::system_error(errno, std::generic_category(), "write dense output");
+                            if (!n) throw std::runtime_error("Dense output write made no progress.");
+                            done += (size_t)n;
+                        }
+                        return Timing{kernel_ms / 1000., copy_ms / 1000.,
+                            std::chrono::duration<double>(Clock::now()-start).count()};
+                    });
+                }
+                for (auto& slot : slots) drain(*slot);
+                int failed = 0;
+                CUDA_CHECK(cudaStreamSynchronize(compute.value));
+                CUDA_CHECK(cudaMemcpy(&failed, invalid.get(), sizeof(int), cudaMemcpyDeviceToHost));
+                if (failed) throw std::runtime_error("Posterior means must be finite and strictly positive; no floor is applied.");
+            } catch (...) {
+                // No asynchronous operation may outlive its scratch or duplicated fd.
+                cudaStreamSynchronize(compute.value);
+                cudaStreamSynchronize(transfer.value);
+                for (auto& slot : slots) if (slot->writer.valid()) slot->writer.wait();
+                throw;
+            }
+            wall = std::chrono::duration<double>(Clock::now()-start).count();
+        }
+        result["native_seconds"] = wall;
+        result["gpu_compute_seconds"] = total.compute;
+        result["device_to_host_seconds"] = total.transfer;
+        result["file_write_seconds"] = total.write;
+        result["host_staging_bytes"] = buffers * plane * sizeof(float);
+        result["device_workspace_bytes"] = workspace;
+        return result;
+#endif
+    }
+
+    py::dict run_fb_checkpointed_impl(
+        std::vector<std::pair<int, int>> pairs, int tile_sites,
+        bool mean_only, bool return_posterior,
+        const std::vector<std::pair<int, int>>& regions, float calibration)
+    {
+        if (tile_sites < 1) throw std::invalid_argument("tile_sites must be positive.");
+        validate_pairs(pairs, n_haps_);
+        const int R = (int)regions.size();
+        if (!std::isfinite(calibration) || calibration <= 0)
+            throw std::invalid_argument("calibration_factor must be finite and positive.");
+        for (const auto& region : regions)
+            if (region.first < 0 || region.second > S_ || region.first >= region.second)
+                throw std::invalid_argument("Regions must be nonempty half-open site-index intervals.");
+        const int P = (int)pairs.size();
+        if (R && (!P || !S_)) {
+            py::dict result;
+            result["region_mean"] = py::array_t<double>(std::vector<ssize_t>{R, P});
+            result["region_mean_log"] = py::array_t<double>(std::vector<ssize_t>{R, P});
+            return result;
+        }
+        if (!P || !S_) return empty_flow_result(S_, P, mean_only, return_posterior);
+        const int B = std::min(tile_sites, S_);
+        const int tiles = (int)(((long long)S_ + B - 1) / B);
+        const bool ci = !mean_only;
+        const int outputs = 1 + (ci ? 2 : 0) + (return_posterior ? 2 : 0);
+        const size_t plane = (size_t)B * P;
+        const size_t working_bytes =
+            (size_t)P * n_words_ * sizeof(uint64_t) +
+            ((size_t)tiles + 1) * P * sizeof(float2) +
+            (2 + outputs) * plane * sizeof(float) + (2ULL * P + 1) * sizeof(int) +
+            (size_t)R * (sizeof(int2) + 2ULL * P * sizeof(double));
+        std::vector<int> pi(P), pj(P);
+        for (int i = 0; i < P; ++i) { pi[i] = pairs[i].first; pj[i] = pairs[i].second; }
+        std::vector<py::array_t<float>> arrays;
+        std::vector<float*> destinations;
+        for (int i = 0; !R && i < outputs; ++i) {
+            arrays.emplace_back(std::vector<ssize_t>{S_, P});
+            destinations.push_back(arrays.back().mutable_data());
+        }
+        py::array_t<double> region_linear, region_log;
+        std::vector<int2> bounds;
+        if (R) {
+            region_linear = py::array_t<double>(std::vector<ssize_t>{R, P});
+            region_log = py::array_t<double>(std::vector<ssize_t>{R, P});
+            for (const auto& region : regions) bounds.push_back(make_int2(region.first, region.second));
+        }
+        // Acquire writable host views while the GIL is held.
+        double* h_linear = R ? region_linear.mutable_data() : nullptr;
+        double* h_log = R ? region_log.mutable_data() : nullptr;
+        {
+            py::gil_scoped_release release;
+            std::lock_guard<std::mutex> lock(run_mutex_);
+            DeviceGuard device(device_id_);
+            free_output();
+            if (d_fwd_buf_) { cudaFree(d_fwd_buf_); d_fwd_buf_ = nullptr; }
+            fwd_buf_pairs_ = 0;
+            size_t free_bytes = 0, total_bytes = 0;
+            CUDA_CHECK(cudaMemGetInfo(&free_bytes, &total_bytes));
+            const size_t reserve = 512ULL * 1024 * 1024;
+            if (free_bytes <= reserve || working_bytes > free_bytes - reserve)
+                throw std::runtime_error("Checkpoint workspace exceeds free GPU memory; reduce pairs or tile_sites.");
+            DeviceBuffer<int> dpi(P), dpj(P);
+            DeviceBuffer<int> invalid_mean(1);
+            CUDA_CHECK(cudaMemset(invalid_mean.get(), 0, sizeof(int)));
+            DeviceBuffer<uint64_t> xor_buf((size_t)P * n_words_);
+            DeviceBuffer<float2> checkpoints((size_t)tiles * P), carry(P);
+            DeviceBuffer<float> forward(2 * plane), output(outputs * plane);
+            DeviceBuffer<int2> dbounds(R);
+            DeviceBuffer<double> linear((size_t)R*P), logarithmic((size_t)R*P);
+            if (R) {
+                CUDA_CHECK(cudaMemcpy(dbounds.get(), bounds.data(), R*sizeof(int2), cudaMemcpyHostToDevice));
+                CUDA_CHECK(cudaMemset(linear.get(), 0, (size_t)R*P*sizeof(double)));
+                CUDA_CHECK(cudaMemset(logarithmic.get(), 0, (size_t)R*P*sizeof(double)));
+            }
+            CUDA_CHECK(cudaMemcpy(dpi.get(), pi.data(), P*sizeof(int), cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemcpy(dpj.get(), pj.data(), P*sizeof(int), cudaMemcpyHostToDevice));
+            CUDA_CHECK(cudaMemset(carry.get(), 0, P*sizeof(float2)));
+            launch_precompute_xor(d_packed_, n_words_, dpi.get(), dpj.get(), P, xor_buf.get(), nullptr);
+            CUDA_CHECK(cudaGetLastError());
+            gamma_smc_flow_checkpoint_build_gpu(xor_buf.get(), n_words_, d_pos_, S_, P, B,
+                                                ctx_cache_, checkpoints.get());
+            CUDA_CHECK(cudaGetLastError());
+            for (int tile = tiles - 1; tile >= 0; --tile) {
+                const int start = tile * B;
+                const int rows = std::min(B, S_ - start);
+                float* mean = output.get();
+                float* lower = ci ? mean + plane : nullptr;
+                float* upper = ci ? mean + 2*plane : nullptr;
+                float* alpha = return_posterior ? mean + (ci ? 3 : 1)*plane : nullptr;
+                float* beta = return_posterior ? alpha + plane : nullptr;
+                gamma_smc_flow_checkpoint_tile_gpu(xor_buf.get(), n_words_, d_pos_, start, rows,
+                    P, ctx_cache_Ne_, ctx_cache_, checkpoints.get() + (size_t)tile*P, carry.get(),
+                    forward.get(), mean, lower, upper, alpha, beta, calibration, invalid_mean.get());
+                CUDA_CHECK(cudaGetLastError());
+                if (R) {
+                    gamma_smc_region_moments_tile_gpu(mean, P, start, rows, dbounds.get(), R,
+                        1.0f, linear.get(), logarithmic.get());
+                    CUDA_CHECK(cudaGetLastError());
+                }
+                for (int i = 0; !R && i < outputs; ++i)
+                    CUDA_CHECK(cudaMemcpy(destinations[i] + (size_t)start*P,
+                        output.get() + i*plane, (size_t)rows*P*sizeof(float), cudaMemcpyDeviceToHost));
+            }
+            if (R) {
+                gamma_smc_region_moments_finalize_gpu(P, dbounds.get(), R, linear.get(), logarithmic.get());
+                CUDA_CHECK(cudaGetLastError());
+                CUDA_CHECK(cudaMemcpy(h_linear, linear.get(), (size_t)R*P*sizeof(double), cudaMemcpyDeviceToHost));
+                CUDA_CHECK(cudaMemcpy(h_log, logarithmic.get(), (size_t)R*P*sizeof(double), cudaMemcpyDeviceToHost));
+            }
+            int invalid = 0;
+            CUDA_CHECK(cudaMemcpy(&invalid, invalid_mean.get(), sizeof(int), cudaMemcpyDeviceToHost));
+            if (invalid)
+                throw std::runtime_error("Posterior means must be finite and strictly positive; no floor is applied.");
+        }
+        py::dict result;
+        result["posterior_means_validated"] = true;
+        if (R) {
+            result["region_mean"] = region_linear;
+            result["region_mean_log"] = region_log;
+            result["checkpoint_workspace_bytes"] = working_bytes;
+            return result;
+        }
+        int index = 0;
+        result["mean"] = arrays[index++];
+        if (ci) { result["lower"] = arrays[index++]; result["upper"] = arrays[index++]; }
+        if (return_posterior) { result["posterior_alpha"] = arrays[index++]; result["posterior_beta"] = arrays[index++]; }
+        result["checkpoint_workspace_bytes"] = working_bytes;
+        return result;
+    }
+
+    py::dict run_fb_checkpointed(std::vector<std::pair<int, int>> pairs,
+        int tile_sites, bool mean_only, bool return_posterior, float calibration) {
+        return run_fb_checkpointed_impl(std::move(pairs), tile_sites, mean_only,
+            return_posterior, {}, calibration);
+    }
+
+    py::dict run_fb_region_moments(std::vector<std::pair<int, int>> pairs,
+        std::vector<std::pair<int, int>> regions, int tile_sites, float calibration) {
+        if (regions.empty()) throw std::invalid_argument("At least one region is required.");
+        return run_fb_checkpointed_impl(std::move(pairs), tile_sites, true, false,
+            regions, calibration);
+    }
+
     py::dict run_fb_blockwise(
         std::vector<std::pair<int, int>> pairs,
         int core_block_sites,
@@ -3489,6 +3820,11 @@ PYBIND11_MODULE(_core, m) {
         return dev;
     }, "Get the current CUDA device");
 
+    m.def("device_pci_bus_id", [](int device) {
+        char bus[32];
+        CUDA_CHECK(cudaDeviceGetPCIBusId(bus, sizeof(bus), device));
+        return std::string(bus);
+    }, py::arg("device"));
     m.def("cuda_mem_info", []() -> py::tuple {
         size_t free_mem = 0, total_mem = 0;
         CUDA_CHECK(cudaMemGetInfo(&free_mem, &total_mem));
@@ -3558,6 +3894,20 @@ PYBIND11_MODULE(_core, m) {
              py::arg("pairs"),
              py::arg("mean_only") = true,
              py::arg("return_posterior") = false)
+        .def("export_mean_fd", &FlowContext::export_mean_fd,
+             "Export calibrated dense means through bounded pinned staging to a pre-sized POSIX file.",
+             py::arg("pairs"), py::arg("fd"), py::arg("data_offset"),
+             py::arg("tile_sites") = 4096, py::arg("calibration_factor") = 1.0f,
+             py::arg("buffers") = 3)
+        .def("run_fb_region_moments", &FlowContext::run_fb_region_moments,
+             "Full-context per-pair region means and mean-log values, computed on GPU.",
+             py::arg("pairs"), py::arg("regions"), py::arg("tile_sites") = 2048,
+             py::arg("calibration_factor") = 1.0f)
+        .def("run_fb_checkpointed", &FlowContext::run_fb_checkpointed,
+             "Full-sequence checkpoint/replay with bounded GPU state memory.",
+             py::arg("pairs"), py::arg("tile_sites") = 2048,
+             py::arg("mean_only") = true, py::arg("return_posterior") = false,
+             py::arg("calibration_factor") = 1.0f)
         .def("run_fb_blockwise", &FlowContext::run_fb_blockwise,
              "Experimental blockwise forward-backward smoothing.\n"
              "Decodes padded site blocks, keeps only the core sites, and stitches\n"

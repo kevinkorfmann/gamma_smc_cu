@@ -41,6 +41,8 @@ from gamma_smc_cu.estimator import (
 
 from gamma_smc_cu.multigpu import MultiGPUFlowContext
 from gamma_smc_cu.infer import infer, infer_blockwise
+from gamma_smc_cu.batching import iter_infer_batches, RegionMomentContext
+from gamma_smc_cu.export import export_dense
 
 __all__ = [
     "bitpack",
@@ -66,6 +68,9 @@ __all__ = [
     "MultiGPUFlowContext",
     "infer",
     "infer_blockwise",
+    "iter_infer_batches",
+    "export_dense",
+    "RegionMomentContext",
     "CoalescenceEstimator",
     "TMRCAResult",
     "Segment",

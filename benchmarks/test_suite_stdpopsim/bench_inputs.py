@@ -8,6 +8,8 @@ import numpy as np
 class PreparedInputs:
     G: np.ndarray
     pos: np.ndarray
+    site_ids: np.ndarray
+    sample_nodes: np.ndarray
     n_total_records: int
     n_kept_records: int
     n_dropped_non_snp: int
@@ -44,13 +46,19 @@ def materialize_binary_snp_vcf(ts, out_vcf_path: str) -> PreparedInputs:
     tmrca.cu currently expects a binary haplotype matrix, so we keep only
     biallelic SNP records with diploid genotypes in {0, 1} and no missing data.
     """
-    os.makedirs(os.path.dirname(out_vcf_path), exist_ok=True)
+    original_positions = np.asarray(ts.tables.sites.position)
+    if not np.all(np.isfinite(original_positions)) or not np.all(original_positions == np.floor(original_positions)):
+        raise ValueError("This benchmark requires integer tree-sequence site positions for exact VCF roundtrip")
+    os.makedirs(os.path.dirname(out_vcf_path) or ".", exist_ok=True)
     full_vcf_path = out_vcf_path + ".full"
     with open(full_vcf_path, "w") as f:
-        ts.write_vcf(f, contig_id="chr1", allow_position_zero=True)
+        # tskit's default POS equals the site coordinate; VCF is 1-based.
+        # This explicit transform makes HTSlib POS-1 equal the original site.
+        ts.write_vcf(f, contig_id="chr1", position_transform=lambda x: np.asarray(x) + 1)
 
     positions = []
     site_haplotypes = []
+    site_ids = []
     n_total_records = 0
     n_dropped_non_snp = 0
     n_dropped_non_binary = 0
@@ -70,9 +78,11 @@ def materialize_binary_snp_vcf(ts, out_vcf_path: str) -> PreparedInputs:
             if len(ref) != 1 or any(len(a) != 1 or a == "." for a in alt):
                 n_dropped_non_snp += 1
                 continue
+            if len(alt) != 1 or ref not in "ACGT" or alt[0] not in "ACGT" or ref == alt[0]:
+                n_dropped_non_binary += 1
+                continue
 
             haplotypes = []
-            has_alt = False
             bad_record = False
             missing_record = False
 
@@ -86,7 +96,6 @@ def materialize_binary_snp_vcf(ts, out_vcf_path: str) -> PreparedInputs:
                     bad_record = True
                     break
                 haplotypes.extend(gt)
-                has_alt = has_alt or any(allele == 1 for allele in gt)
 
             if bad_record:
                 if missing_record:
@@ -95,12 +104,13 @@ def materialize_binary_snp_vcf(ts, out_vcf_path: str) -> PreparedInputs:
                     n_dropped_non_binary += 1
                 continue
 
-            if not has_alt:
+            if not (0 < sum(haplotypes) < len(haplotypes)):
                 n_dropped_nonseg += 1
                 continue
 
             dst.write(line)
             positions.append(float(int(fields[1]) - 1))
+            site_ids.append(int(fields[2]))
             site_haplotypes.append(haplotypes)
 
     os.remove(full_vcf_path)
@@ -110,9 +120,18 @@ def materialize_binary_snp_vcf(ts, out_vcf_path: str) -> PreparedInputs:
 
     G = np.asarray(site_haplotypes, dtype=np.uint8).T
     pos = np.asarray(positions, dtype=np.float64)
+    site_ids = np.asarray(site_ids, dtype=np.int64)
+    np.testing.assert_array_equal(pos, original_positions[site_ids])
+    # msprime/stdpopsim place samples in diploid individual order. Guard this
+    # rather than silently changing the pair-to-node correspondence.
+    sample_nodes = np.asarray(ts.samples(), dtype=np.int32)
+    expected = ts.genotype_matrix()[site_ids].T
+    np.testing.assert_array_equal(G, expected)
     return PreparedInputs(
         G=G,
         pos=pos,
+        site_ids=site_ids,
+        sample_nodes=sample_nodes,
         n_total_records=n_total_records,
         n_kept_records=G.shape[1],
         n_dropped_non_snp=n_dropped_non_snp,

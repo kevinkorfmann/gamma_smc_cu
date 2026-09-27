@@ -124,6 +124,75 @@ def _estimate_scaled_params(G, positions, mu, rho, Ne):
     return float(effective_mu), float(effective_rho)
 
 
+def _inference_calibration(G, positions, mu, rho, Ne, auto_estimate_theta,
+                           physical_mu):
+    """Keep HMM scaled rates separate from the conversion to generations.
+
+    Native kernels return ``2*Ne`` times the dimensionless coalescent time.
+    When theta is estimated (or supplied through effective rates), its
+    physical conversion is instead ``theta/(2*physical_mu)``. Posterior
+    alpha/beta remain in dimensionless coalescent units in either mode.
+    """
+    if auto_estimate_theta and mu <= 0:
+        raise ValueError("mu must be positive when auto_estimate_theta=True.")
+    if physical_mu is not None and not (
+            math.isfinite(physical_mu) and physical_mu > 0):
+        raise ValueError("physical_mu must be finite and positive.")
+
+    if auto_estimate_theta:
+        kernel_mu, kernel_rho = _estimate_scaled_params(G, positions, mu, rho, Ne)
+        if physical_mu is None:
+            physical_mu = float(mu)
+    else:
+        kernel_mu, kernel_rho = float(mu), float(rho)
+
+    theta = 4.0 * float(Ne) * kernel_mu
+    scaled_rho = 4.0 * float(Ne) * kernel_rho
+    native_scale = 2.0 * float(Ne)
+    if physical_mu is None:
+        # Fixed-parameter mode keeps its historical Ne-defined scale,
+        # including its supported zero-mutation-rate limit.
+        scale = native_scale
+        scale_source = "fixed_Ne"
+    else:
+        scale = theta / (2.0 * float(physical_mu))
+        scale_source = "physical_mutation_rate"
+    if not (math.isfinite(scale) and scale > 0):
+        raise ValueError("The mutation-rate calibration must give a finite positive time scale.")
+
+    metadata = {
+        "calibration_version": 1,
+        "time_units": "generations",
+        "posterior_time_units": "coalescent",
+        "time_scale_source": scale_source,
+        "auto_estimate_theta": bool(auto_estimate_theta),
+        "input_Ne": float(Ne),
+        "input_mu": float(mu),
+        "input_rho": float(rho),
+        "physical_mu": None if physical_mu is None else float(physical_mu),
+        "kernel_mu": kernel_mu,
+        "kernel_rho": kernel_rho,
+        "scaled_mutation_rate": theta,
+        "scaled_recombination_rate": scaled_rho,
+        "generations_per_coalescent_unit": scale,
+        "effective_Ne": scale / 2.0,
+        "native_generations_per_coalescent_unit": native_scale,
+        "generation_rescaling_factor": scale / native_scale,
+    }
+    return kernel_mu, kernel_rho, metadata
+
+
+def _calibrate_result(result, metadata):
+    """Rescale native time summaries in place; leave Gamma parameters intact."""
+    factor = metadata["generation_rescaling_factor"]
+    if factor != 1.0:
+        for key in ("mean", "lower", "upper"):
+            if key in result:
+                result[key] *= factor
+    result["metadata"] = metadata
+    return result
+
+
 def _filter_segregating(G, positions):
     """Drop sites that are monomorphic within ``G``.
 
@@ -257,6 +326,7 @@ def infer(
     mean_only=True,
     return_posterior=False,
     auto_estimate_theta=True,
+    physical_mu=None,
 ):
     """Estimate pairwise TMRCA at every segregating site.
 
@@ -277,10 +347,11 @@ def infer(
     return_posterior : bool, default False
         If True, also return the per-site combined Gamma posterior
         parameters as ``posterior_alpha`` and ``posterior_beta`` arrays
-        in scaled coalescent time (T_scaled = T / (2*Ne)). Mean in
-        generations is then ``(alpha / beta) * 2 * Ne``; arbitrary
+        in scaled coalescent time (T_scaled = T / time_scale), where
+        ``time_scale = result["metadata"]["generations_per_coalescent_unit"]``.
+        Mean in generations is ``(alpha / beta) * time_scale``; arbitrary
         quantiles can be computed via ``scipy.stats.gamma(alpha,
-        scale=2*Ne/beta).ppf(q)``.
+        scale=time_scale/beta).ppf(q)``.
     auto_estimate_theta : bool, default True
         If True (the default), replace the scaled parameters derived
         from ``(Ne, mu, rho)`` with ones learned from the data, matching
@@ -288,18 +359,35 @@ def infer(
         plus ``-t rho/mu``). The scaled mutation rate is set to the
         observed per-individual heterozygosity and the scaled
         recombination rate to ``pi_hat * (rho/mu)``; ``Ne`` is only used
-        to invert gamma_smc_cu's internal per-bp scaling. This consistently outperforms the
-        naive ``Ne=10000`` assumption on non-HomSap species where the
-        data-implied effective Ne differs from the user-supplied one.
+        to invert gamma_smc_cu's internal per-bp scaling. Returned time
+        summaries use ``theta / (2 * mu)`` generations per coalescent unit,
+        so changing this bookkeeping ``Ne`` does not change physical times.
+        Requires positive ``mu``. If theta cannot be estimated (e.g. odd
+        haplotype count or zero heterozygosity), supplied rates are retained.
         Pass ``False`` to force the kernel to use the raw
         ``(Ne, mu, rho)`` values — useful for demographic
         misspecification studies.
+    physical_mu : float or None, default None
+        Optional physical mutation rate used only to convert outputs to
+        generations. In auto-estimation mode it defaults to ``mu``. In
+        fixed mode, omit it to retain the ``2*Ne`` conversion, or supply it
+        when ``mu``/``rho`` are externally estimated effective rates; the
+        conversion is then ``(4*Ne*mu) / (2*physical_mu)``. Must be positive.
+
+    Returns
+    -------
+    dict
+        Time arrays, positions, pairs and optional coalescent Gamma
+        parameters. ``metadata`` records input/kernel rates, scaled rates,
+        the physical mutation rate and the conversion to generations.
     """
     from gamma_smc_cu import _core
 
     _validate_rates(Ne, mu, rho)
     G, positions = _coerce_inputs(G_or_ts, positions)
     G, positions, _ = _filter_segregating(G, positions)
+    kernel_mu, kernel_rho, metadata = _inference_calibration(
+        G, positions, mu, rho, Ne, auto_estimate_theta, physical_mu)
     n = G.shape[0]
 
     if pairs is None:
@@ -308,16 +396,10 @@ def infer(
         pairs = _normalize_pairs(pairs, G.shape[0])
 
     if positions.size == 0 or not pairs:
-        return _empty_result(positions, pairs, mean_only, return_posterior)
+        return _calibrate_result(
+            _empty_result(positions, pairs, mean_only, return_posterior), metadata)
 
     flow_field_path = _resolve_flow_field_path(flow_field_path)
-
-    if auto_estimate_theta:
-        kernel_mu, kernel_rho = _estimate_scaled_params(
-            G, positions, mu, rho, Ne
-        )
-    else:
-        kernel_mu, kernel_rho = float(mu), float(rho)
 
     ctx = _core.FlowContext(
         G, positions, float(Ne), kernel_mu, kernel_rho, flow_field_path, 0
@@ -329,7 +411,7 @@ def infer(
     )
     result["pairs"] = pairs
     result["positions"] = positions
-    return result
+    return _calibrate_result(result, metadata)
 
 
 def infer_blockwise(
@@ -348,6 +430,7 @@ def infer_blockwise(
     verbose=False,
     return_posterior=False,
     auto_estimate_theta=True,
+    physical_mu=None,
 ):
     """Blockwise Gamma-SMC forward-backward decoding for explicit pairs.
 
@@ -404,6 +487,12 @@ def infer_blockwise(
         If True, also return the per-site combined Gamma posterior
         parameters as ``posterior_alpha`` and ``posterior_beta`` arrays.
         Currently supported only with ``max_streams=1``.
+    auto_estimate_theta : bool, default True
+        Estimate scaled rates and calibrate output times using physical
+        ``mu``, as in :func:`infer`.
+    physical_mu : float or None, default None
+        Physical mutation rate for externally estimated effective rates.
+        The semantics and returned ``metadata`` match :func:`infer`.
     """
     from gamma_smc_cu import _core
 
@@ -435,12 +524,16 @@ def infer_blockwise(
     _validate_rates(Ne, mu, rho)
     G, positions = _coerce_inputs(G_or_ts, positions)
     G, positions, _ = _filter_segregating(G, positions)
+    kernel_mu, kernel_rho, metadata = _inference_calibration(
+        G, positions, mu, rho, Ne, auto_estimate_theta, physical_mu)
     pairs = _normalize_pairs(pairs, G.shape[0])
     n_sites = G.shape[1]
     n_pairs = len(pairs)
 
     if n_sites == 0:
-        return _empty_result(positions, pairs, mean_only, return_posterior, blockwise=True)
+        return _calibrate_result(
+            _empty_result(positions, pairs, mean_only, return_posterior, blockwise=True),
+            metadata)
 
     # ----- auto-size or sanity-check core_block_sites -----
     free_bytes = _query_free_gpu_bytes()
@@ -502,13 +595,6 @@ def infer_blockwise(
 
     flow_field_path = _resolve_flow_field_path(flow_field_path)
 
-    if auto_estimate_theta:
-        kernel_mu, kernel_rho = _estimate_scaled_params(
-            G, positions, mu, rho, Ne
-        )
-    else:
-        kernel_mu, kernel_rho = float(mu), float(rho)
-
     ctx = _core.FlowContext(
         G, positions, float(Ne), kernel_mu, kernel_rho, flow_field_path, 0
     )
@@ -523,4 +609,4 @@ def infer_blockwise(
     )
     result["pairs"] = pairs
     result["positions"] = positions
-    return result
+    return _calibrate_result(result, metadata)

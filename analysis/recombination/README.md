@@ -1,5 +1,9 @@
 # fastRho maps at study-highlighted genes
 
+For corrected reruns and refreshed candidate unions, use the portable workflow
+in [`../rerun/RECOMBINATION_BGS.md`](../rerun/RECOMBINATION_BGS.md). Counts below
+describe the historical revision atlas.
+
 This analysis supplements the Gamma-SMC study with population-specific,
 LD-derived recombination maps. `prepare_targets.py` extracts the named genes
 from the revision main text, SI, and Tables 1–2, and includes all 165 highlighted
@@ -42,7 +46,7 @@ figures are archived separately in the private manuscript.
 * Model: one unchanged general-purpose checkpoint and companion feature
   statistics, phased view, mutation rate 1.25e-8. No retraining.
 * Scale: preserve population-scaled rho/bp. The absolute rate is
-  rho/(4 × 10,000), using the same Ne as the Gamma-SMC analysis. Rates in
+  rho/(4 × 10,000), a fixed comparison scale. Rates in
   cM/Mb multiply that conditional rate by 1e8. Auxiliary model Ne is recorded
   but is not used to rescale each locus. A 1 cM/Mb reference corresponds to
   the original Gamma-SMC constant input rate, 1e-8/bp/generation.

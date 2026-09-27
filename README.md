@@ -66,7 +66,10 @@ At genome-wide scale, the full 1000G pairwise scan across 22 autosomes
   for fast access.
 - **Auto-calibration of scaled rates.** `auto_estimate_theta=True`
   infers effective µ and ρ from chromosome-wide heterozygosity,
-  matching the upstream binary's behaviour.
+  matching the upstream binary's behaviour. Time summaries use the
+  physical mutation rate to convert the inferred coalescent scale to
+  generations (`theta / (2 * mu)`); result metadata records the rates
+  and conversion. Posterior Gamma parameters retain coalescent units.
 
 ## Install
 
@@ -206,10 +209,17 @@ reference-parity accuracy):
 
 ## Main API
 
+For full-chromosome context with persistent pair batching, exact checkpoint/replay,
+or GPU gene/window reductions, see the [batching guide](docs/batching.md).
+It distinguishes complete analysis timings from dense posterior export timings.
+
 | Function | Purpose |
 |---|---|
 | `gamma_smc_cu.infer(...)` | One-shot pairwise TMRCA for inputs that fit in GPU memory |
 | `gamma_smc_cu.infer_blockwise(...)` | Memory-bounded blockwise decoder for chromosome-scale inputs |
+| `gamma_smc_cu.iter_infer_batches(...)` | Persistent full-context pair batches, optional checkpoint/replay and multiple GPUs |
+| `gamma_smc_cu.export_dense(...)` | Full-context float32 means written directly to NPY files with bounded memory |
+| `gamma_smc_cu.RegionMomentContext(...)` | Per-pair interval mean and mean-log TMRCA on the GPU |
 | `gamma_smc_cu.CoalescenceEstimator` | Object-oriented estimator with custom discretisation, posterior summaries |
 | `gamma_smc_cu.MultiGPUFlowContext` | Partitions pair batches across multiple CUDA devices |
 | `gamma_smc_cu.generate_flow_field(...)` | Pre-compute flow fields for non-human / user-supplied demography |

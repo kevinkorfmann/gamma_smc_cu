@@ -20,6 +20,7 @@ gamma_smc_cu.infer(
     mean_only=True,
     return_posterior=False,
     auto_estimate_theta=True,
+    physical_mu=None,
 )
 ```
 
@@ -45,8 +46,9 @@ forward-backward decoding of the Gamma-SMC HMM.
   time, not per call — changing it requires a fresh `FlowContext`.
 
 `Ne` *(float, default `10000`)*
-: Effective population size. Output TMRCAs are in *real generations*, scaled
-  by `2 * Ne`.
+: Effective population size in fixed-parameter mode. When theta is estimated
+  from the data, `Ne` is a bookkeeping constant for the native rate inputs;
+  the physical mutation rate determines the output conversion to generations.
 
 `pairs` *(list of `(int, int)`, optional)*
 : Pairs of haplotype indices to decode. Defaults to all $n(n-1)/2$ pairs.
@@ -62,20 +64,29 @@ forward-backward decoding of the Gamma-SMC HMM.
 `return_posterior` *(bool, default `False`)*
 : If `True`, also return the per-site combined Gamma posterior
   parameters as `posterior_alpha` / `posterior_beta` (in scaled coalescent
-  time `T_scaled = T / (2*Ne)`). Reconstructable mean is
-  `(alpha / beta) * 2 * Ne`; arbitrary quantiles via
-  `scipy.stats.gamma(alpha, scale=2*Ne/beta).ppf(q)`. See
+  time `T_scaled = T / time_scale`), where
+  `time_scale = result["metadata"]["generations_per_coalescent_unit"]`.
+  Reconstructable mean is `(alpha / beta) * time_scale`; arbitrary quantiles via
+  `scipy.stats.gamma(alpha, scale=time_scale/beta).ppf(q)`. See
   [Algorithm](algorithm.md) for the parameterization.
 
 `auto_estimate_theta` *(bool, default `True`)*
 : If `True`, estimate the scaled mutation rate from the observed
   per-individual heterozygosity in the genotype matrix, matching gamma_smc's
   (Schweiger and Durbin, 2023) auto-estimation mode. The scaled recombination
-  rate is derived from the user-supplied `rho/mu` ratio. This makes inference
-  robust to non-human species and demographic misspecification — the
-  user-supplied `Ne`, `mu`, `rho` only affect the `rho/mu` ratio and the
-  per-bp output rescaling. Pass `False` to fall back to textbook-constants
-  behavior (`4 * Ne * mu`), useful for deliberate misspecification studies.
+  rate is derived from the user-supplied `rho/mu` ratio. The conversion to
+  generations is `theta / (2 * mu)`, independent of the bookkeeping `Ne`.
+  Requires positive `mu`. If theta cannot be estimated (e.g. an odd haplotype
+  count or zero heterozygosity), the supplied rates are retained.
+  Pass `False` to use the supplied scaled rates (`4 * Ne * mu` and
+  `4 * Ne * rho`) and the original `2 * Ne` time conversion.
+
+`physical_mu` *(float or `None`, default `None`)*
+: Physical per-site, per-generation mutation rate used only for converting
+  outputs to generations. Defaults to `mu` in auto-estimation mode. In fixed
+  mode, omit it to retain `2 * Ne`, or supply it when `mu` and `rho` are
+  externally estimated effective rates: the conversion then becomes
+  `(4 * Ne * mu) / (2 * physical_mu)`. Must be finite and positive.
 
 **Returns**
 
@@ -90,6 +101,17 @@ A `dict` with keys:
 | `posterior_beta`   | `(n_sites, n_pairs)` | `float32` | `return_posterior=True`        |
 | `positions`        | `(n_sites,)`         | `float64` | always                         |
 | `pairs`            | `list[(int, int)]`   |           | always                         |
+| `metadata`         |                      | `dict`    | always                         |
+
+All time summary arrays (`mean`, `lower`, `upper`) are in generations.
+`posterior_alpha` and `posterior_beta` retain their dimensionless coalescent
+parameterization. The JSON-serializable `metadata` records `input_Ne`,
+`input_mu`, `input_rho`, `kernel_mu`, `kernel_rho`, `scaled_mutation_rate`,
+`scaled_recombination_rate`, `physical_mu`, `generations_per_coalescent_unit`,
+`effective_Ne` (half that conversion), the native `2 * Ne` conversion and its
+rescaling factor, the time units, and the calibration mode/version. Save this
+metadata with inference outputs so posterior distributions can be interpreted
+without reconstructing the input settings.
 
 ## `gamma_smc_cu.infer_blockwise`
 
@@ -110,6 +132,7 @@ gamma_smc_cu.infer_blockwise(
     verbose=False,
     return_posterior=False,
     auto_estimate_theta=True,
+    physical_mu=None,
 )
 ```
 
@@ -153,6 +176,9 @@ for the mechanism.
 : Same as for `infer()`. Estimates scaled mutation rate from observed
   heterozygosity. See `infer()` for details.
 
+`physical_mu` *(float or `None`, default `None`)*
+: Same calibration and metadata semantics as for `infer()`.
+
 **Required**
 
 Unlike `infer()`, `infer_blockwise()` **requires `pairs` to be passed
@@ -173,6 +199,7 @@ windows used:
 | `blocks`           | `(n_blocks, 4)`      | `int32`   | always                         |
 | `positions`        | `(n_sites,)`         | `float64` | always                         |
 | `pairs`            | `list[(int, int)]`   |           | always                         |
+| `metadata`         |                      | `dict`    | always                         |
 
 The `blocks` array stores `(core_start, core_stop, padded_start, padded_stop)`
 for every block — useful for debugging or for stitching custom outputs.
@@ -192,6 +219,10 @@ you want to inspect or implement your own block sizing logic.
 These bypass the Python wrappers and call the C++ `FlowContext` directly. Use
 them only if you need to amortize context construction across many `run_*`
 calls on the same data, or if you want fine-grained control over chunking.
+They retain the native `2 * Ne` output conversion and do not estimate theta
+or return the Python calibration metadata. If supplying effective rates
+directly, convert native time summaries by
+`(4 * Ne * effective_mu) / (4 * Ne * physical_mu)` yourself.
 
 ```python
 ctx = gamma_smc_cu.FlowContext(

@@ -1763,3 +1763,248 @@ void gamma_smc_flow_cached_fb_reduce_gpu(
         if (status != cudaSuccess) throw std::runtime_error(cudaGetErrorString(status));
     }
 }
+
+
+// Exact checkpoint/replay: preserve forward and backward state across tiles.
+// The extra forward pass trades recomputation for O(P*(S/B+B)) state memory.
+__global__ void gamma_smc_checkpoint_build_kernel(
+    const uint64_t* __restrict__ xor_buf, int n_words,
+    const double* __restrict__ positions, int S, int n_pairs, int tile_sites,
+    FlowFieldDeviceCacheView cache, float2* __restrict__ checkpoints)
+{
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= n_pairs) return;
+    float m = 0.0f, c = 0.0f;
+    int cur_word = -1, next_checkpoint = 0, tile = 0;
+    uint64_t xor_w = 0;
+    double prev_pos = -1.0;
+    for (int s = 0; s < S; ++s) {
+        if (s == next_checkpoint) {
+            checkpoints[(long long)tile * n_pairs + pid] = make_float2(m, c);
+            ++tile;
+            next_checkpoint = (tile_sites > S - s) ? S : s + tile_sites;
+        }
+        double pos = positions[s];
+        int seg_steps = rounded_segment_steps(pos - prev_pos);
+        prev_pos = pos;
+        int w = s >> 6;
+        if (w != cur_word) {
+            xor_w = xor_buf[(long long)pid * n_words + w];
+            cur_word = w;
+        }
+        bool is_het = ((xor_w >> (s & 63)) & 1ULL) != 0;
+        cache_apply_forward_segment(m, c, cache, seg_steps, is_het);
+    }
+}
+
+__global__ void gamma_smc_checkpoint_replay_kernel(
+    const uint64_t* __restrict__ xor_buf,  // pre-computed XOR [n_pairs × n_words]
+    int n_words,
+    const double* __restrict__ positions,
+    int site_start,
+    int block_S,
+    int n_pairs,
+    FlowFieldDeviceCacheView cache,
+    float* __restrict__ fwd_mean,
+    float* __restrict__ fwd_cv_out,
+    const float2* __restrict__ seed)
+{
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= n_pairs) return;
+
+    float m = seed[pid].x, c = seed[pid].y;
+    int cur_word = -1;
+    uint64_t xor_w = 0;
+    double prev_pos = (site_start == 0) ? -1.0 : positions[site_start - 1];
+
+    for (int s = 0; s < block_S; s++) {
+        int global_s = site_start + s;
+        double pos = positions[global_s];
+        int seg_steps = rounded_segment_steps(pos - prev_pos);
+        prev_pos = pos;
+        int w = global_s >> 6;
+        int bit = global_s & 63;
+        if (w != cur_word) {
+            xor_w = xor_buf[(long long)pid * n_words + w];  // coalesced read
+            cur_word = w;
+        }
+        bool is_het = ((xor_w >> bit) & 1ULL) != 0;
+        cache_apply_forward_segment(m, c, cache, seg_steps, is_het);
+
+        long long idx = (long long)s * n_pairs + pid;
+        fwd_mean[idx] = m;
+        fwd_cv_out[idx] = c;
+    }
+}
+
+template<bool WRITE_CI>
+__global__ void gamma_smc_checkpoint_backward_kernel(
+    const uint64_t* __restrict__ xor_buf,  // pre-computed XOR [n_pairs × n_words]
+    int n_words,
+    const double* __restrict__ positions,
+    int site_start,
+    int block_S,
+    float Ne,
+    int n_pairs,
+    FlowFieldDeviceCacheView cache,
+    const float* __restrict__ fwd_mean_in,
+    const float* __restrict__ fwd_cv_in,
+    float* __restrict__ mean_out,
+    float* __restrict__ lower_out,
+    float* __restrict__ upper_out,
+    float* __restrict__ alpha_out,
+    float* __restrict__ beta_out,
+    float2* __restrict__ carry, float calibration, int* invalid_mean)
+{
+    int pid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (pid >= n_pairs) return;
+
+    float m = carry[pid].x, c = carry[pid].y;
+    float unscale = 2.0f * Ne;
+    int cur_word = -1;
+    uint64_t xor_w = 0;
+
+    for (int s = block_S - 1; s >= 0; s--) {
+        int global_s = site_start + s;
+
+        // Backward state BEFORE emission
+        float bwd_a, bwd_b;
+        mc_to_ab(m, c, bwd_a, bwd_b);
+
+        // Forward state
+        long long idx = (long long)s * n_pairs + pid;
+        float fm = fwd_mean_in[idx], fc = fwd_cv_in[idx];
+        float fwd_a, fwd_b;
+        mc_to_ab(fm, fc, fwd_a, fwd_b);
+
+        // Combine
+        float a_s = fwd_a + bwd_a - 1.0f;
+        float b_s = fwd_b + bwd_b - 1.0f;
+        float mean_gen = (a_s / fmaxf(b_s, 1e-10f)) * unscale;
+        float calibrated_mean = __fmul_rn(mean_gen, calibration);
+        mean_out[idx] = calibrated_mean;
+        if (!isfinite(calibrated_mean) || calibrated_mean <= 0.0f)
+            atomicExch(invalid_mean, 1);
+
+        if constexpr (WRITE_CI) {
+            float a_ci = fmaxf(a_s, 1.0f);
+            float inv9a = __frcp_rn(9.0f * a_ci);
+            float sq = __fsqrt_rn(inv9a);
+            float base = 1.0f - inv9a;
+            float lo_f = fmaxf(base - 1.96f * sq, 0.0f);
+            float hi_f = base + 1.96f * sq;
+            lower_out[idx] = __fmul_rn(fmaxf(mean_gen * lo_f * lo_f * lo_f, 0.0f), calibration);
+            upper_out[idx] = __fmul_rn(mean_gen * hi_f * hi_f * hi_f, calibration);
+        }
+
+        if (alpha_out != nullptr) alpha_out[idx] = a_s;
+        if (beta_out  != nullptr) beta_out[idx]  = b_s;
+
+        // Coalesced XOR read from pre-computed buffer
+        int w = global_s >> 6;
+        int bit = global_s & 63;
+        if (w != cur_word) {
+            xor_w = xor_buf[(long long)pid * n_words + w];  // coalesced read
+            cur_word = w;
+        }
+        bool is_het = ((xor_w >> bit) & 1ULL) != 0;
+        int seg_steps;
+        if (global_s == 0) {
+            seg_steps = rounded_segment_steps(positions[0] + 1.0);
+        } else {
+            seg_steps = rounded_segment_steps(positions[global_s] - positions[global_s - 1]);
+        }
+        cache_apply_backward_segment(m, c, cache, seg_steps, is_het);
+    }
+    carry[pid] = make_float2(m, c);
+}
+
+
+void gamma_smc_flow_checkpoint_build_gpu(
+    const uint64_t* xor_buf, int n_words, const double* positions,
+    int S, int n_pairs, int tile_sites, FlowFieldDeviceCacheView cache,
+    void* checkpoints, void* stream_ptr)
+{
+    const auto stream = static_cast<cudaStream_t>(stream_ptr);
+    const int block = cached_flow_block_size(n_pairs);
+    const int grid = (int)(((long long)n_pairs + block - 1) / block);
+    gamma_smc_checkpoint_build_kernel<<<grid, block, 0, stream>>>(
+        xor_buf, n_words, positions, S, n_pairs, tile_sites, cache,
+        static_cast<float2*>(checkpoints));
+}
+
+void gamma_smc_flow_checkpoint_tile_gpu(
+    const uint64_t* xor_buf, int n_words, const double* positions,
+    int site_start, int tile_S, int n_pairs, float Ne,
+    FlowFieldDeviceCacheView cache, const void* checkpoint, void* carry,
+    float* forward, float* mean, float* lower, float* upper,
+    float* alpha, float* beta, float calibration, int* invalid_mean, void* stream_ptr)
+{
+    const auto stream = static_cast<cudaStream_t>(stream_ptr);
+    const int block = cached_flow_block_size(n_pairs);
+    const int grid = (int)(((long long)n_pairs + block - 1) / block);
+    float* cv = forward + (long long)tile_S * n_pairs;
+    gamma_smc_checkpoint_replay_kernel<<<grid, block, 0, stream>>>(
+        xor_buf, n_words, positions, site_start, tile_S, n_pairs, cache,
+        forward, cv, static_cast<const float2*>(checkpoint));
+    if (lower) {
+        gamma_smc_checkpoint_backward_kernel<true><<<grid, block, 0, stream>>>(
+            xor_buf, n_words, positions, site_start, tile_S, Ne, n_pairs, cache,
+            forward, cv, mean, lower, upper, alpha, beta, static_cast<float2*>(carry), calibration, invalid_mean);
+    } else {
+        gamma_smc_checkpoint_backward_kernel<false><<<grid, block, 0, stream>>>(
+            xor_buf, n_words, positions, site_start, tile_S, Ne, n_pairs, cache,
+            forward, cv, mean, nullptr, nullptr, alpha, beta, static_cast<float2*>(carry), calibration, invalid_mean);
+    }
+}
+
+// Preserve each pair's region moments without copying a site-by-pair matrix.
+__global__ void gamma_smc_region_moments_tile_kernel(
+    const float* values, int P, int start, int rows,
+    const int2* bounds, int regions, float calibration,
+    double* linear, double* logarithmic)
+{
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= (long long)regions * P) return;
+    int region = (int)(i / P), pair = (int)(i % P);
+    int lo = max(start, bounds[region].x), hi = min(start + rows, bounds[region].y);
+    double a = linear[i], b = logarithmic[i];
+    for (int s = lo; s < hi; ++s) {
+        // Public inference calibrates its float32 mean in place before the
+        // production analysis promotes values to float64 for site reductions.
+        float calibrated = values[(long long)(s-start)*P + pair] * calibration;
+        double value = (double)calibrated;
+        a += value;
+        b += log(value);
+    }
+    linear[i] = a;
+    logarithmic[i] = b;
+}
+
+__global__ void gamma_smc_region_moments_finalize_kernel(
+    int P, const int2* bounds, int regions, double* linear, double* logarithmic)
+{
+    long long i = (long long)blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= (long long)regions * P) return;
+    int region = (int)(i / P);
+    double n = bounds[region].y - bounds[region].x;
+    linear[i] /= n;
+    logarithmic[i] /= n;
+}
+
+void gamma_smc_region_moments_tile_gpu(
+    const float* values, int P, int start, int rows, const void* bounds,
+    int regions, float calibration, double* linear, double* logarithmic)
+{
+    int grid = (int)(((long long)regions * P + 255) / 256);
+    gamma_smc_region_moments_tile_kernel<<<grid, 256>>>(values, P, start, rows,
+        static_cast<const int2*>(bounds), regions, calibration, linear, logarithmic);
+}
+
+void gamma_smc_region_moments_finalize_gpu(
+    int P, const void* bounds, int regions, double* linear, double* logarithmic)
+{
+    int grid = (int)(((long long)regions * P + 255) / 256);
+    gamma_smc_region_moments_finalize_kernel<<<grid, 256>>>(P,
+        static_cast<const int2*>(bounds), regions, linear, logarithmic);
+}

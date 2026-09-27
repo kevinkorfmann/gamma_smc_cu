@@ -23,6 +23,42 @@ def genotype_data(ts):
     return G, pos
 
 
+class TestPhysicalTimeCalibration:
+    """Regression tests against the real CUDA kernels on either GPU host."""
+
+    @pytest.mark.parametrize("blockwise", [False, True])
+    def test_auto_times_and_posterior_are_Ne_invariant(self, genotype_data, blockwise):
+        G, pos = genotype_data
+        options = dict(pairs=[(0, 1), (2, 3)], mu=1.25e-8, rho=1e-8,
+                       mean_only=False, return_posterior=True)
+        decode = gamma_smc_cu.infer_blockwise if blockwise else gamma_smc_cu.infer
+        if blockwise:
+            options.update(core_block_sites=max(1, G.shape[1] // 2), flank_sites=256)
+        first = decode(G, pos, Ne=10000, **options)
+        second = decode(G, pos, Ne=40000, **options)
+        for key in ("mean", "lower", "upper", "posterior_alpha", "posterior_beta"):
+            np.testing.assert_allclose(first[key], second[key], rtol=2e-5, atol=1e-6)
+        expected_theta = (G[0::2] != G[1::2]).sum(axis=1).mean() / (pos[-1] + 1)
+        expected_scale = expected_theta / (2 * options["mu"])
+        assert first["metadata"]["generations_per_coalescent_unit"] == pytest.approx(expected_scale)
+        reconstructed = first["posterior_alpha"] / first["posterior_beta"] * expected_scale
+        np.testing.assert_allclose(first["mean"], reconstructed, rtol=1e-4, atol=1e-2)
+
+    @pytest.mark.parametrize("blockwise", [False, True])
+    def test_manual_rates_and_physical_mu_match_auto(self, genotype_data, blockwise):
+        G, pos = genotype_data
+        options = dict(pairs=[(0, 1), (2, 3)], mean_only=False, return_posterior=True)
+        decode = gamma_smc_cu.infer_blockwise if blockwise else gamma_smc_cu.infer
+        if blockwise:
+            options.update(core_block_sites=G.shape[1], flank_sites=0)
+        auto = decode(G, pos, mu=1.25e-8, rho=1e-8, Ne=10000, **options)
+        metadata = auto["metadata"]
+        manual = decode(G, pos, mu=metadata["kernel_mu"], rho=metadata["kernel_rho"],
+                        Ne=10000, auto_estimate_theta=False, physical_mu=1.25e-8, **options)
+        for key in ("mean", "lower", "upper", "posterior_alpha", "posterior_beta"):
+            np.testing.assert_allclose(auto[key], manual[key], rtol=2e-5, atol=1e-6)
+
+
 class TestInferTreeSequence:
     def test_returns_dict(self, ts):
         result = gamma_smc_cu.infer(ts)
@@ -291,8 +327,8 @@ class TestInferModes:
             assert np.all(result[key] > 0)
         # Posterior mean reconstructed from (alpha, beta) in scaled time
         # should match the returned `mean` array within float precision.
-        Ne = 10000.0
-        recon = (result["posterior_alpha"] / result["posterior_beta"]) * 2.0 * Ne
+        time_scale = result["metadata"]["generations_per_coalescent_unit"]
+        recon = (result["posterior_alpha"] / result["posterior_beta"]) * time_scale
         np.testing.assert_allclose(recon, result["mean"], rtol=1e-4, atol=1e-2)
 
     def test_with_posterior_and_ci(self, ts):
@@ -306,8 +342,8 @@ class TestInferModes:
         for key in expected:
             assert result[key].shape == (ts.num_sites, 2)
         # Reconstructed posterior mean still matches
-        Ne = 10000.0
-        recon = (result["posterior_alpha"] / result["posterior_beta"]) * 2.0 * Ne
+        time_scale = result["metadata"]["generations_per_coalescent_unit"]
+        recon = (result["posterior_alpha"] / result["posterior_beta"]) * time_scale
         np.testing.assert_allclose(recon, result["mean"], rtol=1e-4, atol=1e-2)
 
     def test_posterior_does_not_change_mean(self, ts):
@@ -629,8 +665,8 @@ class TestInferBlockwise:
         for key in ("mean", "posterior_alpha", "posterior_beta"):
             assert key in result
         assert "lower" not in result
-        Ne = 10000.0
-        recon = (result["posterior_alpha"] / result["posterior_beta"]) * 2.0 * Ne
+        time_scale = result["metadata"]["generations_per_coalescent_unit"]
+        recon = (result["posterior_alpha"] / result["posterior_beta"]) * time_scale
         np.testing.assert_allclose(recon, result["mean"], rtol=1e-4, atol=1e-2)
 
     def test_blockwise_with_posterior_and_ci(self, genotype_data):
@@ -644,8 +680,8 @@ class TestInferBlockwise:
         )
         for key in ("mean", "lower", "upper", "posterior_alpha", "posterior_beta"):
             assert key in result
-        Ne = 10000.0
-        recon = (result["posterior_alpha"] / result["posterior_beta"]) * 2.0 * Ne
+        time_scale = result["metadata"]["generations_per_coalescent_unit"]
+        recon = (result["posterior_alpha"] / result["posterior_beta"]) * time_scale
         np.testing.assert_allclose(recon, result["mean"], rtol=1e-4, atol=1e-2)
 
     def test_blockwise_posterior_matches_full_infer(self, genotype_data):
@@ -659,8 +695,8 @@ class TestInferBlockwise:
             return_posterior=True,
         )
         np.testing.assert_allclose(blk["mean"], full["mean"], rtol=1e-5, atol=1e-6)
-        Ne = 10000.0
-        recon = (blk["posterior_alpha"] / blk["posterior_beta"]) * 2.0 * Ne
+        time_scale = blk["metadata"]["generations_per_coalescent_unit"]
+        recon = (blk["posterior_alpha"] / blk["posterior_beta"]) * time_scale
         np.testing.assert_allclose(recon, full["mean"], rtol=1e-4, atol=1e-2)
 
     def test_blockwise_posterior_rejects_multi_stream(self, genotype_data):

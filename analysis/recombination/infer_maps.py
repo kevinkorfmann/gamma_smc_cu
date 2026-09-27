@@ -10,6 +10,8 @@ import hashlib
 import json
 import os
 import platform
+import random
+import shutil
 import subprocess
 import time
 import traceback
@@ -50,7 +52,7 @@ def weighted_intervals(left,right,values,starts,ends):
     return result,covered
 
 
-def extract(row,panel,root):
+def extract(row,panel,root,reuse_inputs=None,vcf_dir=None,require_local=False):
     from cyvcf2 import VCF
     path=root/'cache'/f'{row.gene}.npz'
     pops=row.populations.split(',')
@@ -58,6 +60,15 @@ def extract(row,panel,root):
     spec={'url':VCF_URL.format(chrom=row.chrom),'start0':int(row.extract_start0),'end0':int(row.extract_end0),'samples':wanted,
           'filters':'PASS/dot, biallelic ACGT SNP, diploid phased, complete within each population, segregating within population; duplicate positions removed'}
     fingerprint=hashlib.sha256(json.dumps(spec,sort_keys=True).encode()).hexdigest()
+    if not path.exists():
+        for item in (reuse_inputs or {}).get(row.gene, []):
+            source=Path(item['path'])
+            if sha(source)!=item['sha256']:raise ValueError(f'Changed reusable input: {source}')
+            with np.load(source) as z:
+                if str(z['fingerprint'])!=fingerprint:continue
+            # Input caches are immutable; all model predictions still run anew.
+            shutil.copyfile(source,path)
+            break
     if path.exists():
         z=np.load(path)
         if str(z['fingerprint'])!=fingerprint:raise ValueError(f'Input cache specification changed: {path}')
@@ -68,9 +79,12 @@ def extract(row,panel,root):
         sample_file=root/'cache'/f'{row.gene}.samples.txt'
         sample_file.write_text('\n'.join(wanted)+'\n')
         temporary=bcf.with_suffix('.partial.bcf')
+        source=vcf_dir/f'{row.chrom}.vcf.gz' if vcf_dir is not None else spec['url']
+        if require_local and (vcf_dir is None or not source.is_file()):
+            raise FileNotFoundError(f'Local chromosome VCF required: {source}')
         command=[os.environ.get('BCFTOOLS','bcftools'),'view','--no-version','-r',
                  f'{row.chrom}:{row.extract_start0+1}-{row.extract_end0}',
-                 '-S',str(sample_file),'-Ob','-o',str(temporary),spec['url']]
+                 '-S',str(sample_file),'-Ob','-o',str(temporary),str(source)]
         for attempt in range(3):
             try:
                 subprocess.run(command,check=True,timeout=900)
@@ -114,6 +128,19 @@ def extract(row,panel,root):
     return out
 
 
+def validate_completed(prefix, provenance, root):
+    path=Path(str(prefix)+'.json')
+    if not path.exists():return False
+    recorded=json.loads(path.read_text())
+    for key in ('script_sha256','manifest_sha256','panel_sha256','model_sha256','fastrho_version','seed'):
+        if recorded.get(key)!=provenance[key]:raise ValueError(f'Completed map has different {key}: {path}')
+    for name,digest in recorded['output_sha256'].items():
+        if sha(root/'maps'/name)!=digest:raise ValueError(f'Changed completed output: {name}')
+    cache=root/'cache'/f"{recorded['gene']}.npz"
+    if sha(cache)!=recorded['input_cache_sha256']:raise ValueError(f'Changed input cache: {cache}')
+    return True
+
+
 def save_prediction(pred,row,pop,samples,root,metadata):
     prefix=root/'maps'/f'{row.gene}.{pop}'
     left,right=pred['pos_left'],pred['pos_right']
@@ -150,27 +177,45 @@ def save_prediction(pred,row,pop,samples,root,metadata):
 def main():
     ap=argparse.ArgumentParser();ap.add_argument('--root',type=Path,required=True);ap.add_argument('--bundle',type=Path,required=True)
     ap.add_argument('--shard',type=int,default=0);ap.add_argument('--shards',type=int,default=1)
-    ap.add_argument('--genes',nargs='*');ap.add_argument('--split-check',action='store_true');a=ap.parse_args()
+    ap.add_argument('--genes',nargs='*');ap.add_argument('--split-check',action='store_true')
+    ap.add_argument('--reuse-inputs',type=Path);ap.add_argument('--vcf-dir',type=Path)
+    ap.add_argument('--source-manifest',type=Path)
+    ap.add_argument('--require-local-inputs',action='store_true');ap.add_argument('--seed',type=int,default=42)
+    a=ap.parse_args()
+    if a.shards<1 or not 0<=a.shard<a.shards:ap.error('shard must lie in [0,shards)')
+    if 'betty' in platform.node().lower() and not os.environ.get('SLURM_JOB_ID'):
+        raise RuntimeError('Run Betty GPU inference through Slurm')
     for d in ['maps','cache','logs']:(a.root/d).mkdir(parents=True,exist_ok=True)
     hashes={n:sha(a.bundle/n) for n in EXPECTED};assert hashes==EXPECTED,'Model bundle checksum mismatch'
     import torch,fastrho
+    if fastrho.__version__!='0.1.1':raise RuntimeError('This rerun pins fastRho 0.1.1')
+    random.seed(a.seed);np.random.seed(a.seed);torch.manual_seed(a.seed)
     torch.set_num_threads(6)
     model,cfg,stats=fastrho.load_model(a.bundle/'model.ckpt',a.bundle/'feat_stats.npz',device='cuda:0')
     targets=pd.read_csv(a.root/'inputs/targets.tsv',sep='\t')
     if a.genes:targets=targets[targets.gene.isin(a.genes)]
     targets=targets.iloc[a.shard::a.shards]
     panel=pd.read_csv(a.root/'inputs/phase3.panel',sep=r'\s+',usecols=[0,1,2,3])
+    reuse_inputs=json.loads(a.reuse_inputs.read_text()) if a.reuse_inputs else {}
+    if a.source_manifest:
+        for name,record in json.loads(a.source_manifest.read_text()).items():
+            info=Path(name).stat()
+            if info.st_size!=record['bytes'] or info.st_mtime_ns!=record['mtime_ns']:
+                raise ValueError(f'VCF changed since checksum preparation: {name}')
     provenance=dict(fastrho_version=fastrho.__version__,torch_version=torch.__version__,python=platform.python_version(),
                     host=platform.node(),gpu=torch.cuda.get_device_name(0),model_id='domain-randomized-v1',
                     model_sha256=hashes,script_sha256=sha(__file__),manifest_sha256=sha(a.root/'inputs/targets.tsv'),
-                    panel_sha256=sha(a.root/'inputs/phase3.panel'),input_mode='phased')
+                    panel_sha256=sha(a.root/'inputs/phase3.panel'),input_mode='phased',seed=a.seed,
+                    slurm_job_id=os.environ.get('SLURM_JOB_ID'),
+                    local_vcf_dir=str(a.vcf_dir) if a.vcf_dir else None,
+                    reuse_manifest_sha256=sha(a.reuse_inputs) if a.reuse_inputs else None)
+    provenance['source_manifest_sha256']=sha(a.source_manifest) if a.source_manifest else None
     (a.root/'logs'/f'environment.{a.shard}.json').write_text(json.dumps(provenance,indent=2)+'\n')
     failures=[]
     for row in targets.itertuples(index=False):
         try:
             populations=row.populations.split(',')
-            if all((a.root/'maps'/f'{row.gene}.{p}.json').exists() for p in populations) and not a.split_check:continue
-            z=extract(row,panel,a.root)
+            z=extract(row,panel,a.root,reuse_inputs,a.vcf_dir,a.require_local_inputs)
             for pop in populations:
                 jobs=[(pop,z[f'{pop}_gm'],z[f'{pop}_samples'])]
                 if a.split_check and row.gene in ['GRK2','TREM2']:
@@ -180,13 +225,17 @@ def main():
                         hidx=np.column_stack([2*idx,2*idx+1]).ravel()
                         jobs.append((f'{pop}_half{half+1}',z[f'{pop}_gm'][hidx],z[f'{pop}_samples'][idx]))
                 for label,gm,samples in jobs:
-                    if (a.root/'maps'/f'{row.gene}.{label}.json').exists():continue
+                    if validate_completed(a.root/'maps'/f'{row.gene}.{label}',provenance,a.root):continue
                     t=time.time();pos=z[f'{pop}_pos']-row.extract_start0
+                    keep=gm.min(axis=0)!=gm.max(axis=0)
+                    removed_fixed=int((~keep).sum());gm=gm[:,keep];pos=pos[keep]
+                    if len(pos)<100:raise ValueError(f'{row.gene}/{label}: fewer than 100 segregating SNPs')
                     print(f'INFER {row.gene}/{label} {gm.shape}',flush=True)
                     pred=fastrho.predict_map_from_genotype_matrix(gm,pos,model,cfg,stats,mutation_rate=MU,Ne=NE,device='cuda:0',input_mode='phased')
                     pred['pos_left']+=row.extract_start0;pred['pos_right']+=row.extract_start0
                     metadata={**provenance,'seconds':time.time()-t,'input_cache_sha256':sha(a.root/'cache'/f'{row.gene}.npz'),
-                              'input_qc':json.loads(str(z['metadata'])),'split_check':label!=pop}
+                              'input_qc':json.loads(str(z['metadata'])),'split_check':label!=pop,
+                              'monomorphic_sites_removed_for_this_panel':removed_fixed}
                     save_prediction(pred,row,label,samples,a.root,metadata)
                     print(f'DONE {row.gene}/{label} {time.time()-t:.1f}s',flush=True)
         except Exception:

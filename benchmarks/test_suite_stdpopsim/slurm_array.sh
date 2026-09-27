@@ -4,30 +4,20 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
-#SBATCH --time=0:30:00
-#SBATCH --requeue
-#SBATCH --output=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/benchmarks/test_suite_stdpopsim/logs/config_%a_%j.log
-# Submit as (from repo root):
-#   N=$(python -c 'import json; print(len(json.load(open("benchmarks/test_suite_stdpopsim/configs.json"))))')
-#   sbatch --array=0-$((N-1))%8 benchmarks/test_suite_stdpopsim/slurm_array.sh
-
+#SBATCH --time=02:00:00
+#SBATCH --output=stdpopsim_%A_%a.log
+# From the immutable software checkout root, set host-appropriate resource
+# overrides and a NEW output root, then submit:
+# sbatch --array=0-8,10-14 this-script --results-dir /path/to/new/run
+# Use BENCH_PYTHON/BENCH_ENV_PREFIX/GAMMA_SMC_BIN to select installed binaries.
 set -euo pipefail
-
-BASE=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/benchmarks/test_suite_stdpopsim
-PIXI_ENV=/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu/.pixi/envs/default
-PYTHON=${PIXI_ENV}/bin/python3.12
-
-# bgzip, tabix, zstd live inside the pixi env; make sure they're on PATH
-# so run_one.py's subprocess calls to the gamma_smc pipeline succeed.
-export PATH=${PIXI_ENV}/bin:${PATH}
-export LD_LIBRARY_PATH=${PIXI_ENV}/lib:${LD_LIBRARY_PATH:-}
-
+BENCH_REPO_ROOT=${BENCH_REPO_ROOT:-${SLURM_SUBMIT_DIR:-$(pwd)}}
+BENCH_ENV_PREFIX=${BENCH_ENV_PREFIX:-${BENCH_REPO_ROOT}/.pixi/envs/default}
+BENCH_PYTHON=${BENCH_PYTHON:-${BENCH_ENV_PREFIX}/bin/python}
+export PATH="${BENCH_ENV_PREFIX}/bin:${PATH}"
+export LD_LIBRARY_PATH="${BENCH_ENV_PREFIX}/lib:${LD_LIBRARY_PATH:-}"
 export MPLBACKEND=Agg
-export CUDA_VISIBLE_DEVICES=0
-export STDPOPSIM_CACHE_DIR=/vast/projects/smathi/cohort/kkor/stdpopsim_cache
-
-mkdir -p "${BASE}/results" "${BASE}/logs" "${STDPOPSIM_CACHE_DIR}"
-
-cd "${BASE}"
-echo "host=$(hostname)  idx=${SLURM_ARRAY_TASK_ID}  job=${SLURM_JOB_ID}"
-"${PYTHON}" "${BASE}/run_one.py" --config-idx "${SLURM_ARRAY_TASK_ID}" "$@"
+cd "${BENCH_REPO_ROOT}"
+# Preserve scheduler-assigned CUDA_VISIBLE_DEVICES; do not change device ownership.
+"${BENCH_PYTHON}" benchmarks/test_suite_stdpopsim/run_one.py \
+  --config-idx "${SLURM_ARRAY_TASK_ID:?submit as an array}" "$@"

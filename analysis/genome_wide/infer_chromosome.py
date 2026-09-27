@@ -17,12 +17,14 @@ The NPZ contains, per gene:
     log_sum      : sum of per-pair log TMRCA   (geom mean  = exp(log_sum/count))
     log_sq_sum   : sum of (per-pair log TMRCA)^2  (-> log variance)
     min_lin      : minimum per-pair linear TMRCA
-    min_log      : minimum per-pair log TMRCA (== log(min_lin))
+    min_log      : minimum across pairs of mean log TMRCA across sites
     histogram    : (n_genes, n_bins) counts of per-pair log-TMRCA
     bin_edges    : (n_bins+1,) natural-log edges spanning ln(10)..ln(1e6)
 
-With these saved, any order statistic / quantile / threshold-fraction can
-be recomputed offline without rerunning inference.
+Histograms give approximate quantiles within finite bins, with underflow and
+overflow retained separately. Exact counts below 1000 generations are saved for
+per-pair geometric and arithmetic means across sites; arbitrary exact quantiles
+or thresholds cannot be recovered from the binned summaries.
 
 Usage:
     python infer_chromosome.py --chr 21
@@ -37,11 +39,12 @@ import os
 import time
 
 import numpy as np
+from pathlib import Path
+from lead_summaries import load_leads, lead_arrays
+from rerun_support import add_arguments, check_arguments, fingerprint, calibrate, run_identity, completed_or_reserve, finish, load_input, validate_posterior_means, per_pair_moments, pair_distribution_counts
 
-BASE = "/vast/projects/smathi/cohort/kkor/tmrca.cu/gamma_smc_cu"
-DATA = os.path.join(BASE, "analysis/genome_wide")
-CACHE_DIR = os.path.join(DATA, "cache")
-RESULTS_DIR = os.path.join(DATA, "results")
+CACHE_DIR = None
+RESULTS_DIR = None
 
 MU = 1.25e-8
 RHO = 1e-8
@@ -56,9 +59,6 @@ HIST_NBINS = 50
 HIST_LOG_LO = np.log(10.0)
 HIST_LOG_HI = np.log(1_000_000.0)
 HIST_EDGES = np.linspace(HIST_LOG_LO, HIST_LOG_HI, HIST_NBINS + 1)
-
-# Floor for log-safety (avoids log(0) on any numerical zero).
-TMRCA_FLOOR = 1.0
 
 ALL_POPULATIONS = [
     "ACB", "ASW", "BEB", "CDX", "CEU", "CHB", "CHS", "CLM",
@@ -105,17 +105,20 @@ def make_pairs(n_haps):
 def compute_gene_site_indices(positions, genes):
     """For each gene, return the array of site indices falling inside it.
 
-    Returned as a list of np.int64 arrays so the chunk loop can do a
-    single fancy-index per gene per chunk, avoiding recomputing masks.
+    Sorted coordinates permit two binary searches per interval, avoiding a
+    chromosome-sized boolean scan for every gene and lead window.
     """
     result = []
     for _, _, gstart, gend in genes:
-        mask = (positions >= gstart) & (positions <= gend)
-        result.append(np.where(mask)[0].astype(np.int64))
+        if gstart > gend:
+            raise ValueError('Interval start is greater than end')
+        left = np.searchsorted(positions, gstart, side='left')
+        right = np.searchsorted(positions, gend, side='right')
+        result.append(np.arange(left, right, dtype=np.int64))
     return result
 
 
-def run_chromosome(chr_num, populations):
+def run_chromosome(chr_num, populations, args):
     import gamma_smc_cu
 
     print(f"=== Chromosome {chr_num} ===", flush=True)
@@ -123,22 +126,37 @@ def run_chromosome(chr_num, populations):
 
     npz_path = os.path.join(CACHE_DIR, "parsed", f"chr{chr_num}.npz")
     print(f"Loading {npz_path}...", flush=True)
-    data = np.load(npz_path, allow_pickle=True)
+    data, cache_identity = load_input(CACHE_DIR, chr_num)
     G = data["G"]
     positions = data["positions"]
     sample_ids = data["sample_ids"]
     print(f"  G: {G.shape}, positions: {positions.shape}, samples: {len(sample_ids)}",
           flush=True)
 
-    pop_map = load_samples(os.path.join(DATA, "data", "samples.txt"))
+    pop_map = load_samples(args.samples)
     genes = load_genes(chr_num)
     n_genes = len(genes)
+    lead_file = getattr(args, "lead_variants", None)
+    lead_half_bp = getattr(args, "lead_half_bp", 25000)
+    leads = load_leads(lead_file, chr_num)
+    regions = genes + [(row["rsid"], row["rsid"], max(1,row["center_pos"]-lead_half_bp),
+                       row["center_pos"]+lead_half_bp) for row in leads]
+    n_regions = len(regions)
+    print(f"  {len(leads)} lead windows share the full-chromosome posterior", flush=True)
     print(f"  {n_genes} genes", flush=True)
 
     out_dir = os.path.join(RESULTS_DIR, f"chr{chr_num}")
     os.makedirs(out_dir, exist_ok=True)
 
+    inputs = {'cache': cache_identity, 'samples': fingerprint(args.samples),
+              'genes': fingerprint(Path(CACHE_DIR)/'genes'/f'chr{chr_num}_genes.tsv')}
+    if lead_file:
+        inputs["lead_variants"] = fingerprint(lead_file)
     for pop in populations:
+        identity = run_identity(args, inputs, {'chromosome': chr_num, 'population': pop})
+        if completed_or_reserve(out_dir, pop, identity, args.resume):
+            print(f"  {pop}: matching complete outputs, skipped", flush=True)
+            continue
         pop_t0 = time.time()
         hap_idx = get_population_haplotype_indices(sample_ids, pop_map, pop)
         n_pop = len(hap_idx)
@@ -147,6 +165,8 @@ def run_chromosome(chr_num, populations):
             continue
 
         G_pop = np.ascontiguousarray(G[np.array(hap_idx), :])
+        calibration = calibrate(G_pop, positions, args.mu, args.rho, args.sequence_length)
+        decoder_metadata = None
 
         all_pairs = make_pairs(n_pop)
         n_pairs_total = len(all_pairs)
@@ -155,17 +175,40 @@ def run_chromosome(chr_num, populations):
               f"{n_chunks} chunks of {PAIR_CHUNK}", flush=True)
 
         # Per-gene accumulators
-        count       = np.zeros(n_genes, dtype=np.int64)
-        lin_sum     = np.zeros(n_genes, dtype=np.float64)
-        log_sum     = np.zeros(n_genes, dtype=np.float64)
-        log_sq_sum  = np.zeros(n_genes, dtype=np.float64)
-        min_lin     = np.full(n_genes, np.inf, dtype=np.float64)
-        min_log     = np.full(n_genes, np.inf, dtype=np.float64)
-        histogram   = np.zeros((n_genes, HIST_NBINS), dtype=np.int64)
-        n_sites_per_gene = np.zeros(n_genes, dtype=np.int32)
+        count       = np.zeros(n_regions, dtype=np.int64)
+        lin_sum     = np.zeros(n_regions, dtype=np.float64)
+        log_sum     = np.zeros(n_regions, dtype=np.float64)
+        log_sq_sum  = np.zeros(n_regions, dtype=np.float64)
+        min_lin     = np.full(n_regions, np.inf, dtype=np.float64)
+        min_log     = np.full(n_regions, np.inf, dtype=np.float64)
+        histogram   = np.zeros((n_regions, HIST_NBINS), dtype=np.int64)
+        histogram_underflow = np.zeros(n_regions, dtype=np.int64)
+        histogram_overflow = np.zeros(n_regions, dtype=np.int64)
+        n_geom_lt_1000 = np.zeros(n_regions, dtype=np.int64)
+        n_arith_lt_1000 = np.zeros(n_regions, dtype=np.int64)
+        n_sites_per_gene = np.zeros(n_regions, dtype=np.int32)
 
         # Will be filled on first chunk
         gene_site_idx = None
+        retained_positions = None
+
+        region_context = None
+        region_rows = {}
+        if getattr(args, 'gpu_region_moments', False):
+            if args.flank_sites != 0 or args.core_block_sites < G_pop.shape[1]:
+                raise ValueError('--gpu-region-moments requires full-chromosome core sites and zero flanks')
+            region_context = gamma_smc_cu.RegionMomentContext(
+                G_pop, positions, mu=args.mu, rho=args.rho,
+                Ne=calibration['calibrated_Ne'], physical_mu=args.mu,
+                auto_estimate_theta=False)
+            retained_positions = region_context.positions.copy()
+            gene_site_idx = compute_gene_site_indices(retained_positions, regions)
+            region_bounds = []
+            for gi, idxs in enumerate(gene_site_idx):
+                n_sites_per_gene[gi] = len(idxs)
+                if len(idxs) >= 2:
+                    region_rows[gi] = len(region_bounds)
+                    region_bounds.append((int(idxs[0]), int(idxs[-1])+1))
 
         for ci in range(n_chunks):
             chunk_start = ci * PAIR_CHUNK
@@ -173,28 +216,49 @@ def run_chromosome(chr_num, populations):
             chunk_pairs = all_pairs[chunk_start:chunk_end]
             n_chunk_pairs = len(chunk_pairs)
 
-            result = gamma_smc_cu.infer_blockwise(
-                G_pop,
-                positions,
-                mu=MU,
-                rho=RHO,
-                Ne=NE,
-                pairs=chunk_pairs,
-                mean_only=True,
-                auto_estimate_theta=True,
-            )
+            if region_context is not None:
+                result = region_context.run(chunk_pairs, region_bounds,
+                    tile_sites=args.checkpoint_sites)
+                mean = None
+            else:
+                result = gamma_smc_cu.infer_blockwise(
+                    G_pop,
+                    positions,
+                    mu=args.mu,
+                    rho=args.rho,
+                    Ne=calibration["calibrated_Ne"],
+                    physical_mu=args.mu,
+                    core_block_sites=args.core_block_sites,
+                    flank_sites=args.flank_sites,
+                    pairs=chunk_pairs,
+                    mean_only=True,
+                    auto_estimate_theta=False,
+                )
 
-            mean = result["mean"]          # (n_filtered_sites, n_chunk_pairs)
+                mean = result['mean']
+            decoder_metadata = result.get('metadata', {})
             out_positions = result["positions"]
 
-            # Guard against numerical zero or negative values in mean
-            mean_safe = np.maximum(mean, TMRCA_FLOOR)
-            log_mean = np.log(mean_safe)   # (n_filtered_sites, n_chunk_pairs)
+            if mean is not None:
+                validate_posterior_means(mean, len(out_positions), n_chunk_pairs)
+            else:
+                values = result['region_mean']
+                logs = result['region_mean_log']
+                if (values.shape != (len(region_bounds), n_chunk_pairs)
+                        or logs.shape != values.shape or not np.isfinite(values).all()
+                        or np.any(values <= 0) or not np.isfinite(logs).all()):
+                    raise ValueError('Invalid GPU region moments')
+            np.testing.assert_array_equal(result["pairs"], chunk_pairs)
+            if decoder_metadata.get("time_units") != "generations":
+                raise ValueError("Decoder must return physically calibrated generation units")
 
             if gene_site_idx is None:
-                gene_site_idx = compute_gene_site_indices(out_positions, genes)
+                retained_positions = np.asarray(out_positions).copy()
+                gene_site_idx = compute_gene_site_indices(out_positions, regions)
                 for gi, idxs in enumerate(gene_site_idx):
                     n_sites_per_gene[gi] = len(idxs)
+            else:
+                np.testing.assert_array_equal(out_positions, retained_positions)
 
             for gi, idxs in enumerate(gene_site_idx):
                 n_gene_sites = idxs.size
@@ -204,15 +268,17 @@ def run_chromosome(chr_num, populations):
                 # Per-pair values for this gene (one number per pair):
                 #   linear: arithmetic mean TMRCA across sites
                 #   log:    arithmetic mean of log(TMRCA) across sites
-                gene_lin = mean_safe[idxs, :]       # (n_gene_sites, n_chunk_pairs)
-                gene_log = log_mean[idxs, :]
-                per_pair_lin = gene_lin.mean(axis=0)
-                per_pair_log = gene_log.mean(axis=0)
+                if region_context is None:
+                    per_pair_lin, per_pair_log = per_pair_moments(mean, idxs)
+                else:
+                    row = region_rows[gi]
+                    per_pair_lin = result['region_mean'][row]
+                    per_pair_log = result['region_mean_log'][row]
 
                 count[gi]      += n_chunk_pairs
-                lin_sum[gi]    += per_pair_lin.sum()
-                log_sum[gi]    += per_pair_log.sum()
-                log_sq_sum[gi] += (per_pair_log * per_pair_log).sum()
+                lin_sum[gi]    += per_pair_lin.sum(dtype=np.float64)
+                log_sum[gi]    += per_pair_log.sum(dtype=np.float64)
+                log_sq_sum[gi] += (per_pair_log * per_pair_log).sum(dtype=np.float64)
 
                 chunk_min_lin = per_pair_lin.min()
                 chunk_min_log = per_pair_log.min()
@@ -221,18 +287,21 @@ def run_chromosome(chr_num, populations):
                 if chunk_min_log < min_log[gi]:
                     min_log[gi] = chunk_min_log
 
-                # Histogram of per-pair log TMRCA
-                bins = np.digitize(per_pair_log, HIST_EDGES) - 1
-                np.clip(bins, 0, HIST_NBINS - 1, out=bins)
-                np.add.at(histogram[gi], bins, 1)
+                distribution = pair_distribution_counts(per_pair_lin, per_pair_log, HIST_EDGES)
+                histogram[gi] += distribution["histogram"]
+                histogram_underflow[gi] += distribution["histogram_underflow"]
+                histogram_overflow[gi] += distribution["histogram_overflow"]
+                n_geom_lt_1000[gi] += distribution["n_geom_lt_1000"]
+                n_arith_lt_1000[gi] += distribution["n_arith_lt_1000"]
 
-            del result, mean, mean_safe, log_mean
+            del result, mean
 
             if (ci + 1) % 5 == 0 or ci == n_chunks - 1:
                 elapsed = time.time() - pop_t0
                 print(f"    chunk {ci+1}/{n_chunks} done ({elapsed:.1f}s)", flush=True)
 
-        # Sanitize: genes with zero contributions get NaN in the CSV
+        np.testing.assert_array_equal(histogram.sum(axis=1) + histogram_underflow + histogram_overflow, count)
+        # Genes with fewer than two retained markers have no contributions.
         with np.errstate(divide="ignore", invalid="ignore"):
             geom_mean = np.where(count > 0, np.exp(log_sum / count), np.nan)
             arith_mean = np.where(count > 0, lin_sum / count, np.nan)
@@ -244,15 +313,18 @@ def run_chromosome(chr_num, populations):
             writer.writerow(
                 ["gene_id", "gene_name", "start", "end",
                  "geom_mean_tmrca", "arith_mean_tmrca",
-                 "min_tmrca", "n_pairs", "n_sites"]
+                 "min_tmrca", "n_pairs", "n_sites",
+                 "frac_pairs_geom_lt_1000", "frac_pairs_arith_lt_1000"]
             )
             for gi, (gene_id, gene_name, gstart, gend) in enumerate(genes):
-                gm = f"{geom_mean[gi]:.2f}" if np.isfinite(geom_mean[gi]) else ""
-                am = f"{arith_mean[gi]:.2f}" if np.isfinite(arith_mean[gi]) else ""
-                mn = f"{min_lin[gi]:.2f}" if np.isfinite(min_lin[gi]) else ""
+                gm = f"{geom_mean[gi]:.17g}" if np.isfinite(geom_mean[gi]) else ""
+                am = f"{arith_mean[gi]:.17g}" if np.isfinite(arith_mean[gi]) else ""
+                mn = f"{min_lin[gi]:.17g}" if np.isfinite(min_lin[gi]) else ""
                 writer.writerow(
                     [gene_id, gene_name, gstart, gend, gm, am, mn,
-                     int(count[gi]), int(n_sites_per_gene[gi])]
+                     int(count[gi]), int(n_sites_per_gene[gi]),
+                     f"{n_geom_lt_1000[gi]/count[gi]:.17g}" if count[gi] else "",
+                     f"{n_arith_lt_1000[gi]/count[gi]:.17g}" if count[gi] else ""]
                 )
 
         # Write NPZ with all raw accumulators
@@ -261,25 +333,37 @@ def run_chromosome(chr_num, populations):
         gene_names = np.array([g[1] for g in genes])
         gene_starts = np.array([g[2] for g in genes], dtype=np.int64)
         gene_ends = np.array([g[3] for g in genes], dtype=np.int64)
+        retained_leads = lead_arrays(leads, lead_half_bp, {
+            "count":count, "lin_sum":lin_sum, "log_sum":log_sum, "log_sq_sum":log_sq_sum,
+            "min_lin":min_lin, "min_log":min_log, "histogram":histogram,
+            "histogram_underflow":histogram_underflow, "histogram_overflow":histogram_overflow,
+            "n_geom_lt_1000":n_geom_lt_1000, "n_arith_lt_1000":n_arith_lt_1000,
+            "n_sites":n_sites_per_gene}, n_genes, bool(lead_file))
         np.savez_compressed(
             npz_out,
             gene_id=gene_ids,
             gene_name=gene_names,
             start=gene_starts,
             end=gene_ends,
-            count=count,
-            lin_sum=lin_sum,
-            log_sum=log_sum,
-            log_sq_sum=log_sq_sum,
-            min_lin=min_lin,
-            min_log=min_log,
-            histogram=histogram,
+            count=count[:n_genes],
+            lin_sum=lin_sum[:n_genes],
+            log_sum=log_sum[:n_genes],
+            log_sq_sum=log_sq_sum[:n_genes],
+            min_lin=min_lin[:n_genes],
+            min_log=min_log[:n_genes],
+            histogram=histogram[:n_genes], histogram_underflow=histogram_underflow[:n_genes],
+            histogram_overflow=histogram_overflow[:n_genes],
+            n_geom_lt_1000=n_geom_lt_1000[:n_genes], n_arith_lt_1000=n_arith_lt_1000[:n_genes],
+            threshold_generations=np.float64(1000),
+            histogram_tail_policy=np.array("separate underflow/overflow; no clipping"),
             bin_edges=HIST_EDGES,
-            n_sites_per_gene=n_sites_per_gene,
+            n_sites_per_gene=n_sites_per_gene[:n_genes],
             n_haplotypes=np.int64(n_pop),
             n_pairs_total=np.int64(n_pairs_total),
+            **retained_leads,
         )
 
+        finish(out_dir, pop, identity, calibration, decoder_metadata)
         pop_dt = time.time() - pop_t0
         print(f"    {pop} done in {pop_dt:.1f}s -> {csv_path}", flush=True)
 
@@ -296,10 +380,23 @@ def main():
         default=None,
         help="Populations to run (default: all 26)",
     )
+    add_arguments(parser)
+    parser.add_argument("--lead-variants", help="GRCh38 one-based lead TSV; summarize windows from the same full-chromosome posterior")
+    parser.add_argument("--lead-half-bp", type=int, default=25000)
+    parser.add_argument('--gpu-region-moments', action='store_true',
+                        help='Compute full-context per-pair gene/window moments on GPU; avoid dense posterior transfers')
+    parser.add_argument('--checkpoint-sites', type=int, default=4096)
     args = parser.parse_args()
+    if args.checkpoint_sites < 1:
+        raise ValueError('Checkpoint site count must be positive')
+    check_arguments(args)
+    if args.lead_half_bp <= 0:
+        raise ValueError("Lead window half width must be positive")
+    global CACHE_DIR, RESULTS_DIR, PAIR_CHUNK
+    CACHE_DIR, RESULTS_DIR, PAIR_CHUNK = args.cache_dir, args.output_dir, args.pair_chunk
 
     pops = args.populations if args.populations else ALL_POPULATIONS
-    run_chromosome(args.chr, pops)
+    run_chromosome(args.chr, pops, args)
 
 
 if __name__ == "__main__":
