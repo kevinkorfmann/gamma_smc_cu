@@ -17,7 +17,21 @@ or [download the full atlas and related gene lists](findings.md#download-gene-li
 The atlas contains **19,119 gene rows across 26 populations** from the
 high-coverage 1000 Genomes panel.
 
-## Latest update · 27 September 2026
+## Reproduce the analyses
+
+The [reproduction guide](reproducing.md) describes the corrected workflow,
+source versions, data downloads and validation requirements. It links the
+separate historical recovery package and the later analysis/benchmark scripts.
+
+## Latest update · 10 November 2026
+
+- Analysis source now includes rank diagnostics, detection/localisation,
+  selection/BGS follow-ups and exploratory profile matching.
+- The reproduction guide replaces historical launch instructions with the
+  corrected full-chromosome workflow and verified recovery entry points.
+- The findings release remains **2026-09-27**; this update does not change its tables.
+
+## Findings release · 27 September 2026
 
 - Corrected gene atlas and candidate list, with versioned downloads.
 - Full-context pair batching and direct export of dense coalescence estimates.
@@ -36,5 +50,6 @@ usage
 findings
 python-api
 methods
+reproducing
 releases
 ```

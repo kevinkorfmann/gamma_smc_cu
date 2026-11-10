@@ -1,5 +1,17 @@
 # Maintaining releases
 
+## 2026-11-10 · Analysis source and recovery documentation
+
+Added previously local rank-diagnostic, detection/localisation, exploratory
+profile-matching and selection/BGS follow-up scripts. The
+[reproduction guide](reproducing.md) now identifies the corrected full-chromosome
+protocol, current collector, final CLUES correction chain and the separate
+private recovery repository. Its source archives and run-directory reconstruction
+were verified from a fresh GitHub clone. Full scientific reruns and fresh CUDA
+environment builds were not performed as part of the recovery packaging.
+
+The September findings tables and their immutable release hashes are unchanged.
+
 ## 2026-09-27
 
 The first release on this rebuilt documentation site publishes the corrected

@@ -6,7 +6,7 @@ interval summaries and bounded-memory dense export.
 
 [Documentation](https://gamma-smc-cu.readthedocs.io/en/latest/) ·
 [Installation](docs/install.md) · [Usage](docs/usage.md) ·
-[Latest findings](docs/findings.md)
+[Latest findings](docs/findings.md) · [Reproducing the analyses](REPRODUCING.md)
 
 The **2026-09-27** findings release contains **19,119 gene rows across 26
 populations** and **143 candidate loci**. [Browse the searchable findings list](https://gamma-smc-cu.readthedocs.io/en/latest/findings.html)
@@ -41,3 +41,17 @@ For large outputs use `iter_infer_batches`, `export_dense`, or
 
 The implementation builds on [Gamma-SMC](https://github.com/regevs/gamma_smc).
 Cite the method and the specific software/data version used in an analysis.
+
+## Reproduce and extend the analyses
+
+[REPRODUCING.md](REPRODUCING.md) maps the corrected full-chromosome workflow,
+input versions, validation requirements and analysis scripts. It also indexes
+the rank diagnostics, detection/localisation benchmark, selection/BGS experiments
+and exploratory profile-matching workflows now included in this repository.
+
+The complete historical recovery package is maintained separately in the private
+[analysis-reproduceability repository](https://github.com/kevinkorfmann/analysis-reproduceability).
+It preserves frozen source versions, task definitions, environment recipes,
+checksum-pinned downloads and final manuscript correction scripts without bulk
+datasets. Access to that package is required for the full historical workflow;
+the public inference software can be installed and used independently.

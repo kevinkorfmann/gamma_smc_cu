@@ -83,6 +83,27 @@ before installing or running. Keep sources under `study/` in a run root with
 `run_python.sh` supplies a bounded execution environment for that layout.
 Each CLI documents required inputs with `--help`. Outputs must use new paths.
 
+### Later follow-up and plotting scripts
+
+The following source files extend the separate experiments above. They consume
+their own frozen manifests and completed outputs; they do not remove the
+technical-smoke gate on the original `simulate.py` workflow.
+
+| Scripts | Purpose |
+| --- | --- |
+| `run_stronger_bgs_followup.py`, `summarize_stronger_bgs_extension.py`, `audit_stronger_bgs_calibration.py` | Gate independent confirmation or paired 10Ne-to-20Ne burn-in extensions using the recorded calibration decisions. |
+| `infer_stronger_bgs_spatial.py`, `plot_stronger_bgs_calibration.py` | Spatial Gamma inference and calibration displays for the stronger-BGS experiment. |
+| `plot_selection_spatial_bias.py`, `plot_selection_spatial_calibrated.py` | Inspect spatial bias and physical-time calibration in retained simulation outputs. |
+| `plot_selection_spatial_presentation_v4.py`, `render_spatial_presentation_v4.py` | Render the preserved calibration/presentation layout with source and output hashes. |
+| `infer_trem2_empirical_context.py`, `plot_trem2_empirical_comparison.py` | Extend the empirical TREM2 comparison window while retaining the original 20 pairs and chromosome-wide calibration. |
+
+Some wrappers expect the original run-root layout or a specific frozen API
+hash. Restore the corresponding configuration from the analysis recovery package
+and adapt copies of the wrappers for a new machine. Do not replace a frozen
+input or weaken its identity checks to make a newer output fit. Running these
+scripts requires regenerated input data; source publication alone is not a new
+validation or a change to the dated public findings tables.
+
 Run the coordinate/truth tests with:
 
 ```bash
