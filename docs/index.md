@@ -11,9 +11,11 @@ selected haplotype pairs, and gene or interval summaries.
 
 ## Explore the findings
 
-[Browse the 143-locus findings list](findings.md) or download the full atlas
-of **19,119 gene rows across 26 populations** from the high-coverage
-1000 Genomes panel.
+[Browse the 143-locus findings list](findings.md),
+[download the **143-locus CSV**](https://raw.githubusercontent.com/kevinkorfmann/gamma_smc_cu/findings-2026-09-27/findings_database/releases/2026-09-27/stage5_loci.csv),
+or [download the full atlas and related gene lists](findings.md#download-gene-lists).
+The atlas contains **19,119 gene rows across 26 populations** from the
+high-coverage 1000 Genomes panel.
 
 ## Latest update · 27 September 2026
 

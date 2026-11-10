@@ -10,7 +10,10 @@ interval summaries and bounded-memory dense export.
 
 The **2026-09-27** findings release contains **19,119 gene rows across 26
 populations** and **143 candidate loci**. [Browse the searchable findings list](https://gamma-smc-cu.readthedocs.io/en/latest/findings.html)
-or [download the versioned tables](findings_database/releases/2026-09-27/README.md).
+or [download the **143-locus CSV**](https://raw.githubusercontent.com/kevinkorfmann/gamma_smc_cu/findings-2026-09-27/findings_database/releases/2026-09-27/stage5_loci.csv).
+The list includes each representative gene, all member genes, GRCh38 intervals
+and focal populations. [Download the full 19,119-gene atlas](https://raw.githubusercontent.com/kevinkorfmann/gamma_smc_cu/findings-2026-09-27/findings_database/releases/2026-09-27/genome_wide_ranks.csv.gz)
+or see [all versioned tables and column definitions](findings_database/releases/2026-09-27/README.md).
 
 Start with the [VCF walkthrough](docs/usage.md) to prepare a chromosome, choose
 haplotype pairs, run inference and read the results. The [Python API guide](docs/python-api.md)

@@ -10,6 +10,22 @@ high-coverage 1000 Genomes panel: 3,202 individuals, 19,119 gene rows, and
 [Download the full gene atlas](https://raw.githubusercontent.com/kevinkorfmann/gamma_smc_cu/findings-2026-09-27/findings_database/releases/2026-09-27/genome_wide_ranks.csv.gz) ·
 [All tables and data dictionary](https://github.com/kevinkorfmann/gamma_smc_cu/tree/findings-2026-09-27/findings_database/releases/2026-09-27)
 
+## Download gene lists
+
+| List | Contents | Download |
+| --- | --- | --- |
+| **143 candidate loci** | Representative genes, all member genes, GRCh38 intervals and focal populations; corresponds to Supplementary Table S2. | [CSV](https://raw.githubusercontent.com/kevinkorfmann/gamma_smc_cu/findings-2026-09-27/findings_database/releases/2026-09-27/stage5_loci.csv) |
+| 540 candidate genes | Genes retained before grouping nearby genes into the 143 loci. | [CSV](https://raw.githubusercontent.com/kevinkorfmann/gamma_smc_cu/findings-2026-09-27/findings_database/releases/2026-09-27/stage4_genes.csv) |
+| Cluster membership | Maps candidate genes to their reporting locus; complements Supplementary Table S3. | [CSV](https://raw.githubusercontent.com/kevinkorfmann/gamma_smc_cu/findings-2026-09-27/findings_database/releases/2026-09-27/cluster_members.csv) |
+| Full gene atlas | 19,119 gene rows with TMRCA values and ranks for all 26 populations. | [CSV.gz](https://raw.githubusercontent.com/kevinkorfmann/gamma_smc_cu/findings-2026-09-27/findings_database/releases/2026-09-27/genome_wide_ranks.csv.gz) |
+
+These downloads use the fixed `findings-2026-09-27` release. Coordinates are
+GRCh38; ranks in the CSV files are fractions (multiply by 100 for percent).
+Each locus groups nearby candidate genes and is labelled by one representative.
+The 143 loci are regions prioritised for follow-up, not 143 established targets
+of positive selection. See the [data dictionary](https://github.com/kevinkorfmann/gamma_smc_cu/tree/findings-2026-09-27/findings_database/releases/2026-09-27)
+for column definitions and filtering details.
+
 ## Browse the loci
 
 Search by gene, population or chromosome. Rank is the representative gene's
