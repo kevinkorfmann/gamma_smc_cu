@@ -30,7 +30,10 @@ for column definitions and filtering details.
 
 Search by gene, population or chromosome. Rank is the representative gene's
 lowest within-population percentile; smaller values indicate shallower
-coalescence. Gene groups adjacent to one another are reported as one locus.
+coalescence. The minimum-rank population matches the population reported in
+Supplementary Table S2 (`min_pop` in the CSV). The focal population is a
+descriptive label from a qualifying continental group and can differ. Gene
+groups adjacent to one another are reported as one locus.
 
 ```{raw} html
 :file: _generated/loci.html

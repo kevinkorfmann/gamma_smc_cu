@@ -32,7 +32,7 @@ with (_release_dir / "stage5_loci.csv").open(newline="") as stream:
 rows = []
 for locus in loci:
     values = [locus["representative_gene"], locus["locus_id"],
-              locus["focal_population"], f'{100 * float(locus["min_rank"]):.3f}',
+              locus["min_pop"], locus["focal_population"], f'{100 * float(locus["min_rank"]):.3f}',
               locus["cluster_size"]]
     search = " ".join(values + [locus["cluster_members"]])
     rows.append('<tr data-search="' + html.escape(search, quote=True) + '">' +
@@ -43,7 +43,7 @@ table = '''<div class="findings-browser">
 <p id="locus-count" role="status" aria-live="polite">143 loci</p>
 <div class="locus-table-wrap"><table id="locus-table">
 <thead><tr><th scope="col">Representative gene</th><th scope="col">GRCh38 locus</th>
-<th scope="col">Focal population</th><th scope="col">Minimum rank (%)</th>
+<th scope="col">Minimum-rank population</th><th scope="col">Focal population</th><th scope="col">Minimum rank (%)</th>
 <th scope="col">Genes</th></tr></thead><tbody>'''
 table += '\n'.join(rows) + '</tbody></table></div></div>'
 (root / '_generated').mkdir(exist_ok=True)
